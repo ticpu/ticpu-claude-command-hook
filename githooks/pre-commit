@@ -1,0 +1,10 @@
+#!/bin/bash
+# Scan staged content for secrets before allowing the commit.
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "pre-commit: gitleaks not installed; refusing to commit unscanned content." >&2
+    exit 1
+fi
+
+exec gitleaks git --staged --no-banner
