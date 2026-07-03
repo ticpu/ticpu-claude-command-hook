@@ -34,6 +34,19 @@ impl HookOutput {
         }
     }
 
+    /// PreToolUse "allow" decision: bypasses the normal permission prompt.
+    pub fn allow(event: &str, reason: &str) -> Self {
+        HookOutput {
+            system_message: None,
+            hook_specific_output: Some(HookSpecificOutput {
+                hook_event_name: event.to_string(),
+                permission_decision: Some("allow".to_string()),
+                permission_decision_reason: Some(reason.to_string()),
+                additional_context: None,
+            }),
+        }
+    }
+
     /// PostToolUse advisory: a user-facing line plus context injected to the model.
     pub fn context(system: &str, context: &str) -> Self {
         HookOutput {

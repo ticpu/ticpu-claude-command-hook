@@ -9,6 +9,8 @@ pub struct HookInput {
     #[serde(default)]
     pub tool_name: String,
     #[serde(default)]
+    pub cwd: String,
+    #[serde(default)]
     pub tool_input: ToolInput,
 }
 

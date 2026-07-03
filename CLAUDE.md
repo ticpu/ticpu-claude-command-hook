@@ -24,7 +24,13 @@ user's tools. Checks never silence their own IO errors — they log and allow.
 - `glab_skill` — first `glab` per session is denied to force `Skill("glab")`; a marker in
   `$XDG_RUNTIME_DIR/claude-hooks/` lets later calls through.
 - `git_bypass` — denies `--no-verify` (unless the commit message starts with `test`),
-  `--no-gpg-sign`, and `commit.gpgsign=false/0`.
+  `--no-gpg-sign`, and `commit.gpgsign=false/0`. Also handles `git -C <path>`: a
+  provably read-only subcommand is auto-*allowed* (the standard permission allowlist
+  can't express `git -C <anypath> status`), while a non-read-only `-C` pointing at the
+  current workdir is denied with a "drop the -C" reason; anything else falls through to
+  the normal prompt. Read-only classification is fail-safe — a whitelist of always-safe
+  subcommands plus explicit read-only modes for the mode-dependent ones (branch/tag/
+  config/remote/reflog/symbolic-ref); any unrecognized flag or verb prompts.
 - `broad_find` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
   repo parent; a find scoped to one repo under GIT is allowed.
 - `design_rationale` — on any edit to a `design-rationale.md`, injects the stop-for-review

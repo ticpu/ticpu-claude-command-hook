@@ -1,3 +1,6 @@
+use std::path::Path;
+
+use crate::input::HookInput;
 use crate::output::HookOutput;
 
 const NO_VERIFY: &str = "`--no-verify` is only allowed for TDD (commit message starts with \"test\"). \
@@ -7,10 +10,34 @@ const NO_SIGN: &str = "Command bypasses git signing (--no-gpg-sign / commit.gpgs
 CLAUDE.md forbids this unless explicitly requested. If GPG fails on the TTY, run the commit \
 manually with `! git commit ...` or fix GPG_TTY.";
 
-pub fn check(command: &str) -> Option<HookOutput> {
-    let cmd = command.trim_start();
+const REDUNDANT_C: &str = "`git -C <path>` points at the current working directory — drop the \
+`-C` and run the plain `git` command so the normal per-command approval applies. CLAUDE.md: \
+avoid `git -C`; use `git <verb>` directly.";
+
+const ALLOW_RO_C: &str = "read-only `git -C` command (auto-allowed by the hook)";
+
+/// Subcommands that never mutate the repo or worktree in *any* invocation; safe
+/// to auto-allow with `-C <path>` regardless of their arguments.
+const ALWAYS_READ_ONLY: &[&str] = &[
+    "status", "log", "show", "diff", "rev-parse", "describe", "blame", "shortlog", "ls-files",
+    "ls-tree", "ls-remote", "cat-file", "for-each-ref", "show-ref", "whatchanged", "grep",
+    "name-rev", "merge-base", "rev-list", "count-objects", "var", "help", "version",
+];
+
+pub fn check(input: &HookInput) -> Option<HookOutput> {
+    let cmd = input.tool_input.command.trim_start();
     if !is_git(cmd) {
         return None;
+    }
+    // `-C` handling comes first so a read-only `-C` short-circuits to allow and a
+    // redundant `-C` is denied with guidance; ordering mirrors CLAUDE.md intent.
+    if git_c_path(cmd).is_some() {
+        if is_read_only(cmd) {
+            return Some(HookOutput::allow("PreToolUse", ALLOW_RO_C));
+        }
+        if points_at_cwd(cmd, &input.cwd) {
+            return Some(HookOutput::deny("PreToolUse", REDUNDANT_C));
+        }
     }
     if cmd.contains("--no-verify") && !allows_no_verify(cmd) {
         return Some(HookOutput::deny("PreToolUse", NO_VERIFY));
@@ -22,6 +49,176 @@ pub fn check(command: &str) -> Option<HookOutput> {
         return Some(HookOutput::deny("PreToolUse", NO_SIGN));
     }
     None
+}
+
+/// True when `git -C <path>` targets the same directory the tool already runs in,
+/// making the `-C` redundant. Both sides are canonicalized so symlinked mount
+/// paths and `.`/trailing-slash forms compare equal; if either fails to resolve
+/// we fall back to a literal compare rather than guessing.
+fn points_at_cwd(cmd: &str, cwd: &str) -> bool {
+    let Some(target) = git_c_path(cmd) else {
+        return false;
+    };
+    if cwd.is_empty() {
+        return false;
+    }
+    let target = if Path::new(target).is_absolute() {
+        Path::new(target).to_path_buf()
+    } else {
+        Path::new(cwd).join(target)
+    };
+    let cwd = Path::new(cwd);
+    match (target.canonicalize(), cwd.canonicalize()) {
+        (Ok(t), Ok(c)) => t == c,
+        _ => target == cwd,
+    }
+}
+
+/// Walk the global-option prefix once, capturing the `-C` argument (if any) and
+/// the subcommand token that terminates the prefix. Everything before the first
+/// bare (non-`-`) token is a git global option; a `-C` after the subcommand is an
+/// argument to that subcommand, not a working-directory change.
+struct Parsed<'a> {
+    c_path: Option<&'a str>,
+    subcommand: Option<&'a str>,
+    /// Tokens following the subcommand — the subcommand's own args/flags.
+    args: Vec<&'a str>,
+}
+
+fn parse<'a>(cmd: &'a str) -> Parsed<'a> {
+    let mut c_path = None;
+    let mut tokens = cmd.split_whitespace();
+    let _ = tokens.next(); // "git"
+    let mut subcommand = None;
+    while let Some(tok) = tokens.next() {
+        if let Some(rest) = tok.strip_prefix("-C") {
+            let raw = if let Some(eq) = rest.strip_prefix('=') {
+                Some(eq)
+            } else if !rest.is_empty() {
+                Some(rest)
+            } else {
+                tokens.next()
+            };
+            c_path = raw.map(unquote);
+            continue;
+        }
+        // `-c key=val`, `--git-dir=...` etc. consume their own value inline or as
+        // a following token; the only one we must not misread as a subcommand is
+        // the two-token `-c val` form.
+        if tok == "-c" || tok == "--git-dir" || tok == "--work-tree" || tok == "--namespace" {
+            let _ = tokens.next();
+            continue;
+        }
+        if tok.starts_with('-') {
+            continue;
+        }
+        subcommand = Some(tok);
+        break;
+    }
+    Parsed {
+        c_path,
+        subcommand,
+        args: tokens.collect(),
+    }
+}
+
+fn git_c_path(cmd: &str) -> Option<&str> {
+    parse(cmd).c_path
+}
+
+/// Fail-safe classifier: returns true only when the command is *provably*
+/// read-only. Subcommands in `ALWAYS_READ_ONLY` qualify unconditionally; the
+/// mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref) qualify
+/// only in explicitly-whitelisted read-only forms. Everything else — including
+/// any unrecognized flag or subcommand — returns false and falls through to the
+/// normal permission prompt, so an unforeseen write mode is never auto-allowed.
+fn is_read_only(cmd: &str) -> bool {
+    let p = parse(cmd);
+    let Some(sub) = p.subcommand else {
+        return false;
+    };
+    if ALWAYS_READ_ONLY.contains(&sub) {
+        return true;
+    }
+    match sub {
+        // Listing is the only read-only mode. Every token must be a whitelisted
+        // read-only flag (or the value of a value-taking one); a bare positional
+        // means create/rename/set and disqualifies the command.
+        "branch" | "tag" => args_all_read_only(
+            &p.args,
+            &[
+                "--list", "-l", "-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose",
+                "--no-contains", "--no-merged", "-i", "--ignore-case", "--color", "--no-color",
+                "--column", "--no-column",
+            ],
+            &["--contains", "--merged", "--points-at", "--sort", "--format"],
+        ),
+        // Only the query verbs read; add/remove/set/rename/prune write.
+        "remote" => match p.args.split_first() {
+            None => true,
+            Some((&"-v", rest)) | Some((&"--verbose", rest)) => rest.is_empty(),
+            Some((&"show", _)) | Some((&"get-url", _)) => true,
+            _ => false,
+        },
+        // Only the read verbs / --get* / --list queries.
+        "config" => config_is_read(&p.args),
+        // `git reflog` / `reflog show` read; expire/delete write.
+        "reflog" => matches!(p.args.first(), None | Some(&"show")),
+        // One-arg form (`symbolic-ref HEAD`) reads; two-arg form sets it.
+        "symbolic-ref" => p.args.iter().filter(|a| !a.starts_with('-')).count() <= 1,
+        _ => false,
+    }
+}
+
+/// True only if every token is a whitelisted read-only flag. `nullary` flags
+/// take no value; `unary` flags consume the following token as their value
+/// (unless given as `--flag=value`). Any token that is neither — a bare
+/// positional or an unrecognized flag — disqualifies the command (fail-safe).
+fn args_all_read_only(args: &[&str], nullary: &[&str], unary: &[&str]) -> bool {
+    let mut it = args.iter();
+    while let Some(&a) = it.next() {
+        let name = a.split('=').next().unwrap_or(a);
+        if nullary.contains(&name) {
+            continue;
+        }
+        if unary.contains(&name) {
+            // `--flag=value` carries its value inline; `--flag value` eats next.
+            if !a.contains('=') {
+                let _ = it.next();
+            }
+            continue;
+        }
+        return false;
+    }
+    true
+}
+
+/// `git config` reads only via an explicit query verb/flag, or a single lone key
+/// with no value. Anything else — a second positional (the value), an edit/unset
+/// flag, or the `set`/`unset` subcommand form — is treated as a write.
+fn config_is_read(args: &[&str]) -> bool {
+    match args.split_first() {
+        None => false,
+        Some((first, rest)) => match *first {
+            "get" | "list" | "--get" | "--get-all" | "--get-regexp" | "--get-urlmatch" | "-l"
+            | "--list" | "--get-color" | "--get-colorbool" => true,
+            // `config <key>` with nothing else reads that key.
+            key if !key.starts_with('-') && rest.is_empty() => true,
+            // A leading flag like `--global`/`--local` followed by a query verb.
+            flag if flag.starts_with('-') && is_config_scope(flag) => config_is_read(rest),
+            _ => false,
+        },
+    }
+}
+
+fn is_config_scope(flag: &str) -> bool {
+    matches!(flag, "--global" | "--local" | "--system" | "--worktree")
+}
+
+fn unquote(tok: &str) -> &str {
+    tok.strip_prefix(['"', '\''])
+        .and_then(|s| s.strip_suffix(['"', '\'']))
+        .unwrap_or(tok)
 }
 
 fn is_git(cmd: &str) -> bool {
@@ -45,10 +242,40 @@ fn allows_no_verify(cmd: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::check;
+    use super::{check, is_read_only, parse};
+    use crate::input::{HookInput, ToolInput};
+
+    fn input(cmd: &str, cwd: &str) -> HookInput {
+        HookInput {
+            hook_event_name: "PreToolUse".to_string(),
+            tool_name: "Bash".to_string(),
+            cwd: cwd.to_string(),
+            tool_input: ToolInput {
+                command: cmd.to_string(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    /// Decision as one of: allow / deny / prompt (None).
+    fn decision(cmd: &str, cwd: &str) -> &'static str {
+        match check(&input(cmd, cwd)) {
+            None => "prompt",
+            Some(out) => match out
+                .hook_specific_output
+                .and_then(|h| h.permission_decision)
+                .as_deref()
+            {
+                Some("allow") => "allow",
+                Some("deny") => "deny",
+                other => panic!("unexpected decision {other:?}"),
+            },
+        }
+    }
 
     fn blocked(cmd: &str) -> bool {
-        check(cmd).is_some()
+        decision(cmd, "") == "deny"
     }
 
     #[test]
@@ -64,7 +291,7 @@ mod tests {
         assert!(!blocked("git commit --no-verify -m \"test: red\""));
         assert!(!blocked("git commit --no-verify -m 'test(scope): red'"));
         assert!(!blocked("git commit -m \"feat: x\""));
-        assert!(!blocked("git status"));
+        assert_eq!(decision("git status", ""), "prompt");
         assert!(!blocked("cargo test --no-verify-something"));
     }
 
@@ -72,5 +299,83 @@ mod tests {
     fn heredoc_test_message_allowed() {
         let cmd = "git commit --no-verify -F - <<EOF\ntest: red bar\nEOF";
         assert!(!blocked(cmd));
+    }
+
+    #[test]
+    fn read_only_dash_c_auto_allowed() {
+        for cmd in [
+            "git -C /some/other/repo status",
+            "git -C=/other log --oneline",
+            "git -C /x diff HEAD~1",
+            "git -C /x show abc123",
+            "git -C /x branch --list",
+            "git -C /x remote -v",
+            "git -C /x config --get user.email",
+            "git -C /x config user.email",
+            "git -C /x rev-parse HEAD",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
+        }
+    }
+
+    #[test]
+    fn write_dash_c_not_auto_allowed() {
+        // Not read-only → falls through to prompt unless it targets cwd.
+        for cmd in [
+            "git -C /other commit -m x",
+            "git -C /other branch -d foo",
+            "git -C /other branch newbranch",
+            "git -C /other tag -d v1",
+            "git -C /other tag -a v1 -m msg",
+            "git -C /other tag v1",
+            "git -C /other config user.email a@b",
+            "git -C /other config set user.email a@b",
+            "git -C /other config --unset user.email",
+            "git -C /other remote add o url",
+            "git -C /other remote set-url o url",
+            "git -C /other reflog expire --all",
+            "git -C /other symbolic-ref HEAD refs/heads/x",
+            "git -C /other push",
+            "git -C /other checkout main",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
+        }
+    }
+
+    #[test]
+    fn redundant_dash_c_at_cwd_denied() {
+        // Non-read-only -C pointing at the current dir is the redundant case.
+        let cwd = std::env::current_dir().unwrap();
+        let cwd = cwd.to_str().unwrap();
+        let cmd = format!("git -C {cwd} commit -m x");
+        assert_eq!(decision(&cmd, cwd), "deny");
+        // "." resolves to cwd too.
+        assert_eq!(decision("git -C . push", cwd), "deny");
+    }
+
+    #[test]
+    fn dash_c_after_subcommand_is_not_workdir() {
+        // `git branch -C old new` renames; the -C is a branch flag, no c_path.
+        assert!(parse("git branch -C old new").c_path.is_none());
+    }
+
+    #[test]
+    fn is_read_only_classifies() {
+        assert!(is_read_only("git -C /x log"));
+        assert!(is_read_only("git -C /x symbolic-ref HEAD"));
+        assert!(is_read_only("git -C /x config --list"));
+        assert!(is_read_only("git -C /x config --global --get user.email"));
+        assert!(is_read_only("git -C /x config user.email"));
+        assert!(is_read_only("git -C /x branch --list --contains HEAD"));
+        assert!(is_read_only("git -C /x remote"));
+
+        assert!(!is_read_only("git -C /x commit -m x"));
+        assert!(!is_read_only("git -C /x config user.name Jerome"));
+        assert!(!is_read_only("git -C /x config set user.name Jerome"));
+        assert!(!is_read_only("git -C /x symbolic-ref HEAD refs/heads/x"));
+        assert!(!is_read_only("git -C /x branch newbranch"));
+        assert!(!is_read_only("git -C /x remote add o url"));
+        // Unknown flag on an otherwise-listing subcommand → not provably safe.
+        assert!(!is_read_only("git -C /x branch --some-new-flag"));
     }
 }
