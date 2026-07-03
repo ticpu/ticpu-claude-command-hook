@@ -13,7 +13,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
         "PreToolUse" if input.tool_name == "Bash" => {
             let cmd = input.tool_input.command.as_str();
             glab_skill::check(input)
-                .or_else(|| git_bypass::check(cmd))
+                .or_else(|| git_bypass::check(input))
                 .or_else(|| broad_find::check(cmd))
         }
         "PostToolUse" => design_rationale::check(&input.tool_input.file_path),
