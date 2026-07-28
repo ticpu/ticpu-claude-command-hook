@@ -78,26 +78,44 @@ fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
         return None;
     }
     let stages = shell::pipeline_stages(segment)?;
-    if stages[0]
-        .split_whitespace()
-        .any(changes_output_shape)
+
+    // gf goes after the last stage that still needs whole paths: a later search is
+    // a line filter, and its pattern can match the prefix gf would strip.
+    let mut at = 0;
+    for (i, stage) in stages
+        .iter()
+        .enumerate()
     {
-        return None;
+        if !shell::is_searcher(stage) {
+            continue;
+        }
+        if stage
+            .split_whitespace()
+            .any(changes_output_shape)
+        {
+            return None;
+        }
+        at = i + 1;
     }
-    if !stages[1..]
+    if !stages[at..]
         .iter()
         .all(|s| shell::command_word(s).is_some_and(|w| DISPLAY_ONLY.contains(&w)))
     {
         return None;
     }
 
-    // A search with no consumer would hand its exit status to gf, hiding "no
-    // match" and its errors; PIPESTATUS puts it back. The braces keep that
-    // recovered status attached to this segment alone inside a chain.
-    Some(match (stages.len(), chained) {
-        (1, false) => format!("{} | {gf}; (exit ${{PIPESTATUS[0]}})", stages[0]),
-        (1, true) => format!("{{ {} | {gf}; (exit ${{PIPESTATUS[0]}}); }}", stages[0]),
-        _ => format!("{} | {gf} | {}", stages[0], stages[1..].join(" | ")),
+    let piped = format!("{} | {gf}", stages[..at].join(" | "));
+    if at < stages.len() {
+        return Some(format!("{piped} | {}", stages[at..].join(" | ")));
+    }
+    // Ending on gf would hand it the search's exit status, hiding "no match" and
+    // its errors; PIPESTATUS puts it back. The braces keep that recovered status
+    // attached to this segment alone inside a chain.
+    let status = format!("; (exit ${{PIPESTATUS[{}]}})", at - 1);
+    Some(if chained {
+        format!("{{ {piped}{status}; }}")
+    } else {
+        piped + &status
     })
 }
 
@@ -134,6 +152,29 @@ mod tests {
             rewrite("grep -rn foo src | head -20", GF).unwrap(),
             "grep -rn foo src | /opt/hook/gf | head -20"
         );
+    }
+
+    /// A later search filters lines, and its pattern can match the path prefix gf
+    /// strips — so gf lands after it, not before.
+    #[test]
+    fn gf_goes_after_a_filtering_search() {
+        assert_eq!(
+            rewrite("rg -n foo src | rg -v test", GF).unwrap(),
+            "rg -n foo src | rg -v test | /opt/hook/gf; (exit ${PIPESTATUS[1]})"
+        );
+        assert_eq!(
+            rewrite("rg -n foo src | rg -v 'a.xml|b.xml' | head", GF).unwrap(),
+            "rg -n foo src | rg -v 'a.xml|b.xml' | /opt/hook/gf | head"
+        );
+        assert_eq!(
+            rewrite("rg -n foo src | head -100 | grep -v bar", GF).unwrap(),
+            "rg -n foo src | head -100 | grep -v bar | /opt/hook/gf; (exit ${PIPESTATUS[2]})"
+        );
+    }
+
+    #[test]
+    fn a_shape_flag_on_any_search_stage_stops_the_fold() {
+        assert_eq!(rewrite("rg -n foo src | grep -q bar", GF), None);
     }
 
     #[test]

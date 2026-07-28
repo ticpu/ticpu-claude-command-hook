@@ -84,9 +84,13 @@ pub fn command_word(stage: &str) -> Option<&str> {
 
 /// True when this pipeline's first stage is a file search.
 pub fn is_search(segment: &str) -> bool {
-    pipeline_stages(segment)
-        .and_then(|stages| command_word(stages[0]))
-        .is_some_and(|w| SEARCHERS.contains(&w))
+    pipeline_stages(segment).is_some_and(|stages| is_searcher(stages[0]))
+}
+
+/// True when one pipeline stage is a search — as a later stage it filters lines
+/// rather than reading files, but it is still matching against whole paths.
+pub fn is_searcher(stage: &str) -> bool {
+    command_word(stage).is_some_and(|w| SEARCHERS.contains(&w))
 }
 
 fn basename(word: &str) -> &str {
