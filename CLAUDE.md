@@ -39,6 +39,20 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   repo parent; a find scoped to one repo under GIT is allowed.
 - `design_rationale` — on any edit to a `design-rationale.md`, injects the stop-for-review
   reminder.
+- `grep_fold` — rewrites searches to pipe through the sibling `gf`, per chain segment, so a
+  chained or `cd`-prefixed grep still folds. Refuses a segment whose later stages do more
+  than display (a path-consuming `xargs`/`awk` would get truncated paths), whose flags change
+  the output shape gf parses, or that redirects. A folded lone search regains grep's exit
+  status via `PIPESTATUS`, brace-grouped so it stays attached to that segment.
+- `search_stderr` — denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped
+  alternative.
+
+`command grep` is the documented opt-out from both: `shell::WRAPPERS` deliberately omits
+`command`, so it never classifies as a search.
+
+`src/checks/shell.rs` is the only shell parser — one quote mask feeds chain splitting,
+pipeline splitting, redirect detection and unquoting. A second ad-hoc matcher already caused
+one bug (a `2>/dev/null` inside a search *pattern* read as a real redirect).
 
 ## Adding a check
 
@@ -47,7 +61,12 @@ function. Keep IO (filesystem, env) thin and behind a testable core (see `glab_s
 
 ## Build / test
 
-`cargo test` then `cargo build --release`. The hook entries point at the absolute
-`target/release/ticpu-claude-command-hook` path, so rebuild after changing a check.
+`make -j check` (clippy `-D warnings` + `cargo test`) then `make release`. The hook entries
+point at the absolute `target/release/ticpu-claude-command-hook` path, so rebuild after
+changing a check — and `gf` must stay beside it, which `cargo build` handles.
+
+`tests/verdicts.rs` runs the real binary over a table of commands and asserts pass / deny /
+rewritten-command; add a row there for any new shape. `./probe.sh` prints the same verdicts
+for commands on stdin when you just want to try one.
 
 License GPL-3.0-only. Commits run `gitleaks git --staged` via `core.hooksPath=githooks`.

@@ -18,10 +18,15 @@ fail-open) so a bug in the hook never blocks your tools.
   or the parent directory holding all your repos; a `find` scoped to one repo is allowed.
 - **design-rationale review gate** — when an edit touches a `design-rationale.md`, injects a
   reminder to stop and present the diff for review.
-- **grep fold** — rewrites a plain `grep`/`rg`/`git grep` command to pipe through `gf`, so
-  repeated file paths collapse instead of eating the model's context. Only plain pipelines
-  whose later stages just display (`head`, `tail`, `less`, `cat`, `nl`) are rewritten;
-  anything that parses the path back out is left alone.
+- **grep fold** — rewrites `grep`/`rg`/`git grep` commands to pipe through `gf`, so repeated
+  file paths collapse instead of eating the model's context. Chains are handled per segment
+  (`cd /x && grep …` folds the grep and leaves the `cd`), and a segment that cannot be
+  folded costs only itself. Left alone: later pipeline stages that do anything but display
+  (`head`, `tail`, `less`, `cat`, `nl` are fine; `xargs`, `awk`, `sort`, `wc` are not),
+  redirects, `-q`/`-Z`/`-z`, and anything with command substitution or a heredoc. Writing
+  `command grep` opts out entirely.
+- **search stderr guard** — denies `2>/dev/null` on a search: it hides wrong paths and
+  unreadable dirs, and `-s`/`--no-messages` suppresses just the file noise instead.
 
 ## gf
 
@@ -89,11 +94,15 @@ entry.
 ## Develop
 
 ```
-cargo test
+make -j check          # clippy -D warnings + cargo test
+echo 'grep -rn x src' | ./probe.sh    # what would the hook do with this command?
 ```
 
 Each check lives in `src/checks/` and returns `Option<HookOutput>`. Add a module, wire it
-into `checks::dispatch`, and unit-test the decision function.
+into `checks::dispatch`, and unit-test the decision function. `src/checks/shell.rs` holds the
+one quote-aware splitter every command-shape question goes through — don't grow a second one.
+`tests/verdicts.rs` is the asserted verdict table, run against the real binary; `probe.sh`
+answers the same question for one-off commands.
 
 ## License
 
