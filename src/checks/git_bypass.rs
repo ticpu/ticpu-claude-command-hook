@@ -3,7 +3,8 @@ use std::path::Path;
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
-const NO_VERIFY: &str = "`--no-verify` is only allowed for TDD (commit message starts with \"test\"). \
+const NO_VERIFY: &str =
+    "`--no-verify` is only allowed for TDD (commit message starts with \"test\"). \
 CLAUDE.md forbids skipping git hooks otherwise.";
 
 const NO_SIGN: &str = "Command bypasses git signing (--no-gpg-sign / commit.gpgsign=false). \
@@ -19,13 +20,35 @@ const ALLOW_RO_C: &str = "read-only `git -C` command (auto-allowed by the hook)"
 /// Subcommands that never mutate the repo or worktree in *any* invocation; safe
 /// to auto-allow with `-C <path>` regardless of their arguments.
 const ALWAYS_READ_ONLY: &[&str] = &[
-    "status", "log", "show", "diff", "rev-parse", "describe", "blame", "shortlog", "ls-files",
-    "ls-tree", "ls-remote", "cat-file", "for-each-ref", "show-ref", "whatchanged", "grep",
-    "name-rev", "merge-base", "rev-list", "count-objects", "var", "help", "version",
+    "status",
+    "log",
+    "show",
+    "diff",
+    "rev-parse",
+    "describe",
+    "blame",
+    "shortlog",
+    "ls-files",
+    "ls-tree",
+    "ls-remote",
+    "cat-file",
+    "for-each-ref",
+    "show-ref",
+    "whatchanged",
+    "grep",
+    "name-rev",
+    "merge-base",
+    "rev-list",
+    "count-objects",
+    "var",
+    "help",
+    "version",
 ];
 
 pub fn check(input: &HookInput) -> Option<HookOutput> {
-    let cmd = input.tool_input.command.trim_start();
+    let cmd = input
+        .command()
+        .trim_start();
     if !is_git(cmd) {
         return None;
     }
@@ -147,14 +170,37 @@ fn is_read_only(cmd: &str) -> bool {
         "branch" | "tag" => args_all_read_only(
             &p.args,
             &[
-                "--list", "-l", "-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose",
-                "--no-contains", "--no-merged", "-i", "--ignore-case", "--color", "--no-color",
-                "--column", "--no-column",
+                "--list",
+                "-l",
+                "-a",
+                "--all",
+                "-r",
+                "--remotes",
+                "-v",
+                "-vv",
+                "--verbose",
+                "--no-contains",
+                "--no-merged",
+                "-i",
+                "--ignore-case",
+                "--color",
+                "--no-color",
+                "--column",
+                "--no-column",
             ],
-            &["--contains", "--merged", "--points-at", "--sort", "--format"],
+            &[
+                "--contains",
+                "--merged",
+                "--points-at",
+                "--sort",
+                "--format",
+            ],
         ),
         // Only the query verbs read; add/remove/set/rename/prune write.
-        "remote" => match p.args.split_first() {
+        "remote" => match p
+            .args
+            .split_first()
+        {
             None => true,
             Some((&"-v", rest)) | Some((&"--verbose", rest)) => rest.is_empty(),
             Some((&"show", _)) | Some((&"get-url", _)) => true,
@@ -163,9 +209,19 @@ fn is_read_only(cmd: &str) -> bool {
         // Only the read verbs / --get* / --list queries.
         "config" => config_is_read(&p.args),
         // `git reflog` / `reflog show` read; expire/delete write.
-        "reflog" => matches!(p.args.first(), None | Some(&"show")),
+        "reflog" => matches!(
+            p.args
+                .first(),
+            None | Some(&"show")
+        ),
         // One-arg form (`symbolic-ref HEAD`) reads; two-arg form sets it.
-        "symbolic-ref" => p.args.iter().filter(|a| !a.starts_with('-')).count() <= 1,
+        "symbolic-ref" => {
+            p.args
+                .iter()
+                .filter(|a| !a.starts_with('-'))
+                .count()
+                <= 1
+        }
         _ => false,
     }
 }
@@ -177,7 +233,10 @@ fn is_read_only(cmd: &str) -> bool {
 fn args_all_read_only(args: &[&str], nullary: &[&str], unary: &[&str]) -> bool {
     let mut it = args.iter();
     while let Some(&a) = it.next() {
-        let name = a.split('=').next().unwrap_or(a);
+        let name = a
+            .split('=')
+            .next()
+            .unwrap_or(a);
         if nullary.contains(&name) {
             continue;
         }
@@ -231,29 +290,34 @@ fn allows_no_verify(cmd: &str) -> bool {
     let mut rest = cmd;
     while let Some(pos) = rest.find("-m") {
         let after = rest[pos + 2..].trim_start();
-        let after = after.strip_prefix(['"', '\'']).unwrap_or(after);
+        let after = after
+            .strip_prefix(['"', '\''])
+            .unwrap_or(after);
         if after.starts_with("test") {
             return true;
         }
         rest = &rest[pos + 2..];
     }
-    cmd.contains("<<") && cmd.lines().any(|l| l.trim_start().starts_with("test"))
+    cmd.contains("<<")
+        && cmd
+            .lines()
+            .any(|l| {
+                l.trim_start()
+                    .starts_with("test")
+            })
 }
 
 #[cfg(test)]
 mod tests {
     use super::{check, is_read_only, parse};
-    use crate::input::{HookInput, ToolInput};
+    use crate::input::HookInput;
 
     fn input(cmd: &str, cwd: &str) -> HookInput {
         HookInput {
             hook_event_name: "PreToolUse".to_string(),
             tool_name: "Bash".to_string(),
             cwd: cwd.to_string(),
-            tool_input: ToolInput {
-                command: cmd.to_string(),
-                ..Default::default()
-            },
+            tool_input: serde_json::json!({ "command": cmd }),
             ..Default::default()
         }
     }
@@ -346,7 +410,9 @@ mod tests {
     fn redundant_dash_c_at_cwd_denied() {
         // Non-read-only -C pointing at the current dir is the redundant case.
         let cwd = std::env::current_dir().unwrap();
-        let cwd = cwd.to_str().unwrap();
+        let cwd = cwd
+            .to_str()
+            .unwrap();
         let cmd = format!("git -C {cwd} commit -m x");
         assert_eq!(decision(&cmd, cwd), "deny");
         // "." resolves to cwd too.
@@ -356,7 +422,9 @@ mod tests {
     #[test]
     fn dash_c_after_subcommand_is_not_workdir() {
         // `git branch -C old new` renames; the -C is a branch flag, no c_path.
-        assert!(parse("git branch -C old new").c_path.is_none());
+        assert!(parse("git branch -C old new")
+            .c_path
+            .is_none());
     }
 
     #[test]

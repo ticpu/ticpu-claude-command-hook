@@ -13,6 +13,10 @@ Replaces a pile of per-check shell scripts: one Rust program, reached straight f
 Output is the documented hook JSON on stdout (`src/output.rs`):
 
 - PreToolUse block → `hookSpecificOutput.permissionDecision = "deny"` with a reason.
+- PreToolUse rewrite → `updatedInput` replacing the whole tool input. Claude Code only
+  honours it next to an `"allow"` decision, so a rewrite also skips the permission prompt;
+  `HookInput::tool_input` stays a raw `Value` so a rewrite hands back the fields this
+  binary does not model (`description`, `timeout`, …) untouched.
 - PostToolUse advisory → `systemMessage` + `hookSpecificOutput.additionalContext`.
 
 Exit code is always 0 except on an internal error (bad stdin, serialize failure), which

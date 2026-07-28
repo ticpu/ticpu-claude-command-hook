@@ -1,4 +1,5 @@
 use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Debug, Serialize)]
 pub struct HookOutput {
@@ -18,6 +19,8 @@ pub struct HookSpecificOutput {
     pub permission_decision_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub additional_context: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_input: Option<Value>,
 }
 
 impl HookOutput {
@@ -30,6 +33,7 @@ impl HookOutput {
                 permission_decision: Some("deny".to_string()),
                 permission_decision_reason: Some(reason.to_string()),
                 additional_context: None,
+                updated_input: None,
             }),
         }
     }
@@ -43,6 +47,23 @@ impl HookOutput {
                 permission_decision: Some("allow".to_string()),
                 permission_decision_reason: Some(reason.to_string()),
                 additional_context: None,
+                updated_input: None,
+            }),
+        }
+    }
+
+    /// PreToolUse rewrite: the tool runs `updated_input` instead of what the
+    /// model sent. Claude Code only honours it alongside an "allow" decision,
+    /// so a rewritten command also skips the permission prompt.
+    pub fn rewrite(event: &str, reason: &str, updated_input: Value) -> Self {
+        HookOutput {
+            system_message: None,
+            hook_specific_output: Some(HookSpecificOutput {
+                hook_event_name: event.to_string(),
+                permission_decision: Some("allow".to_string()),
+                permission_decision_reason: Some(reason.to_string()),
+                additional_context: None,
+                updated_input: Some(updated_input),
             }),
         }
     }
@@ -56,6 +77,7 @@ impl HookOutput {
                 permission_decision: None,
                 permission_decision_reason: None,
                 additional_context: Some(context.to_string()),
+                updated_input: None,
             }),
         }
     }

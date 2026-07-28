@@ -18,12 +18,43 @@ fail-open) so a bug in the hook never blocks your tools.
   or the parent directory holding all your repos; a `find` scoped to one repo is allowed.
 - **design-rationale review gate** — when an edit touches a `design-rationale.md`, injects a
   reminder to stop and present the diff for review.
+- **grep fold** — rewrites a plain `grep`/`rg`/`git grep` command to pipe through `gf`, so
+  repeated file paths collapse instead of eating the model's context. Only plain pipelines
+  whose later stages just display (`head`, `tail`, `less`, `cat`, `nl`) are rewritten;
+  anything that parses the path back out is left alone.
+
+## gf
+
+The second binary in this crate. It reads grep-style output and prints a file path once
+per run of consecutive lines from the same file, dropping configured directory prefixes:
+
+```
+$ grep -rn notify_command -A 2 ~/GIT/ng911/rust/test-data/ | gf
+base: /home/jerome.poulin/GIT/
+ng911/rust/test-data/deploy-configs/localhost/noans-worker-lab/config.yaml:44:  notify_command:
+-45-    endpoint:
+-46-      loopback:
+```
+
+Prefixes come from `--strip PREFIX` (repeatable), the `:`-separated `GF_STRIP`, and `$PWD`.
+Each one is announced once with a `base:` line, so the full paths stay recoverable;
+`--no-base` drops that. With arguments and no `--stdin`, `gf` runs `grep` (or `--cmd PROG`
+/ `GF_CMD`) itself and exits with its status. `gf --help` covers the rest.
+
+A path is recognized as the shortest prefix that both is followed by `SEP digits SEP`
+(`:44:`, `-45-`) and exists on disk — results are cached, so repeats cost no syscalls.
+Everything else is passed through byte-for-byte, ANSI escapes included, so `--color=always`
+still works. Paths containing `:` are not detected, paths containing spaces only on
+line-numbered output, and `-Z/--null` output is unsupported.
 
 ## Build
 
 ```
 cargo build --release
 ```
+
+Builds both binaries; the hook finds `gf` as its own sibling in `target/release/`, so a
+`gf` elsewhere on `PATH` is never used for the rewrite.
 
 ## Wire into Claude Code
 

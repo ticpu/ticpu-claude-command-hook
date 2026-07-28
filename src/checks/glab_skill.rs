@@ -4,14 +4,15 @@ use std::path::{Path, PathBuf};
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
-const REASON: &str = "Load the glab skill first: Skill(\"glab\"). It has the correct flags and usage \
+const REASON: &str =
+    "Load the glab skill first: Skill(\"glab\"). It has the correct flags and usage \
 patterns for the GitLab CLI.";
 
 /// Block the first `glab` command per session to force loading the glab skill;
 /// a per-session marker lets every later call through. Best-effort: if the
 /// runtime dir is unavailable the command is allowed (logged on real errors).
 pub fn check(input: &HookInput) -> Option<HookOutput> {
-    if !is_glab(&input.tool_input.command) {
+    if !is_glab(input.command()) {
         return None;
     }
     let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
@@ -56,15 +57,23 @@ mod tests {
 
     #[test]
     fn first_call_blocks_then_passes() {
-        let base: PathBuf = [env!("CARGO_MANIFEST_DIR"), "target", "test-tmp", "glab-decide"]
-            .iter()
-            .collect();
+        let base: PathBuf = [
+            env!("CARGO_MANIFEST_DIR"),
+            "target",
+            "test-tmp",
+            "glab-decide",
+        ]
+        .iter()
+        .collect();
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
 
         assert!(decide(&base, "sess-1").is_some(), "first call must block");
         assert!(decide(&base, "sess-1").is_none(), "second call must pass");
-        assert!(decide(&base, "sess-2").is_some(), "new session blocks again");
+        assert!(
+            decide(&base, "sess-2").is_some(),
+            "new session blocks again"
+        );
 
         std::fs::remove_dir_all(&base).unwrap();
     }
