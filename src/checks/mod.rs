@@ -3,6 +3,8 @@ mod design_rationale;
 mod git_bypass;
 mod glab_skill;
 mod grep_fold;
+mod search_stderr;
+mod shell;
 
 use crate::input::HookInput;
 use crate::output::HookOutput;
@@ -19,6 +21,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
             glab_skill::check(input)
                 .or_else(|| git_bypass::check(input))
                 .or_else(|| broad_find::check(cmd))
+                .or_else(|| search_stderr::check(cmd))
                 // Last: a rewrite also allows, so every objection gets first say.
                 .or_else(|| grep_fold::check(input))
         }

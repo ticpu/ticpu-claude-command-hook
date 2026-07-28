@@ -2,15 +2,12 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
+use crate::checks::shell;
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
 /// Sent on every rewritten grep, so it stays one line; `gf --help` has the rest.
 const REASON: &str = "piped through gf: repeated paths folded, `base:` announces what was stripped";
-
-/// Shell metacharacters that make the command something other than a plain
-/// pipeline. Rewriting around them would change what runs, so we leave it alone.
-const UNSAFE_CHARS: [char; 6] = ['&', ';', '`', '<', '>', '\n'];
 
 /// Later pipeline stages that only display what they receive. Anything else may
 /// parse the path off each line — folding would feed it truncated paths.
@@ -51,23 +48,36 @@ fn gf_path() -> Option<PathBuf> {
         .then_some(gf)
 }
 
+/// Folds every segment that can be folded and leaves the rest verbatim, so one
+/// unfoldable command in a chain costs only its own segment.
 fn rewrite(command: &str, gf: &str) -> Option<String> {
-    if command.contains(UNSAFE_CHARS) || command.contains("$(") || command.contains("||") {
+    let parts = shell::chain_parts(command)?;
+    let chained = parts.len() > 1;
+    let mut out = String::with_capacity(command.len() + 64);
+    let mut folded = false;
+
+    for (segment, operator) in &parts {
+        match fold_segment(segment, gf, chained) {
+            Some(new) => {
+                out.push_str(&new);
+                folded = true;
+            }
+            None => out.push_str(segment),
+        }
+        if !operator.is_empty() {
+            out.push(' ');
+            out.push_str(operator);
+            out.push(' ');
+        }
+    }
+    folded.then_some(out)
+}
+
+fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
+    if !shell::is_search(segment) || shell::has_redirect(segment) {
         return None;
     }
-    let stages: Vec<&str> = command
-        .split('|')
-        .map(str::trim)
-        .collect();
-    if stages
-        .iter()
-        .any(|s| s.is_empty())
-    {
-        return None;
-    }
-    if !searches_files(first_word(stages[0], true)?) {
-        return None;
-    }
+    let stages = shell::pipeline_stages(segment)?;
     if stages[0]
         .split_whitespace()
         .any(changes_output_shape)
@@ -76,45 +86,19 @@ fn rewrite(command: &str, gf: &str) -> Option<String> {
     }
     if !stages[1..]
         .iter()
-        .all(|s| first_word(s, false).is_some_and(|w| DISPLAY_ONLY.contains(&w)))
+        .all(|s| shell::command_word(s).is_some_and(|w| DISPLAY_ONLY.contains(&w)))
     {
         return None;
     }
 
-    Some(match stages.len() {
-        // Sole command: the pipeline's status would become gf's, hiding grep's
-        // "no match" exit 1 and its errors.
-        1 => format!("{} | {gf}; (exit ${{PIPESTATUS[0]}})", stages[0]),
+    // A search with no consumer would hand its exit status to gf, hiding "no
+    // match" and its errors; PIPESTATUS puts it back. The braces keep that
+    // recovered status attached to this segment alone inside a chain.
+    Some(match (stages.len(), chained) {
+        (1, false) => format!("{} | {gf}; (exit ${{PIPESTATUS[0]}})", stages[0]),
+        (1, true) => format!("{{ {} | {gf}; (exit ${{PIPESTATUS[0]}}); }}", stages[0]),
         _ => format!("{} | {gf} | {}", stages[0], stages[1..].join(" | ")),
     })
-}
-
-/// First word of a stage, skipping `VAR=value` prefixes, and stepping over `git`
-/// so `git grep` is classified on its subcommand.
-fn first_word(stage: &str, skip_git: bool) -> Option<&str> {
-    let mut words = stage
-        .split_whitespace()
-        .skip_while(|w| w.contains('=') && !w.starts_with('-'));
-    let word = basename(words.next()?);
-    if skip_git && word == "git" {
-        return words
-            .next()
-            .map(basename);
-    }
-    Some(word)
-}
-
-fn basename(word: &str) -> &str {
-    word.rsplit('/')
-        .next()
-        .unwrap_or(word)
-}
-
-fn searches_files(word: &str) -> bool {
-    matches!(
-        word,
-        "grep" | "egrep" | "fgrep" | "rgrep" | "ugrep" | "ug" | "rg"
-    )
 }
 
 /// `-q` prints nothing and `-Z`/`-z` swap the line and field separators gf keys
@@ -168,6 +152,41 @@ mod tests {
     }
 
     #[test]
+    fn folds_each_segment_of_a_chain() {
+        assert_eq!(
+            rewrite("cd /x && grep -rn foo .", GF).unwrap(),
+            "cd /x && { grep -rn foo . | /opt/hook/gf; (exit ${PIPESTATUS[0]}); }"
+        );
+        assert_eq!(
+            rewrite("grep -rn a src | head -5; ls src", GF).unwrap(),
+            "grep -rn a src | /opt/hook/gf | head -5 ; ls src"
+        );
+        assert_eq!(
+            rewrite("grep -rn a x; grep -rn b y", GF).unwrap(),
+            "{ grep -rn a x | /opt/hook/gf; (exit ${PIPESTATUS[0]}); } ; \
+             { grep -rn b y | /opt/hook/gf; (exit ${PIPESTATUS[0]}); }"
+        );
+    }
+
+    #[test]
+    fn an_unfoldable_segment_costs_only_itself() {
+        assert_eq!(
+            rewrite("grep -rn a x > out; grep -rn b y", GF).unwrap(),
+            "grep -rn a x > out ; { grep -rn b y | /opt/hook/gf; (exit ${PIPESTATUS[0]}); }"
+        );
+    }
+
+    #[test]
+    fn command_grep_opts_out() {
+        assert_eq!(rewrite("command grep -rn foo src", GF), None);
+    }
+
+    #[test]
+    fn nothing_foldable_means_no_rewrite() {
+        assert_eq!(rewrite("ls -l; cargo build", GF), None);
+    }
+
+    #[test]
     fn leaves_consumers_of_the_path_alone() {
         for cmd in [
             "grep -rl foo . | xargs sed -i s/a/b/",
@@ -180,12 +199,11 @@ mod tests {
     }
 
     #[test]
-    fn leaves_non_pipelines_alone() {
+    fn leaves_redirects_and_non_searches_alone() {
         for cmd in [
-            "grep -rn foo . && echo hit",
             "grep -rn foo . > out",
             "grep -rn foo . 2>/dev/null",
-            "grep -rn foo . || true",
+            "grep -rn foo . 2>&1 | head",
             "echo $(grep -rn foo .)",
             "cat x | grep foo",
             "ls -l",
