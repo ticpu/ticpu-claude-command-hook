@@ -50,6 +50,11 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "grep -rn foo src > out; grep -rn bar src",
         Fold("grep -rn foo src > out ; { grep -rn bar src | {gf}; (exit ${PIPESTATUS[0]}); }"),
     ),
+    // The filtering search keeps whole paths to match on; gf runs after it.
+    (
+        "rg -n --no-heading 'a|b' /x/ | rg -v 'public.xml|internal.xml' | head",
+        Fold("rg -n --no-heading 'a|b' /x/ | rg -v 'public.xml|internal.xml' | {gf} | head"),
+    ),
     ("grep -rn foo src 2>/dev/null", Deny),
     ("find / -name foo", Deny),
     // `command grep` is the opt-out, even chained or with stderr dropped.

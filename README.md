@@ -21,10 +21,11 @@ fail-open) so a bug in the hook never blocks your tools.
 - **grep fold** — rewrites `grep`/`rg`/`git grep` commands to pipe through `gf`, so repeated
   file paths collapse instead of eating the model's context. Chains are handled per segment
   (`cd /x && grep …` folds the grep and leaves the `cd`), and a segment that cannot be
-  folded costs only itself. Left alone: later pipeline stages that do anything but display
-  (`head`, `tail`, `less`, `cat`, `nl` are fine; `xargs`, `awk`, `sort`, `wc` are not),
-  redirects, `-q`/`-Z`/`-z`, and anything with command substitution or a heredoc. Writing
-  `command grep` opts out entirely.
+  folded costs only itself. `gf` is spliced in after the last search stage — `rg … | rg -v
+  'some.xml'` filters on whole paths, so folding before it would change what matches. Left
+  alone: stages past that point that do anything but display (`head`, `tail`, `less`, `cat`,
+  `nl` are fine; `xargs`, `awk`, `sort`, `wc` are not), redirects, `-q`/`-Z`/`-z`, and
+  anything with command substitution or a heredoc. Writing `command grep` opts out entirely.
 - **search stderr guard** — denies `2>/dev/null` on a search: it hides wrong paths and
   unreadable dirs, and `-s`/`--no-messages` suppresses just the file noise instead.
 
