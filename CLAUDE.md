@@ -39,15 +39,18 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   stripped — a message describing the rule does not trip it.
   Bypass flags count only where git reads options: whole
   tokens, outside quotes, before a heredoc marker — so a commit message may name a flag it
-  isn't using. **Allows** a command whose every segment is a bare `cd`, a provably read-only
-  git pipeline, or a `git add` naming at least one path; the standard permission allowlist
+  isn't using. **Allows** a command whose every segment is a bare `cd`, a lone `echo`, a
+  provably read-only git pipeline, or a `git add` naming at least one path; the allowlist
   can't express that, and it covers `git -C <anypath> status` as well as
   `cd <path> && git diff|add …`, which Claude Code otherwise prompts about however the
   allowlist reads (hooks from the target directory — neither a read-only subcommand nor
   `git add` runs one, and staging is undone by `git restore --staged`). The allow is
   whole-command, not per segment,
-  because one allow decides the whole call: a stdout redirect or a consumer that is not
-  display-only (`| sh`, `; rm -rf`) keeps the prompt. It runs last in `dispatch` so every
+  because one allow decides the whole call: a stdout redirect, or a consumer that can write or
+  run something (`| sh`, `| sed -i`, `; rm -rf`), keeps the prompt. A consumer here only has to
+  add no side effect of its own, which is weaker than grep_fold's display-only test — that one
+  also has to survive gf's folding — so `wc` and a line-selecting `sed` qualify here and not
+  there. It runs last in `dispatch` so every
   objection gets first say and a `git grep` still reaches the fold. Read-only classification
   is fail-safe — a whitelist of always-safe subcommands plus explicit read-only modes for the
   mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or

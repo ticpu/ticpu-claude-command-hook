@@ -146,13 +146,14 @@ fn starts_a_command(tokens: &[&str], i: usize) -> bool {
 /// Auto-allows the git commands that run no hook of their own, so the `cd` Claude
 /// Code warns about — hooks from the target directory — has nothing to warn about.
 /// Unlike the denies this cannot be decided per segment: an allow ends the
-/// permission decision for the *whole* command, so every segment has to be a bare
-/// `cd` or one of those commands, or it all goes back to the normal prompt.
+/// permission decision for the *whole* command, so every segment has to be one of
+/// those commands or a segment that does nothing at all (a bare `cd`, an `echo`),
+/// or it all goes back to the normal prompt.
 pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
     let segments = shell::chain_segments(input.command())?;
     let mut git_seen = false;
     for segment in segments {
-        if is_bare_cd(segment) {
+        if is_bare_cd(segment) || is_echo(segment) {
             continue;
         }
         if !is_read_only_segment(segment) && !is_explicit_add(segment) {
@@ -178,6 +179,15 @@ fn is_bare_cd(segment: &str) -> bool {
         .is_none()
         && !path.starts_with('-')
         && !shell::redirects_stdout(segment)
+}
+
+/// An `echo` labelling the output of the commands around it. Harmless on its own,
+/// so it does not disqualify the chain it sits in — but only as a lone stage with
+/// no redirect, since `echo x > f` writes a file and `echo x | sh` runs one.
+fn is_echo(segment: &str) -> bool {
+    !shell::redirects_stdout(segment)
+        && shell::pipeline_stages(segment)
+            .is_some_and(|stages| stages.len() == 1 && shell::command_word(segment) == Some("echo"))
 }
 
 /// `flags` is the part of the command git reads options from; `full` carries the
@@ -218,8 +228,48 @@ fn git_producer(segment: &str) -> Option<&str> {
     (is_git(producer)
         && rest
             .iter()
-            .all(|stage| shell::is_display_only(stage)))
+            .all(|stage| is_harmless_consumer(stage)))
     .then_some(*producer)
+}
+
+/// A later stage that writes nothing and runs nothing. Weaker than `grep_fold`'s
+/// display-only test, which additionally has to survive gf's folding — here the
+/// only question is whether the stage adds a side effect to the git command's.
+fn is_harmless_consumer(stage: &str) -> bool {
+    if shell::is_display_only(stage) {
+        return true;
+    }
+    match shell::command_word(stage) {
+        Some("wc") => true,
+        Some("sed") => prints_line_ranges(stage),
+        _ => false,
+    }
+}
+
+/// `sed` restricted to selecting lines: every argument is the quiet flag, a bare
+/// `-e`, or a script built only from line numbers and `p`/`q`/`d`. That leaves out
+/// `-i`, an `s///w` or `w` command and GNU's `e`, so nothing is written or run. A
+/// glued `-e<script>`/`--expression=` is not accepted, since the script would ride
+/// along unchecked.
+fn prints_line_ranges(stage: &str) -> bool {
+    let mut args = stage.split_whitespace();
+    let _ = args.next(); // "sed"
+    let mut scripts = 0;
+    for arg in args {
+        if matches!(arg, "-n" | "--quiet" | "--silent" | "-e") {
+            continue;
+        }
+        let script = unquote(arg);
+        if script.is_empty()
+            || !script
+                .chars()
+                .all(|c| c.is_ascii_digit() || ",;p$qd".contains(c))
+        {
+            return false;
+        }
+        scripts += 1;
+    }
+    scripts > 0
 }
 
 fn is_read_only_segment(segment: &str) -> bool {
@@ -591,6 +641,42 @@ mod tests {
             "cd ~/GIT/eido && git status",
         ] {
             assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
+        }
+    }
+
+    /// Quoting citation ranges out of two files, with labels between them.
+    #[test]
+    fn a_labelled_multi_file_quote_auto_allowed() {
+        let cmd = "cd /x/freeswitch && git show c2c5964:src/switch_utils.c | \
+                   sed -n '2766,2770p;2796,2800p' && echo '=== amr 688-718' && \
+                   git show c2c5964:src/mod/codecs/mod_amr/mod_amr.c | sed -n '688,692p;712,718p'";
+        assert_eq!(decision(cmd, "/here"), "allow");
+    }
+
+    #[test]
+    fn only_side_effect_free_consumers_qualify() {
+        for cmd in [
+            "git show HEAD:a.c | wc -l",
+            "cd /x && git log | sed -n '1,20p'",
+            "git show HEAD:a.c | sed -n -e '1,5p'",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
+        }
+        for cmd in [
+            // Writes: in place, via a `w` command, via a glued script.
+            "git show HEAD:a.c | sed -i '1d'",
+            "git show HEAD:a.c | sed -n '1,5p;w /x/out'",
+            "git show HEAD:a.c | sed -n -e'1,5p;w /x/out'",
+            // Substitution and GNU `e` execute or rewrite.
+            "git show HEAD:a.c | sed 's/a/b/'",
+            "git show HEAD:a.c | sed -n '1e rm -rf /x'",
+            // Not a consumer at all: sed reads the file itself.
+            "git show HEAD:a.c | sed -n '1,5p' other.c",
+            // echo is harmless alone, not as a producer or with a redirect.
+            "echo pwned > /x/f && git status",
+            "echo rm -rf | sh && git status",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
         }
     }
 
