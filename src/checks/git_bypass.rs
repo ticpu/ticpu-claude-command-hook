@@ -16,8 +16,31 @@ const REDUNDANT_C: &str = "`git -C <path>` points at the current working directo
 `-C` and run the plain `git` command so the normal per-command approval applies. CLAUDE.md: \
 avoid `git -C`; use `git <verb>` directly.";
 
-const ALLOW_READ_ONLY: &str =
-    "read-only git command (auto-allowed by the hook: no hooks run, nothing mutated)";
+const BLANKET_ADD: &str = "`git add -A` / `.` / `-u` / `*` sweeps untracked scratch into the \
+index — CLAUDE.md forbids it (it once staged real PII). Stage explicit paths; `git status` \
+first if unsure what is untracked.";
+
+const ALLOW_SAFE: &str = "read-only git, or `git add` on explicit paths (auto-allowed by the hook)";
+
+/// `git add` flags that do not widen the set of files staged. Interactive modes
+/// (`-p`, `-i`) would hang the tool, `--pathspec-from-file` takes the paths from a
+/// file this cannot see, and the blanket flags are denied outright — all prompt.
+const ADD_FLAGS: &[&str] = &[
+    "-f",
+    "--force",
+    "-v",
+    "--verbose",
+    "-n",
+    "--dry-run",
+    "-N",
+    "--intent-to-add",
+    "--renormalize",
+    "--sparse",
+    "--ignore-removal",
+];
+
+/// Pathspecs that mean "whatever is in this tree", untracked files included.
+const BLANKET_PATHS: &[&str] = &[".", "./", "..", "../", "*", "*/", ":/", ":/*"];
 
 /// Subcommands that never mutate the repo or worktree in *any* invocation; safe
 /// to auto-allow with `-C <path>` regardless of their arguments.
@@ -75,25 +98,24 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
     }
 }
 
-/// A read-only git command mutates nothing and runs no hooks, so it is safe to
-/// auto-allow wherever it points — including behind the `cd` Claude Code warns
-/// about, since the warning is about hooks from the target directory. Unlike the
-/// denies this cannot be decided per segment: an allow ends the permission
-/// decision for the *whole* command, so every segment has to be a bare `cd` or a
-/// read-only git, or the command goes back to the normal prompt.
-pub fn allow_read_only(input: &HookInput) -> Option<HookOutput> {
+/// Auto-allows the git commands that run no hook of their own, so the `cd` Claude
+/// Code warns about — hooks from the target directory — has nothing to warn about.
+/// Unlike the denies this cannot be decided per segment: an allow ends the
+/// permission decision for the *whole* command, so every segment has to be a bare
+/// `cd` or one of those commands, or it all goes back to the normal prompt.
+pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
     let segments = shell::chain_segments(input.command())?;
     let mut git_seen = false;
     for segment in segments {
         if is_bare_cd(segment) {
             continue;
         }
-        if !is_read_only_segment(segment) {
+        if !is_read_only_segment(segment) && !is_explicit_add(segment) {
             return None;
         }
         git_seen = true;
     }
-    git_seen.then(|| HookOutput::allow("PreToolUse", ALLOW_READ_ONLY))
+    git_seen.then(|| HookOutput::allow("PreToolUse", ALLOW_SAFE))
 }
 
 /// `cd <path>` and nothing else. A flag, a bare `cd` (to `$HOME`), `cd -`, or a
@@ -132,26 +154,78 @@ fn deny(flags: &str, full: &str, cwd: &str) -> Option<HookOutput> {
     {
         return Some(HookOutput::deny("PreToolUse", NO_SIGN));
     }
+    if is_blanket_add(&flags) {
+        return Some(HookOutput::deny("PreToolUse", BLANKET_ADD));
+    }
     None
 }
 
-/// Provably read-only *as a whole segment*: classifying only the git invocation
-/// would let a `| sh` or `> ~/.bashrc` ride along on the allow.
-fn is_read_only_segment(segment: &str) -> bool {
+/// The git invocation a segment produces its output with — but only when the
+/// segment can be judged by that invocation alone. A stdout redirect or a consumer
+/// that is not display-only (`| sh`, `| xargs rm`) would otherwise ride along on
+/// whatever the invocation is allowed.
+fn git_producer(segment: &str) -> Option<&str> {
     if shell::redirects_stdout(segment) {
-        return false;
+        return None;
     }
-    let Some(stages) = shell::pipeline_stages(segment) else {
-        return false;
-    };
-    let Some((producer, rest)) = stages.split_first() else {
-        return false;
-    };
-    is_git(producer)
-        && is_read_only(producer)
+    let stages = shell::pipeline_stages(segment)?;
+    let (producer, rest) = stages.split_first()?;
+    (is_git(producer)
         && rest
             .iter()
-            .all(|stage| shell::is_display_only(stage))
+            .all(|stage| shell::is_display_only(stage)))
+    .then_some(*producer)
+}
+
+fn is_read_only_segment(segment: &str) -> bool {
+    git_producer(segment).is_some_and(is_read_only)
+}
+
+fn is_explicit_add(segment: &str) -> bool {
+    git_producer(segment).is_some_and(adds_explicit_paths)
+}
+
+/// `git add` naming at least one path, with no flag that widens what gets staged.
+/// Staging named files runs no hook and `git restore --staged` undoes it, so the
+/// prompt has nothing to protect; the blanket forms are denied instead.
+fn adds_explicit_paths(cmd: &str) -> bool {
+    let p = parse(cmd);
+    if p.subcommand != Some("add") {
+        return false;
+    }
+    let mut paths = 0;
+    for arg in &p.args {
+        if *arg == "--" {
+            continue;
+        }
+        if arg.starts_with('-') {
+            if !ADD_FLAGS.contains(arg) {
+                return false;
+            }
+            continue;
+        }
+        if BLANKET_PATHS.contains(arg) {
+            return false;
+        }
+        paths += 1;
+    }
+    paths > 0
+}
+
+/// `-A`/`--all`/`-u`/`--update` — including inside a short bundle like `-Av` — or a
+/// pathspec standing for the whole tree.
+fn is_blanket_add(cmd: &str) -> bool {
+    let p = parse(cmd);
+    if p.subcommand != Some("add") {
+        return false;
+    }
+    p.args
+        .iter()
+        .any(|arg| {
+            BLANKET_PATHS.contains(arg)
+                || matches!(*arg, "--all" | "--update")
+                || (arg.starts_with('-') && !arg.starts_with("--") && arg.contains(['A', 'u']))
+        })
 }
 
 fn has_token(segment: &str, flag: &str) -> bool {
@@ -400,7 +474,7 @@ fn allows_no_verify(cmd: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{allow_read_only, check, is_read_only, parse};
+    use super::{allow_safe, check, is_read_only, parse};
     use crate::input::HookInput;
 
     fn input(cmd: &str, cwd: &str) -> HookInput {
@@ -417,7 +491,7 @@ mod tests {
     /// order `dispatch` runs them — a deny has to beat the allow.
     fn decision(cmd: &str, cwd: &str) -> &'static str {
         let input = input(cmd, cwd);
-        match check(&input).or_else(|| allow_read_only(&input)) {
+        match check(&input).or_else(|| allow_safe(&input)) {
             None => "prompt",
             Some(out) => match out
                 .hook_specific_output
@@ -472,6 +546,58 @@ mod tests {
             "cd ~/GIT/eido && git status",
         ] {
             assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
+        }
+    }
+
+    /// Staging named paths runs no hook, so the `cd` warning has nothing to add and
+    /// the allowlist entry it overrode (`Bash(git add:*)`) applies again.
+    #[test]
+    fn staging_explicit_paths_auto_allowed() {
+        for cmd in [
+            "cd /x && git add crates/w/src/mod.rs crates/w/src/queue.rs",
+            "git add src/checks/git_bypass.rs",
+            "cd /x && git add -f vendor/patched.rs",
+            "cd /x && git status && git add a.rs",
+            "git add -- a.rs b.rs",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
+        }
+    }
+
+    /// The forms that swept untracked scratch into a commit once already.
+    #[test]
+    fn blanket_staging_denied() {
+        for cmd in [
+            "git add -A",
+            "git add .",
+            "git add -u",
+            "git add --all",
+            "git add --update",
+            "cd /x && git add -Av",
+            "git add *",
+            "git add ..",
+            "git add src/a.rs .",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "deny", "{cmd}");
+        }
+    }
+
+    /// Anything the classifier cannot vouch for keeps the prompt.
+    #[test]
+    fn other_add_forms_prompt() {
+        for cmd in [
+            // Interactive: it would hang the tool.
+            "git add -p src/a.rs",
+            "git add -i",
+            // The paths come from a file this cannot read.
+            "git add --pathspec-from-file=list",
+            // No path named at all.
+            "cd /x && git add",
+            // A consumer that is not display-only, and a stdout redirect.
+            "git add a.rs | sh",
+            "git add a.rs > out",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
         }
     }
 
