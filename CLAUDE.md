@@ -31,7 +31,13 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   commit message starts with `test`), `--no-gpg-sign`, and `commit.gpgsign=false/0` on any
   segment, plus a non-read-only `git -C` pointing at the current workdir ("drop the -C"), plus
   `git add -A`/`.`/`-u`/`*` (CLAUDE.md: stage explicit paths — a plain `Bash(git add:*)`
-  allowlist entry does not stop those). Bypass flags count only where git reads options: whole
+  allowlist entry does not stop those), plus a `cd` before a `git commit` (a commit is
+  repo-wide, so the `cd` buys nothing and runs the *target* repo's hooks — the one case Claude
+  Code's warning is literally about). That last one is the only check that does not go through
+  `shell`: the shape worth catching is `-m "$(cat <<EOF …)"`, which the parser refuses on
+  principle, so it walks tokens over the text before the heredoc marker with balanced quotes
+  stripped — a message describing the rule does not trip it.
+  Bypass flags count only where git reads options: whole
   tokens, outside quotes, before a heredoc marker — so a commit message may name a flag it
   isn't using. **Allows** a command whose every segment is a bare `cd`, a provably read-only
   git pipeline, or a `git add` naming at least one path; the standard permission allowlist
