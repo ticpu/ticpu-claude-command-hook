@@ -16,6 +16,11 @@ const REDUNDANT_C: &str = "`git -C <path>` points at the current working directo
 `-C` and run the plain `git` command so the normal per-command approval applies. CLAUDE.md: \
 avoid `git -C`; use `git <verb>` directly.";
 
+const CD_COMMIT: &str = "Don't `cd` to commit: a commit covers the whole repo, so plain \
+`git commit` from the directory you are already in does the same thing and takes the normal \
+per-command approval. If the target really is a different repo, work from there or say so and \
+let me run it.";
+
 const BLANKET_ADD: &str = "`git add -A` / `.` / `-u` / `*` sweeps untracked scratch into the \
 index — CLAUDE.md forbids it (it once staged real PII). Stage explicit paths; `git status` \
 first if unsure what is untracked.";
@@ -74,7 +79,7 @@ const ALWAYS_READ_ONLY: &[&str] = &[
 /// as a bare one, so `cd /x && git commit --no-verify` must not escape.
 pub fn check(input: &HookInput) -> Option<HookOutput> {
     let cmd = input.command();
-    match shell::chain_segments(cmd) {
+    let flagged = match shell::chain_segments(cmd) {
         Some(segments) => segments
             .into_iter()
             .map(str::trim_start)
@@ -85,17 +90,57 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
         // the body is message text, so a commit message may name `--no-verify` —
         // while the TDD exemption still reads the body it lives in.
         None => mentions_git(cmd)
-            .then(|| {
-                deny(
-                    cmd.split("<<")
-                        .next()
-                        .unwrap_or(cmd),
-                    cmd,
-                    &input.cwd,
-                )
-            })
+            .then(|| deny(before_heredoc(cmd), cmd, &input.cwd))
             .flatten(),
+    };
+    // Last, so a bypass flag in the same command is reported before the cd.
+    flagged.or_else(|| cd_before_commit(cmd).then(|| HookOutput::deny("PreToolUse", CD_COMMIT)))
+}
+
+/// Everything before a heredoc marker. Past it is message text, not options — a
+/// commit message may name a flag, or describe this very command shape.
+fn before_heredoc(cmd: &str) -> &str {
+    cmd.split("<<")
+        .next()
+        .unwrap_or(cmd)
+}
+
+/// A `cd` preceding a `git commit` in the same command. Deliberately not routed
+/// through `chain_segments`: the shape worth catching is `-m "$(cat <<EOF …)"`,
+/// which that parser refuses on principle. Balanced quotes are dropped first, so
+/// only operators the shell would act on remain.
+fn cd_before_commit(cmd: &str) -> bool {
+    let head = before_heredoc(cmd);
+    let head = shell::unquoted(head).unwrap_or_else(|| head.to_string());
+    let tokens: Vec<&str> = head
+        .split_whitespace()
+        .collect();
+    let mut saw_cd = false;
+    for (i, token) in tokens
+        .iter()
+        .enumerate()
+    {
+        if !starts_a_command(&tokens, i) {
+            continue;
+        }
+        if *token == "cd" {
+            saw_cd = true;
+            continue;
+        }
+        if saw_cd && (*token == "git" || token.ends_with("/git")) {
+            let rest = tokens[i..].join(" ");
+            if parse(&rest).subcommand == Some("commit") {
+                return true;
+            }
+        }
     }
+    false
+}
+
+/// A token in command position: first, or right after a chain operator. Glued
+/// forms (`cd /x; git …`) count, since this runs on text `shell` gave up on.
+fn starts_a_command(tokens: &[&str], i: usize) -> bool {
+    i == 0 || tokens[i - 1].ends_with(['&', ';', '|'])
 }
 
 /// Auto-allows the git commands that run no hook of their own, so the `cd` Claude
@@ -546,6 +591,36 @@ mod tests {
             "cd ~/GIT/eido && git status",
         ] {
             assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
+        }
+    }
+
+    /// A commit is repo-wide, so the `cd` buys nothing and runs the target repo's
+    /// hooks — the one case Claude Code's warning is literally about.
+    #[test]
+    fn a_cd_before_commit_is_denied() {
+        for cmd in [
+            "cd /x && git commit -m 'feat: y'",
+            "cd /x; git commit -m y",
+            "cd /x && git add a.rs && git commit -m y",
+            "cd /x && git -c user.name=Y commit -m y",
+            "cd /x && /usr/bin/git commit -m y",
+            // The reported shape: substitution *and* heredoc, which `shell` refuses.
+            "cd /x/rust && git commit -m \"$(cat <<'EOF'\nrefactor: collapse the rule\nEOF\n)\"",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "deny", "{cmd}");
+        }
+    }
+
+    /// The rule keys on a real `cd`, not a description of one.
+    #[test]
+    fn talking_about_the_cd_is_not_doing_it() {
+        for cmd in [
+            "git commit -m \"fix: deny cd && git commit\"",
+            "git commit -F - <<EOF\nfix: deny `cd /x && git commit`\nEOF",
+            "cd /x && git status",
+            "git -C /x commit -m y",
+        ] {
+            assert_ne!(decision(cmd, "/here"), "deny", "{cmd}");
         }
     }
 

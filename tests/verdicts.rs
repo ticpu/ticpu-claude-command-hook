@@ -83,6 +83,13 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("cd /x && git add crates/w/src/mod.rs crates/w/src/queue.rs", Allow),
     ("cd /x && git add -A", Deny),
     ("git add .", Deny),
+    // A commit runs the target repo's hooks and the cd buys nothing; the same shape
+    // quoted in a message does not count.
+    (
+        "cd /x/rust && git commit -m \"$(cat <<'EOF'\nrefactor: collapse the rule\nEOF\n)\"",
+        Deny,
+    ),
+    ("git commit -F - <<EOF\nfix: deny cd && git commit\nEOF", Pass),
     // The allow must not cover a second command riding on the same decision.
     ("git -C /x status; rm -rf /y", Pass),
     // A read-only git still reaches the fold, so the allow runs after grep_fold.
