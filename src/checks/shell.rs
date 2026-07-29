@@ -10,6 +10,12 @@ const SEARCHERS: [&str; 7] = ["grep", "egrep", "fgrep", "rgrep", "ugrep", "ug", 
 /// binary and to be left alone, so it must not classify as a search.
 const WRAPPERS: [&str; 5] = ["env", "sudo", "time", "nice", "stdbuf"];
 
+/// Later pipeline stages that only display what they receive. Anything else may
+/// parse the path off each line — folding would feed it truncated paths — or,
+/// for the read-only classifier, run arbitrary code on the piped output.
+/// `wc` would count folded lines, and `sort -o <file>` writes a file.
+const DISPLAY_ONLY: [&str; 5] = ["head", "tail", "less", "cat", "nl"];
+
 /// Top-level segments paired with the operator that follows each one (`""` for
 /// the last), so a caller can rewrite one segment and rebuild the command.
 pub fn chain_parts(command: &str) -> Option<Vec<(&str, &str)>> {
@@ -108,6 +114,11 @@ pub fn is_search(segment: &str) -> bool {
 /// rather than reading files, but it is still matching against whole paths.
 pub fn is_searcher(stage: &str) -> bool {
     command_word(stage).is_some_and(|w| SEARCHERS.contains(&w))
+}
+
+/// True when a pipeline stage only displays what it is handed.
+pub fn is_display_only(stage: &str) -> bool {
+    command_word(stage).is_some_and(|w| DISPLAY_ONLY.contains(&w))
 }
 
 fn basename(word: &str) -> &str {
