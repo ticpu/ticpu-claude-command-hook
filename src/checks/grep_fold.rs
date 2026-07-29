@@ -74,7 +74,7 @@ fn rewrite(command: &str, gf: &str) -> Option<String> {
 }
 
 fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
-    if !shell::is_search(segment) || shell::has_redirect(segment) {
+    if !shell::is_search(segment) || shell::redirects_stdout(segment) {
         return None;
     }
     let stages = shell::pipeline_stages(segment)?;
@@ -239,12 +239,29 @@ mod tests {
         }
     }
 
+    /// Merging stderr neither writes stdout to a file nor hides anything, so it
+    /// only means gf sees the error lines too — and passes them through.
+    #[test]
+    fn a_stderr_redirect_still_folds() {
+        assert_eq!(
+            rewrite("grep -rn foo . 2>&1 | head", GF).unwrap(),
+            "grep -rn foo . 2>&1 | /opt/hook/gf | head"
+        );
+        assert_eq!(
+            rewrite("rg -n foo src 2>&1", GF).unwrap(),
+            "rg -n foo src 2>&1 | /opt/hook/gf; (exit ${PIPESTATUS[0]})"
+        );
+        assert_eq!(
+            rewrite("grep -rn foo . 2>errs.log | head", GF).unwrap(),
+            "grep -rn foo . 2>errs.log | /opt/hook/gf | head"
+        );
+    }
+
     #[test]
     fn leaves_redirects_and_non_searches_alone() {
         for cmd in [
             "grep -rn foo . > out",
-            "grep -rn foo . 2>/dev/null",
-            "grep -rn foo . 2>&1 | head",
+            "grep -rn foo . >out 2>&1",
             "echo $(grep -rn foo .)",
             "cat x | grep foo",
             "ls -l",

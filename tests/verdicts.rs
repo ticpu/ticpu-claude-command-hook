@@ -55,7 +55,14 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "rg -n --no-heading 'a|b' /x/ | rg -v 'public.xml|internal.xml' | head",
         Fold("rg -n --no-heading 'a|b' /x/ | rg -v 'public.xml|internal.xml' | {gf} | head"),
     ),
+    // Merged stderr is not a stdout redirect, so the fold still applies.
+    (
+        "ls /x/; grep -rn \"a\\|b\" /x/f.xml 2>&1 | head",
+        Fold("ls /x/ ; grep -rn \"a\\|b\" /x/f.xml 2>&1 | {gf} | head"),
+    ),
     ("grep -rn foo src 2>/dev/null", Deny),
+    // Redirecting stdout keeps the fold off: the file must get the raw output.
+    ("grep -rn foo src 2>&1 >out", Pass),
     ("find / -name foo", Deny),
     // `command grep` is the opt-out, even chained or with stderr dropped.
     ("ls -ld /x; command grep -c foo /y", Pass),
