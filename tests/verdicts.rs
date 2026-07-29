@@ -79,6 +79,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("cd /x && git diff --stat Cargo.lock", Allow),
     ("cd /x && git stash pop", Pass),
     ("cd /x && git commit --no-verify -m 'feat: x'", Deny),
+    // Staging named paths runs no hook either; the blanket forms are denied.
+    ("cd /x && git add crates/w/src/mod.rs crates/w/src/queue.rs", Allow),
+    ("cd /x && git add -A", Deny),
+    ("git add .", Deny),
     // The allow must not cover a second command riding on the same decision.
     ("git -C /x status; rm -rf /y", Pass),
     // A read-only git still reaches the fold, so the allow runs after grep_fold.

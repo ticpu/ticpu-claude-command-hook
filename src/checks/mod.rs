@@ -25,7 +25,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 // Last, in order: an allow ends the chain, so every objection gets
                 // first say — and a `git grep` still reaches the fold.
                 .or_else(|| grep_fold::check(input))
-                .or_else(|| git_bypass::allow_read_only(input))
+                .or_else(|| git_bypass::allow_safe(input))
         }
         "PostToolUse" => design_rationale::check(input.file_path()),
         _ => None,

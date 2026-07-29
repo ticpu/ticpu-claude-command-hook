@@ -29,13 +29,17 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   `$XDG_RUNTIME_DIR/claude-hooks/` lets later calls through.
 - `git_bypass` — two decisions, both per chain segment. **Denies** `--no-verify` (unless the
   commit message starts with `test`), `--no-gpg-sign`, and `commit.gpgsign=false/0` on any
-  segment, plus a non-read-only `git -C` pointing at the current workdir ("drop the -C").
-  Bypass flags count only where git reads options: whole tokens, outside quotes, before a
-  heredoc marker — so a commit message may name a flag it isn't using. **Allows** a command
-  whose every segment is a bare `cd` or a provably read-only git pipeline; the standard
-  permission allowlist can't express that, and it covers both `git -C <anypath> status` and
-  `cd <path> && git diff`, which Claude Code otherwise prompts about (hooks from the target
-  directory — a read-only subcommand runs none). The allow is whole-command, not per segment,
+  segment, plus a non-read-only `git -C` pointing at the current workdir ("drop the -C"), plus
+  `git add -A`/`.`/`-u`/`*` (CLAUDE.md: stage explicit paths — a plain `Bash(git add:*)`
+  allowlist entry does not stop those). Bypass flags count only where git reads options: whole
+  tokens, outside quotes, before a heredoc marker — so a commit message may name a flag it
+  isn't using. **Allows** a command whose every segment is a bare `cd`, a provably read-only
+  git pipeline, or a `git add` naming at least one path; the standard permission allowlist
+  can't express that, and it covers `git -C <anypath> status` as well as
+  `cd <path> && git diff|add …`, which Claude Code otherwise prompts about however the
+  allowlist reads (hooks from the target directory — neither a read-only subcommand nor
+  `git add` runs one, and staging is undone by `git restore --staged`). The allow is
+  whole-command, not per segment,
   because one allow decides the whole call: a stdout redirect or a consumer that is not
   display-only (`| sh`, `; rm -rf`) keeps the prompt. It runs last in `dispatch` so every
   objection gets first say and a `git grep` still reaches the fold. Read-only classification
