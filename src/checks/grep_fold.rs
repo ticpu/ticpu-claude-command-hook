@@ -9,10 +9,6 @@ use crate::output::HookOutput;
 /// Sent on every rewritten grep, so it stays one line; `gf --help` has the rest.
 const REASON: &str = "piped through gf: repeated paths folded, `base:` announces what was stripped";
 
-/// Later pipeline stages that only display what they receive. Anything else may
-/// parse the path off each line — folding would feed it truncated paths.
-const DISPLAY_ONLY: [&str; 5] = ["head", "tail", "less", "cat", "nl"];
-
 pub fn check(input: &HookInput) -> Option<HookOutput> {
     let tool_input = input
         .tool_input
@@ -99,7 +95,7 @@ fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
     }
     if !stages[at..]
         .iter()
-        .all(|s| shell::command_word(s).is_some_and(|w| DISPLAY_ONLY.contains(&w)))
+        .all(|s| shell::is_display_only(s))
     {
         return None;
     }
