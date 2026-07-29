@@ -43,7 +43,9 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   chained or `cd`-prefixed grep still folds. `gf` lands after the *last* search stage, since a
   later `grep`/`rg` filters lines and its pattern can match the prefix gf strips; everything
   past that point must only display (a path-consuming `xargs`/`awk` would get truncated
-  paths). Refuses a segment whose flags change the output shape gf parses, or that redirects.
+  paths). Refuses a segment whose flags change the output shape gf parses, or that redirects
+  stdout — a stderr-only redirect (`2>&1`, `2>file`) still folds, gf passes the error lines
+  through.
   When gf ends the pipeline it would swallow the search's exit status, so `PIPESTATUS` puts it
   back, brace-grouped so it stays attached to that segment.
 - `search_stderr` — denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped

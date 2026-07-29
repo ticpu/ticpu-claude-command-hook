@@ -57,11 +57,28 @@ pub fn pipeline_stages(segment: &str) -> Option<Vec<&str>> {
     )
 }
 
-/// True when a top-level redirect is present — and also when the command cannot
-/// be analyzed, since a missed redirect would send rewritten output to a file.
-pub fn has_redirect(command: &str) -> bool {
-    split(command, |b, i| matches!(b[i], b'<' | b'>').then_some(1))
-        .is_none_or(|parts| parts.len() > 1)
+/// True when a top-level redirect can carry stdout (`>`, `>>`, `&>`, `>&2`, any fd
+/// but 2) — and when the command cannot be analyzed, since a missed stdout redirect
+/// would send rewritten output somewhere it gets read back. `2>`, `2>&1` and `<`
+/// leave stdout alone, so they come back false.
+pub fn redirects_stdout(command: &str) -> bool {
+    split(command, |b, i| {
+        (b[i] == b'>' && !preceded_by(b, i, b'>') && !stderr_fd(b, i)).then_some(1)
+    })
+    .is_none_or(|parts| parts.len() > 1)
+}
+
+/// `>>` is one operator; its second byte must not count as another redirect.
+fn preceded_by(b: &[u8], i: usize, c: u8) -> bool {
+    i > 0 && b[i - 1] == c
+}
+
+/// A bare `2` glued to the `>`. A longer number is a higher fd, deliberately left
+/// on the stdout side: fail-safe beats guessing what an exotic fd does.
+fn stderr_fd(b: &[u8], i: usize) -> bool {
+    preceded_by(b, i, b'2')
+        && !(i > 1
+            && b[i - 2].is_ascii_digit())
 }
 
 /// The command word of a stage: `VAR=v` assignments and wrappers are stepped
@@ -246,11 +263,33 @@ mod tests {
     }
 
     #[test]
-    fn redirects_including_stderr() {
-        assert!(has_redirect("grep x . 2>/dev/null"));
-        assert!(has_redirect("grep x . > out"));
-        assert!(!has_redirect("grep x . | head -5"));
-        assert!(!has_redirect("grep -rn '2>/dev/null' ."));
+    fn only_stdout_redirects_count() {
+        for cmd in [
+            "grep x . > out",
+            "grep x . >> out",
+            "grep x . 1>out",
+            "grep x . &>out",
+            "grep x . >&2",
+            "grep x . >out 2>&1",
+            "grep x . 3>out",
+            // Unbalanced: unanalyzable, so fail safe.
+            "grep 'x . > out",
+        ] {
+            assert!(redirects_stdout(cmd), "{cmd}");
+        }
+        for cmd in [
+            "grep x . 2>&1",
+            "grep x . 2>&1 | head",
+            "grep x . 2>errs",
+            "grep x . 2>>errs",
+            "grep x . 2>/dev/null",
+            "grep x . < in",
+            "grep x . | head -5",
+            "grep -rn '2>/dev/null' .",
+            "grep -rn 'a > b' .",
+        ] {
+            assert!(!redirects_stdout(cmd), "{cmd}");
+        }
     }
 
     #[test]

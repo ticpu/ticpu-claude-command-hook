@@ -2,8 +2,8 @@ use crate::checks::shell;
 use crate::output::HookOutput;
 
 const SILENCED: &str = "`2>/dev/null` on a search hides the errors worth seeing (wrong path, \
-unreadable dir) and blocks the gf rewrite. Drop it, or pass `-s`/`--no-messages`, which suppresses \
-only missing/unreadable-file noise and keeps real failures. CLAUDE.md: errors shall not be silenced.";
+unreadable dir). Drop it, or pass `-s`/`--no-messages`, which suppresses only \
+missing/unreadable-file noise and keeps real failures. CLAUDE.md: errors shall not be silenced.";
 
 pub fn check(command: &str) -> Option<HookOutput> {
     shell::chain_segments(command)?
