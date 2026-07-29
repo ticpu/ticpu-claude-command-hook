@@ -80,7 +80,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("cd /x && git stash pop", Pass),
     ("cd /x && git commit --no-verify -m 'feat: x'", Deny),
     // Staging named paths runs no hook either; the blanket forms are denied.
-    ("cd /x && git add crates/w/src/mod.rs crates/w/src/queue.rs", Allow),
+    (
+        "cd /x && git add crates/w/src/mod.rs crates/w/src/queue.rs",
+        Allow,
+    ),
     ("cd /x && git add -A", Deny),
     ("git add .", Deny),
     // A commit runs the target repo's hooks and the cd buys nothing; the same shape
@@ -89,7 +92,17 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "cd /x/rust && git commit -m \"$(cat <<'EOF'\nrefactor: collapse the rule\nEOF\n)\"",
         Deny,
     ),
-    ("git commit -F - <<EOF\nfix: deny cd && git commit\nEOF", Pass),
+    (
+        "git commit -F - <<EOF\nfix: deny cd && git commit\nEOF",
+        Pass,
+    ),
+    // Quoting citation ranges: a line-selecting sed and a label add no side effect.
+    (
+        "cd /x && git show c2c5964:src/a.c | sed -n '2766,2770p' && echo '=== amr' && \
+         git show c2c5964:src/b.c | sed -n '688,692p'",
+        Allow,
+    ),
+    ("git show HEAD:a.c | sed -i '1d'", Pass),
     // The allow must not cover a second command riding on the same decision.
     ("git -C /x status; rm -rf /y", Pass),
     // A read-only git still reaches the fold, so the allow runs after grep_fold.
