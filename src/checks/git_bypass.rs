@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::checks::shell;
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
@@ -15,7 +16,8 @@ const REDUNDANT_C: &str = "`git -C <path>` points at the current working directo
 `-C` and run the plain `git` command so the normal per-command approval applies. CLAUDE.md: \
 avoid `git -C`; use `git <verb>` directly.";
 
-const ALLOW_RO_C: &str = "read-only `git -C` command (auto-allowed by the hook)";
+const ALLOW_READ_ONLY: &str =
+    "read-only git command (auto-allowed by the hook: no hooks run, nothing mutated)";
 
 /// Subcommands that never mutate the repo or worktree in *any* invocation; safe
 /// to auto-allow with `-C <path>` regardless of their arguments.
@@ -45,33 +47,100 @@ const ALWAYS_READ_ONLY: &[&str] = &[
     "version",
 ];
 
+/// Denies, per chain segment: a `git` anywhere in a chain carries the same bypass
+/// as a bare one, so `cd /x && git commit --no-verify` must not escape.
 pub fn check(input: &HookInput) -> Option<HookOutput> {
-    let cmd = input
-        .command()
-        .trim_start();
-    if !is_git(cmd) {
-        return None;
+    let cmd = input.command();
+    match shell::chain_segments(cmd) {
+        Some(segments) => segments
+            .into_iter()
+            .map(str::trim_start)
+            .filter(|segment| is_git(segment))
+            .find_map(|segment| deny(segment, segment, &input.cwd)),
+        // Unanalyzable (heredoc, substitution): the whole command is the only unit
+        // left to judge. Flags are read from the part before the heredoc marker —
+        // the body is message text, so a commit message may name `--no-verify` —
+        // while the TDD exemption still reads the body it lives in.
+        None => mentions_git(cmd)
+            .then(|| {
+                deny(
+                    cmd.split("<<")
+                        .next()
+                        .unwrap_or(cmd),
+                    cmd,
+                    &input.cwd,
+                )
+            })
+            .flatten(),
     }
-    // `-C` handling comes first so a read-only `-C` short-circuits to allow and a
-    // redundant `-C` is denied with guidance; ordering mirrors CLAUDE.md intent.
-    if git_c_path(cmd).is_some() {
-        if is_read_only(cmd) {
-            return Some(HookOutput::allow("PreToolUse", ALLOW_RO_C));
+}
+
+/// A read-only git command mutates nothing, so it is safe to auto-allow wherever
+/// it points. Unlike the denies this cannot be decided per segment: an allow ends
+/// the permission decision for the *whole* command, so every segment has to be
+/// read-only or the command goes back to the normal prompt.
+pub fn allow_read_only(input: &HookInput) -> Option<HookOutput> {
+    let segments = shell::chain_segments(input.command())?;
+    let mut git_seen = false;
+    for segment in segments {
+        if !is_read_only_segment(segment) {
+            return None;
         }
-        if points_at_cwd(cmd, &input.cwd) {
-            return Some(HookOutput::deny("PreToolUse", REDUNDANT_C));
-        }
+        git_seen = true;
     }
-    if cmd.contains("--no-verify") && !allows_no_verify(cmd) {
+    git_seen.then(|| HookOutput::allow("PreToolUse", ALLOW_READ_ONLY))
+}
+
+/// `flags` is the part of the command git reads options from; `full` carries the
+/// message too, which is where the TDD exemption looks.
+fn deny(flags: &str, full: &str, cwd: &str) -> Option<HookOutput> {
+    if git_c_path(flags).is_some() && !is_read_only_segment(flags) && points_at_cwd(flags, cwd) {
+        return Some(HookOutput::deny("PreToolUse", REDUNDANT_C));
+    }
+    // Quoted spans are message text, not options: `-m "no --no-verify here"` is a
+    // description of the flag, not a use of it. Unbalanced quotes fall back to the
+    // raw text so a deny is never lost to a parse failure.
+    let flags = shell::unquoted(flags).unwrap_or_else(|| flags.to_string());
+    if has_token(&flags, "--no-verify") && !allows_no_verify(full) {
         return Some(HookOutput::deny("PreToolUse", NO_VERIFY));
     }
-    if cmd.contains("--no-gpg-sign")
-        || cmd.contains("commit.gpgsign=false")
-        || cmd.contains("commit.gpgsign=0")
+    if has_token(&flags, "--no-gpg-sign")
+        || flags.contains("commit.gpgsign=false")
+        || flags.contains("commit.gpgsign=0")
     {
         return Some(HookOutput::deny("PreToolUse", NO_SIGN));
     }
     None
+}
+
+/// Provably read-only *as a whole segment*: classifying only the git invocation
+/// would let a `| sh` or `> ~/.bashrc` ride along on the allow.
+fn is_read_only_segment(segment: &str) -> bool {
+    if shell::redirects_stdout(segment) {
+        return false;
+    }
+    let Some(stages) = shell::pipeline_stages(segment) else {
+        return false;
+    };
+    let Some((producer, rest)) = stages.split_first() else {
+        return false;
+    };
+    is_git(producer)
+        && is_read_only(producer)
+        && rest
+            .iter()
+            .all(|stage| shell::is_display_only(stage))
+}
+
+fn has_token(segment: &str, flag: &str) -> bool {
+    segment
+        .split_whitespace()
+        .any(|word| word == flag)
+}
+
+fn mentions_git(cmd: &str) -> bool {
+    cmd.split_whitespace()
+        .any(|word| word == "git" || word.ends_with("/git"))
 }
 
 /// True when `git -C <path>` targets the same directory the tool already runs in,
@@ -309,7 +378,7 @@ fn allows_no_verify(cmd: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{check, is_read_only, parse};
+    use super::{allow_read_only, check, is_read_only, parse};
     use crate::input::HookInput;
 
     fn input(cmd: &str, cwd: &str) -> HookInput {
@@ -322,9 +391,11 @@ mod tests {
         }
     }
 
-    /// Decision as one of: allow / deny / prompt (None).
+    /// Decision as one of: allow / deny / prompt (None). Both entry points, in the
+    /// order `dispatch` runs them — a deny has to beat the allow.
     fn decision(cmd: &str, cwd: &str) -> &'static str {
-        match check(&input(cmd, cwd)) {
+        let input = input(cmd, cwd);
+        match check(&input).or_else(|| allow_read_only(&input)) {
             None => "prompt",
             Some(out) => match out
                 .hook_specific_output
@@ -355,7 +426,8 @@ mod tests {
         assert!(!blocked("git commit --no-verify -m \"test: red\""));
         assert!(!blocked("git commit --no-verify -m 'test(scope): red'"));
         assert!(!blocked("git commit -m \"feat: x\""));
-        assert_eq!(decision("git status", ""), "prompt");
+        assert_eq!(decision("git status", ""), "allow");
+        assert_eq!(decision("git push", ""), "prompt");
         assert!(!blocked("cargo test --no-verify-something"));
     }
 
@@ -363,6 +435,51 @@ mod tests {
     fn heredoc_test_message_allowed() {
         let cmd = "git commit --no-verify -F - <<EOF\ntest: red bar\nEOF";
         assert!(!blocked(cmd));
+    }
+
+    /// An allow decides the whole command, so a piped or redirected consumer must
+    /// not ride along on the read-only git that precedes it.
+    #[test]
+    fn a_consumer_of_the_output_is_not_covered() {
+        for cmd in [
+            "git -C /x status; rm -rf /y",
+            "git -C /x log | sh",
+            "git -C /x log > ~/.bashrc",
+            "git -C /x log | xargs rm",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
+        }
+    }
+
+    /// A bypass flag on any segment of a chain, not just a bare `git` command.
+    #[test]
+    fn bypasses_in_a_chain_are_denied() {
+        assert_eq!(
+            decision("echo x; git commit --no-verify -m 'feat: x'", "/here"),
+            "deny"
+        );
+        assert_eq!(
+            decision("echo x; git commit --no-gpg-sign -m y", "/here"),
+            "deny"
+        );
+        // Unanalyzable heredoc: the whole command is the only unit left to judge.
+        let heredoc = "echo x; git commit --no-verify -F - <<EOF\nfeat: x\nEOF";
+        assert_eq!(decision(heredoc, "/here"), "deny");
+        let tdd = "echo x; git commit --no-verify -F - <<EOF\ntest: red\nEOF";
+        assert_eq!(decision(tdd, "/here"), "prompt");
+    }
+
+    /// A commit message is allowed to talk about the flags. They only count where
+    /// git reads options: outside quotes, before a heredoc body.
+    #[test]
+    fn a_message_naming_the_flag_is_not_a_bypass() {
+        for cmd in [
+            "git commit -m \"fix: deny --no-verify in a chain\"",
+            "git commit -F - <<EOF\nfix: deny --no-verify in a chain\nEOF",
+            "git commit -m 'drop --no-gpg-sign handling'",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
+        }
     }
 
     #[test]

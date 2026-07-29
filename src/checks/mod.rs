@@ -22,8 +22,10 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| git_bypass::check(input))
                 .or_else(|| broad_find::check(cmd))
                 .or_else(|| search_stderr::check(cmd))
-                // Last: a rewrite also allows, so every objection gets first say.
+                // Last, in order: an allow ends the chain, so every objection gets
+                // first say — and a `git grep` still reaches the fold.
                 .or_else(|| grep_fold::check(input))
+                .or_else(|| git_bypass::allow_read_only(input))
         }
         "PostToolUse" => design_rationale::check(input.file_path()),
         _ => None,

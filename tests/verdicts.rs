@@ -8,13 +8,15 @@ use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
-use Verdict::{Deny, Fold, Pass};
+use Verdict::{Allow, Deny, Fold, Pass};
 
 #[derive(Debug, PartialEq)]
 enum Verdict<S> {
-    /// No output at all: every check allowed the command untouched.
+    /// No output at all: no check objected, so the normal permission prompt applies.
     Pass,
     Deny,
+    /// An explicit allow decision: the permission prompt is skipped.
+    Allow,
     /// Rewritten command, with `{gf}` standing in for the absolute gf path.
     Fold(S),
 }
@@ -24,6 +26,7 @@ impl Verdict<&str> {
         match self {
             Pass => Pass,
             Deny => Deny,
+            Allow => Allow,
             Fold(rewritten) => Fold(rewritten.to_string()),
         }
     }
@@ -71,6 +74,14 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("for f in *.rs; do grep -n foo \"$f\"; done", Pass),
     ("grep -rl foo . | xargs sed -i s/a/b/", Pass),
     ("git commit -m 'fix the grep call'", Pass),
+    ("git -C /x diff --stat Cargo.lock", Allow),
+    // The allow must not cover a second command riding on the same decision.
+    ("git -C /x status; rm -rf /y", Pass),
+    // A read-only git still reaches the fold, so the allow runs after grep_fold.
+    (
+        "git grep -n foo",
+        Fold("git grep -n foo | {gf}; (exit ${PIPESTATUS[0]})"),
+    ),
 ];
 
 #[test]
@@ -93,10 +104,11 @@ fn verdict(command: &str) -> Verdict<String> {
     match specific["updatedInput"]["command"].as_str() {
         // Fold back to the placeholder so the expectation stays path-independent.
         Some(rewritten) => Fold(rewritten.replace(&gf_path(), "{gf}")),
-        None => {
-            assert_eq!(specific["permissionDecision"], "deny", "{stdout}");
-            Deny
-        }
+        None => match specific["permissionDecision"].as_str() {
+            Some("deny") => Deny,
+            Some("allow") => Allow,
+            _ => panic!("unexpected hook output: {stdout}"),
+        },
     }
 }
 
