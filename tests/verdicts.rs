@@ -75,12 +75,16 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("grep -rl foo . | xargs sed -i s/a/b/", Pass),
     ("git commit -m 'fix the grep call'", Pass),
     ("git -C /x diff --stat Cargo.lock", Allow),
+    // Read-only git runs no hooks, so the `cd` Claude Code warns about is harmless.
+    ("cd /x && git diff --stat Cargo.lock", Allow),
+    ("cd /x && git stash pop", Pass),
+    ("cd /x && git commit --no-verify -m 'feat: x'", Deny),
     // The allow must not cover a second command riding on the same decision.
     ("git -C /x status; rm -rf /y", Pass),
     // A read-only git still reaches the fold, so the allow runs after grep_fold.
     (
-        "git grep -n foo",
-        Fold("git grep -n foo | {gf}; (exit ${PIPESTATUS[0]})"),
+        "cd /x && git grep -n foo",
+        Fold("cd /x && { git grep -n foo | {gf}; (exit ${PIPESTATUS[0]}); }"),
     ),
 ];
 

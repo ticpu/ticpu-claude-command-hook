@@ -75,20 +75,42 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
     }
 }
 
-/// A read-only git command mutates nothing, so it is safe to auto-allow wherever
-/// it points. Unlike the denies this cannot be decided per segment: an allow ends
-/// the permission decision for the *whole* command, so every segment has to be
-/// read-only or the command goes back to the normal prompt.
+/// A read-only git command mutates nothing and runs no hooks, so it is safe to
+/// auto-allow wherever it points — including behind the `cd` Claude Code warns
+/// about, since the warning is about hooks from the target directory. Unlike the
+/// denies this cannot be decided per segment: an allow ends the permission
+/// decision for the *whole* command, so every segment has to be a bare `cd` or a
+/// read-only git, or the command goes back to the normal prompt.
 pub fn allow_read_only(input: &HookInput) -> Option<HookOutput> {
     let segments = shell::chain_segments(input.command())?;
     let mut git_seen = false;
     for segment in segments {
+        if is_bare_cd(segment) {
+            continue;
+        }
         if !is_read_only_segment(segment) {
             return None;
         }
         git_seen = true;
     }
     git_seen.then(|| HookOutput::allow("PreToolUse", ALLOW_READ_ONLY))
+}
+
+/// `cd <path>` and nothing else. A flag, a bare `cd` (to `$HOME`), `cd -`, or a
+/// redirect glued to the path (`cd /x>y` truncates `y`) all disqualify it.
+fn is_bare_cd(segment: &str) -> bool {
+    let mut words = segment.split_whitespace();
+    if words.next() != Some("cd") {
+        return false;
+    }
+    let Some(path) = words.next() else {
+        return false;
+    };
+    words
+        .next()
+        .is_none()
+        && !path.starts_with('-')
+        && !shell::redirects_stdout(segment)
 }
 
 /// `flags` is the part of the command git reads options from; `full` carries the
@@ -437,6 +459,44 @@ mod tests {
         assert!(!blocked(cmd));
     }
 
+    /// The reported stall: a subagent inspecting another directory of the project
+    /// it is already in.
+    #[test]
+    fn read_only_git_behind_a_cd_auto_allowed() {
+        for cmd in [
+            "cd /x && git diff --stat Cargo.lock",
+            "cd /x && git status && git log --oneline",
+            "cd /x && git log | head -20",
+            "cd /x; git show HEAD",
+            "cd /x && git -C /y log",
+            "cd ~/GIT/eido && git status",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
+        }
+    }
+
+    /// A `cd` that is not just a directory change, or a write anywhere in the
+    /// chain, drops the whole command back to the normal prompt.
+    #[test]
+    fn a_cd_chain_with_anything_else_prompts() {
+        for cmd in [
+            "cd /x && git stash pop",
+            "cd /x && git log; cargo build",
+            "cd /x && git log && rm -rf /y",
+            "cd /x && git log | sh",
+            "cd /x && git log > out",
+            "cd && git log",
+            "cd - && git log",
+            "cd /x>y && git log",
+            "cd /x /y && git log",
+            "pushd /x && git log",
+            // A `cd` alone has no git segment to justify the allow.
+            "cd /x",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
+        }
+    }
+
     /// An allow decides the whole command, so a piped or redirected consumer must
     /// not ride along on the read-only git that precedes it.
     #[test]
@@ -455,7 +515,7 @@ mod tests {
     #[test]
     fn bypasses_in_a_chain_are_denied() {
         assert_eq!(
-            decision("echo x; git commit --no-verify -m 'feat: x'", "/here"),
+            decision("cd /x && git commit --no-verify -m 'feat: x'", "/here"),
             "deny"
         );
         assert_eq!(

@@ -27,14 +27,21 @@ user's tools. Checks never silence their own IO errors — they log and allow.
 
 - `glab_skill` — first `glab` per session is denied to force `Skill("glab")`; a marker in
   `$XDG_RUNTIME_DIR/claude-hooks/` lets later calls through.
-- `git_bypass` — denies `--no-verify` (unless the commit message starts with `test`),
-  `--no-gpg-sign`, and `commit.gpgsign=false/0`. Also handles `git -C <path>`: a
-  provably read-only subcommand is auto-*allowed* (the standard permission allowlist
-  can't express `git -C <anypath> status`), while a non-read-only `-C` pointing at the
-  current workdir is denied with a "drop the -C" reason; anything else falls through to
-  the normal prompt. Read-only classification is fail-safe — a whitelist of always-safe
-  subcommands plus explicit read-only modes for the mode-dependent ones (branch/tag/
-  config/remote/reflog/symbolic-ref); any unrecognized flag or verb prompts.
+- `git_bypass` — two decisions, both per chain segment. **Denies** `--no-verify` (unless the
+  commit message starts with `test`), `--no-gpg-sign`, and `commit.gpgsign=false/0` on any
+  segment, plus a non-read-only `git -C` pointing at the current workdir ("drop the -C").
+  Bypass flags count only where git reads options: whole tokens, outside quotes, before a
+  heredoc marker — so a commit message may name a flag it isn't using. **Allows** a command
+  whose every segment is a bare `cd` or a provably read-only git pipeline; the standard
+  permission allowlist can't express that, and it covers both `git -C <anypath> status` and
+  `cd <path> && git diff`, which Claude Code otherwise prompts about (hooks from the target
+  directory — a read-only subcommand runs none). The allow is whole-command, not per segment,
+  because one allow decides the whole call: a stdout redirect or a consumer that is not
+  display-only (`| sh`, `; rm -rf`) keeps the prompt. It runs last in `dispatch` so every
+  objection gets first say and a `git grep` still reaches the fold. Read-only classification
+  is fail-safe — a whitelist of always-safe subcommands plus explicit read-only modes for the
+  mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or
+  verb prompts.
 - `broad_find` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
   repo parent; a find scoped to one repo under GIT is allowed.
 - `design_rationale` — on any edit to a `design-rationale.md`, injects the stop-for-review
