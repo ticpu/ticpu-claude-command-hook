@@ -55,6 +55,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   is fail-safe — a whitelist of always-safe subcommands plus explicit read-only modes for the
   mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or
   verb prompts.
+- `lone_cd` — denies a command whose every segment is just a `cd`. Each Bash call gets a fresh
+  shell, so nothing observes the change; the shape only shows up as a retry after a chained `cd`
+  was refused, which splitting cannot fix. A redirect or a pipe means the segment leaves
+  something behind, so it is not the no-op this denies.
 - `broad_find` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
   repo parent; a find scoped to one repo under GIT is allowed.
 - `design_rationale` — on any edit to a `design-rationale.md`, injects the stop-for-review

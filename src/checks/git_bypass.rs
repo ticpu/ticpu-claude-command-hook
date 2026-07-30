@@ -777,7 +777,7 @@ mod tests {
             "cd /x>y && git log",
             "cd /x /y && git log",
             "pushd /x && git log",
-            // A `cd` alone has no git segment to justify the allow.
+            // A `cd` alone has no git segment to justify the allow; `lone_cd` denies it.
             "cd /x",
         ] {
             assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
