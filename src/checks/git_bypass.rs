@@ -432,6 +432,7 @@ fn is_read_only(cmd: &str) -> bool {
             &[
                 "--list",
                 "-l",
+                "--show-current",
                 "-a",
                 "--all",
                 "-r",
