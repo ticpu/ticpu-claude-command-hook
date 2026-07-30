@@ -103,6 +103,9 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Allow,
     ),
     ("git show HEAD:a.c | sed -i '1d'", Pass),
+    // The next call gets a fresh shell, so a `cd` with no work behind it is noise.
+    ("cd /x", Deny),
+    ("cd /x && cargo test", Pass),
     // The allow must not cover a second command riding on the same decision.
     ("git -C /x status; rm -rf /y", Pass),
     // A read-only git still reaches the fold, so the allow runs after grep_fold.

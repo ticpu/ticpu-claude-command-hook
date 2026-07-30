@@ -3,6 +3,7 @@ mod design_rationale;
 mod git_bypass;
 mod glab_skill;
 mod grep_fold;
+mod lone_cd;
 mod search_stderr;
 mod shell;
 
@@ -20,6 +21,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
             let cmd = input.command();
             glab_skill::check(input)
                 .or_else(|| git_bypass::check(input))
+                .or_else(|| lone_cd::check(cmd))
                 .or_else(|| broad_find::check(cmd))
                 .or_else(|| search_stderr::check(cmd))
                 // Last, in order: an allow ends the chain, so every objection gets
