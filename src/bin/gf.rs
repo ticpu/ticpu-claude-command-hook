@@ -106,6 +106,7 @@ impl<F: FnMut(&[u8]) -> bool> Folder<F> {
             if logical.len() > last.len()
                 && logical.starts_with(last)
                 && matches!(logical[last.len()], b':' | b'-')
+                && is_path_shaped(last)
             {
                 return Some(Detected::Fold(last.len()));
             }
@@ -132,7 +133,7 @@ impl<F: FnMut(&[u8]) -> bool> Folder<F> {
         if end.is_none() && !self.lineno_mode {
             // `grep -l`, `grep -c` and match lines without -n have no line
             // number to anchor on; under -l the whole line is the path, and a
-            // space rules out most content lines.
+            // space rules out the content lines a slash lets past the shape test.
             for i in std::iter::once(logical.len()).chain(
                 seps.iter()
                     .rev()
@@ -158,7 +159,7 @@ impl<F: FnMut(&[u8]) -> bool> Folder<F> {
     }
 
     fn is_path(&mut self, cand: &[u8]) -> bool {
-        if cand.is_empty() {
+        if !is_path_shaped(cand) {
             return false;
         }
         if self
@@ -212,6 +213,26 @@ fn lineno_follows(logical: &[u8], i: usize) -> bool {
         j += 1;
     }
     j > i + 1 && j < logical.len() && logical[j] == sep
+}
+
+/// Rejects a candidate that reads as code rather than a filename, before any
+/// stat: a slash makes it a path outright, otherwise the punctuation that never
+/// appears in a bare filename but opens most source lines rules it out.
+fn is_path_shaped(cand: &[u8]) -> bool {
+    if cand.is_empty() {
+        return false;
+    }
+    if cand.contains(&b'/') {
+        return true;
+    }
+    !cand
+        .iter()
+        .any(|b| {
+            matches!(
+                b,
+                b' ' | b'\t' | b'(' | b')' | b'"' | b'\'' | b'=' | b',' | b';' | b'*'
+            )
+        })
 }
 
 fn ansi_end(raw: &[u8], start: usize) -> usize {
@@ -603,6 +624,59 @@ mod tests {
             &["/a/v", "/a/v-1-x.rs"],
         );
         assert_eq!(out, "base: /a/\nv-1-x.rs:7:hit\n-8-next\n");
+    }
+
+    #[test]
+    fn code_leading_a_line_is_not_taken_for_a_path() {
+        // `n` and `switch_stristr` both name files in the fake tree, so only the
+        // shape test keeps the declaration intact.
+        let out = fold(
+            &["/a/u.c:1671:SWITCH_DECLARE(const char *) switch_stristr(const char *instr)"],
+            &["/a"],
+            &["/a/u.c", "n", "switch_stristr"],
+        );
+        assert_eq!(
+            out,
+            "base: /a/\nu.c:1671:SWITCH_DECLARE(const char *) switch_stristr(const char *instr)\n"
+        );
+    }
+
+    #[test]
+    fn slash_free_top_level_names_still_fold() {
+        let out = fold(
+            &[
+                "Makefile:9:all:",
+                "Makefile-10-\tcargo build",
+                "Cargo.toml:6:license",
+            ],
+            &[],
+            &["Makefile", "Cargo.toml"],
+        );
+        assert_eq!(
+            out,
+            "Makefile:9:all:\n-10-\tcargo build\nCargo.toml:6:license\n"
+        );
+    }
+
+    #[test]
+    fn shape_test_rejects_code_accepts_filenames() {
+        for good in [
+            "/a/b.c",
+            "src/main.rs",
+            "./LICENSE",
+            "Makefile",
+            "Cargo.toml",
+        ] {
+            assert!(is_path_shaped(good.as_bytes()), "{good}");
+        }
+        for bad in [
+            "",
+            "SWITCH_DECLARE(const char *) switch_stristr",
+            "let x = foo(a, b)",
+            "see Makefile",
+        ] {
+            assert!(!is_path_shaped(bad.as_bytes()), "{bad}");
+        }
     }
 
     #[test]
