@@ -45,6 +45,7 @@ struct Folder<F> {
     /// content, so guessing paths on them only wastes stat() calls.
     lineno_mode: bool,
     logical: Vec<u8>,
+    seps: Vec<usize>,
 }
 
 impl<F: FnMut(&[u8]) -> bool> Folder<F> {
@@ -60,6 +61,7 @@ impl<F: FnMut(&[u8]) -> bool> Folder<F> {
             misses: HashSet::new(),
             lineno_mode: false,
             logical: Vec::new(),
+            seps: Vec::new(),
         }
     }
 
@@ -109,8 +111,18 @@ impl<F: FnMut(&[u8]) -> bool> Folder<F> {
             }
         }
 
+        // Longest candidate first: a directory that is a prefix of the real
+        // path also stats fine (`GIT/freeswitch` inside `GIT/freeswitch-esl-…`),
+        // and accepting it poisons `last_path` for every following line.
+        let mut seps = std::mem::take(&mut self.seps);
+        seps.clear();
+        seps.extend(separators(logical));
+
         let mut end = None;
-        for i in separators(logical) {
+        for &i in seps
+            .iter()
+            .rev()
+        {
             if lineno_follows(logical, i) && self.is_path(&logical[..i]) {
                 self.lineno_mode = true;
                 end = Some(i);
@@ -119,14 +131,20 @@ impl<F: FnMut(&[u8]) -> bool> Folder<F> {
         }
         if end.is_none() && !self.lineno_mode {
             // `grep -l`, `grep -c` and match lines without -n have no line
-            // number to anchor on; a space rules out most content lines.
-            for i in separators(logical) {
+            // number to anchor on; under -l the whole line is the path, and a
+            // space rules out most content lines.
+            for i in std::iter::once(logical.len()).chain(
+                seps.iter()
+                    .rev()
+                    .copied(),
+            ) {
                 if !logical[..i].contains(&b' ') && self.is_path(&logical[..i]) {
                     end = Some(i);
                     break;
                 }
             }
         }
+        self.seps = seps;
         let end = end?;
 
         let path = &logical[..end];
@@ -558,6 +576,33 @@ mod tests {
             out,
             "base: /a/\n\x1b[35m\x1b[Kx.rs\x1b[m\x1b[K\x1b[36m\x1b[K:\x1b[m\x1b[K7:hit\n-8-next\n"
         );
+    }
+
+    #[test]
+    fn dir_that_prefixes_a_dashed_path_is_not_taken_as_the_path() {
+        let out = fold(
+            &["/g/fs-esl/types/src/a.rs", "/g/fs-esl/types/src/b.rs"],
+            &["/g"],
+            &[
+                "/g/fs",
+                "/g/fs-esl/types/src/a.rs",
+                "/g/fs-esl/types/src/b.rs",
+            ],
+        );
+        assert_eq!(
+            out,
+            "base: /g/\nfs-esl/types/src/a.rs\nfs-esl/types/src/b.rs\n"
+        );
+    }
+
+    #[test]
+    fn dashed_line_number_in_a_filename_does_not_shorten_the_path() {
+        let out = fold(
+            &["/a/v-1-x.rs:7:hit", "/a/v-1-x.rs-8-next"],
+            &["/a"],
+            &["/a/v", "/a/v-1-x.rs"],
+        );
+        assert_eq!(out, "base: /a/\nv-1-x.rs:7:hit\n-8-next\n");
     }
 
     #[test]
