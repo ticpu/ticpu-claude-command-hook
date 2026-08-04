@@ -1,6 +1,7 @@
 use crate::output::HookOutput;
 
-const REASON: &str = "Broad `find` walk blocked (/, ~, $HOME, the home dir, or the GIT repo parent). \
+const REASON: &str =
+    "Broad `find` walk blocked (/, ~, $HOME, the home dir, or the GIT repo parent). \
 These trees are massive and slow to walk. Scope to a specific project dir or subdir, use \
 `rg --files <dir>`, or hand a narrow path to the Explore agent. A find inside one repo \
 (e.g. ~/GIT/eido/...) is fine — its parent is not.";
@@ -14,13 +15,20 @@ fn is_find_token(tok: &str) -> bool {
 }
 
 fn has_broad_find(command: &str) -> bool {
-    let tokens: Vec<&str> = command.split_whitespace().collect();
-    for (i, tok) in tokens.iter().enumerate() {
+    let tokens: Vec<&str> = command
+        .split_whitespace()
+        .collect();
+    for (i, tok) in tokens
+        .iter()
+        .enumerate()
+    {
         if !is_find_token(tok) {
             continue;
         }
         // The first non-option token after `find` is its leading path argument.
-        let path = tokens[i + 1..].iter().find(|t| !t.starts_with('-'));
+        let path = tokens[i + 1..]
+            .iter()
+            .find(|t| !t.starts_with('-'));
         if let Some(p) = path {
             if is_broad_target(p) {
                 return true;
@@ -34,16 +42,24 @@ fn is_broad_target(path: &str) -> bool {
     if path == "/" {
         return true;
     }
-    let t = path.strip_suffix('/').unwrap_or(path);
+    let t = path
+        .strip_suffix('/')
+        .unwrap_or(path);
     if matches!(t, "~" | "$HOME") {
         return true;
     }
     // The GIT repo parent itself (real or ~ form); a specific repo under it is fine.
-    if t.contains('/') && t.rsplit('/').next() == Some("GIT") {
+    if t.contains('/')
+        && t.rsplit('/')
+            .next()
+            == Some("GIT")
+    {
         return true;
     }
     // The bare home directory: /home/<user>, but not a subdir of it.
-    let comps: Vec<&str> = t.split('/').collect();
+    let comps: Vec<&str> = t
+        .split('/')
+        .collect();
     comps.len() == 3 && comps[0].is_empty() && comps[1] == "home" && !comps[2].is_empty()
 }
 

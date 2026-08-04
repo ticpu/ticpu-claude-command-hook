@@ -77,7 +77,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("git -C /x diff --stat Cargo.lock", Allow),
     // Read-only git runs no hooks, so the `cd` Claude Code warns about is harmless.
     ("cd /x && git diff --stat Cargo.lock", Allow),
-    ("cd /x && git status --short && git branch --show-current", Allow),
+    (
+        "cd /x && git status --short && git branch --show-current",
+        Allow,
+    ),
     ("cd /x && git stash pop", Pass),
     ("cd /x && git commit --no-verify -m 'feat: x'", Deny),
     // Staging named paths runs no hook either; the blanket forms are denied.

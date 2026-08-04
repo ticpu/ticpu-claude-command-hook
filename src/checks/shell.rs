@@ -82,9 +82,7 @@ fn preceded_by(b: &[u8], i: usize, c: u8) -> bool {
 /// A bare `2` glued to the `>`. A longer number is a higher fd, deliberately left
 /// on the stdout side: fail-safe beats guessing what an exotic fd does.
 fn stderr_fd(b: &[u8], i: usize) -> bool {
-    preceded_by(b, i, b'2')
-        && !(i > 1
-            && b[i - 2].is_ascii_digit())
+    preceded_by(b, i, b'2') && !(i > 1 && b[i - 2].is_ascii_digit())
 }
 
 /// The command word of a stage: `VAR=v` assignments and wrappers are stepped
