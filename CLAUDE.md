@@ -87,6 +87,17 @@ one bug (a `2>/dev/null` inside a search *pattern* read as a real redirect).
 Add a module under `src/checks/`, wire it into `dispatch`, and unit-test the pure decision
 function. Keep IO (filesystem, env) thin and behind a testable core (see `glab_skill::decide`).
 
+## Working here
+
+`git pull --rebase` before touching anything. This repo is edited from several machines and
+from Claude sessions that outlive each other, so a stale checkout is the normal case, not the
+exception — and the binary it builds is live in `~/.claude/settings.json`, so diverging here
+means the running hook stops matching the source.
+
+Leave nothing uncommitted at the end of a session: every finished step gets its own commit
+before the next one starts, and the last one gets pushed. Formatting churn counts — commit it
+on its own (`style:`) rather than folding it into a behaviour change.
+
 ## Build / test
 
 `make -j check` (clippy `-D warnings` + `cargo test`) then `make release`. The hook entries
