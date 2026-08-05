@@ -4,6 +4,7 @@ mod git_bypass;
 mod glab_skill;
 mod grep_fold;
 mod lone_cd;
+mod search_flags;
 mod search_stderr;
 mod shell;
 
@@ -24,6 +25,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| lone_cd::check(cmd))
                 .or_else(|| broad_find::check(cmd))
                 .or_else(|| search_stderr::check(cmd))
+                .or_else(|| search_flags::check(cmd))
                 // Last, in order: an allow ends the chain, so every objection gets
                 // first say — and a `git grep` still reaches the fold.
                 .or_else(|| grep_fold::check(input))

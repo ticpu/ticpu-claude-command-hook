@@ -74,6 +74,13 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   back, brace-grouped so it stays attached to that segment.
 - `search_stderr` — denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped
   alternative.
+- `search_flags` — two denies for flags a grep habit reads wrong. `rg -r` in any form is
+  `--replace`, so `rg -rn PAT dir` prints every hit rewritten to `n` and the damage reads as
+  ordinary output; `--replace=` is the unambiguous spelling. And a search filtering another
+  search's output may not carry `-n`/`-b`/`-H`/`--vimgrep`: that prefix counts the piped stream,
+  so the numbers belong to no file. Flag scanning is cluster-aware per tool — a short flag that
+  takes a value swallows the rest of its cluster (`rg -trust` is `--type rust`, not `-r ust`),
+  and the next word too when nothing is glued on.
 
 `command grep` is the documented opt-out from both: `shell::WRAPPERS` deliberately omits
 `command`, so it never classifies as a search.

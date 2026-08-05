@@ -64,6 +64,21 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Fold("ls /x/ ; grep -rn \"a\\|b\" /x/f.xml 2>&1 | {gf} | head"),
     ),
     ("grep -rn foo src 2>/dev/null", Deny),
+    // rg's -r is --replace: every shape of it rewrites the output instead of recursing.
+    ("rg -rn foo src", Deny),
+    ("rg -nrl foo src", Deny),
+    ("rg -r foo src", Deny),
+    ("rg -r -n foo src", Deny),
+    (
+        "rg -n foo src",
+        Fold("rg -n foo src | {gf}; (exit ${PIPESTATUS[0]})"),
+    ),
+    // A filtering search numbering the piped stream, which is not any file's lines.
+    ("rg -n foo src | rg -n bar | head -30", Deny),
+    (
+        "rg -n foo src | rg bar | head -30",
+        Fold("rg -n foo src | rg bar | {gf} | head -30"),
+    ),
     // Redirecting stdout keeps the fold off: the file must get the raw output.
     ("grep -rn foo src 2>&1 >out", Pass),
     ("find / -name foo", Deny),
