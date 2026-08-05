@@ -18,3 +18,10 @@ folding and prints in full, while a wrong acceptance corrupts output.
 The same gate guards the fast path that folds a line repeating the previous path. It trusted
 the previous match without rechecking, which made a content line beginning with that path plus
 a separator lose the text.
+
+## A prefixed search line is refused, not parsed around
+
+`gf` anchors a path at the start of a line, so a search that filters another search's output and
+adds a position or filename prefix of its own makes every line unfoldable. Teaching gf to skip
+such a prefix is the wrong repair: those positions count the piped stream, so they name no line
+in any file, and folding around them would dress up output that is already wrong. Deny instead.
