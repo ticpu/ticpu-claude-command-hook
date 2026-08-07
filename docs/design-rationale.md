@@ -11,6 +11,16 @@ is approved on its own terms; a stage before it produces what the client then ac
 rides along. Operators inside the quoted remote command or SQL body belong to the far end and
 must not count — the rule is about what this shell runs.
 
+## A location-dependent deny states the location
+
+A deny that turns on where the command runs names the working directory and its repo root; the
+rest say nothing about either. Neither reaches the caller in a tool result, so a bare refusal
+buys a `pwd` round trip before it can even be acted on.
+
+A `git add` pathspec resolving under the repo root but not the working directory is denied on
+the same grounds — wrong root, and the deny can name the right spelling. Only then: a pathspec
+that resolves nowhere is a deletion, which keeps the normal prompt.
+
 ## Path shape gates the fold before the filesystem is consulted
 
 `gf` decides that a line's leading text is a path by asking the filesystem whether it exists.
