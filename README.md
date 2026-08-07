@@ -12,8 +12,11 @@ fail-open) so a bug in the hook never blocks your tools.
 
 - **glab skill gate** — denies the first `glab` command per session so the `glab` skill
   gets loaded; later calls pass (tracked by a marker in `$XDG_RUNTIME_DIR/claude-hooks/`).
+  A leading `cd`, a wrapper or an absolute path does not skip it.
 - **git bypass guard** — blocks `--no-verify` (except commit messages starting with
-  `test`), `--no-gpg-sign`, and `-c commit.gpgsign=false`.
+  `test`), `--no-gpg-sign`, and `-c commit.gpgsign=false`, in every spelling git accepts:
+  quoted, short (`commit -n`), and the other off values. `git` is recognized behind a path,
+  a wrapper or a brace group.
 - **broad find guard** — blocks `find` walks of `/`, `~`, `$HOME`, the bare home directory,
   or the parent directory holding all your repos; a `find` scoped to one repo is allowed.
 - **remote session guard** — denies `ssh`, `sshfs`, `psql`, `mysql`, `mariadb` or `mongosh`
@@ -29,8 +32,11 @@ fail-open) so a bug in the hook never blocks your tools.
   folded costs only itself. `gf` is spliced in after the last search stage — `rg … | rg -v
   'some.xml'` filters on whole paths, so folding before it would change what matches. Left
   alone: stages past that point that do anything but display (`head`, `tail`, `less`, `cat`,
-  `nl` are fine; `xargs`, `awk`, `sort`, `wc` are not), redirects, `-q`/`-Z`/`-z`, and
-  anything with command substitution or a heredoc. Writing `command grep` opts out entirely.
+  `nl` are fine; `xargs`, `awk`, `sort`, `wc` are not), redirects, `-q`/`-Z`/`-z`, search
+  options that run a program (`--pre`, `git grep -O`), and anything with a heredoc. Because
+  Claude Code only honours a rewrite next to an `allow` — which covers the whole call — a chain
+  is folded only when every segment is one the fold can vouch for; `grep … ; rm -rf …` keeps
+  its prompt instead. Writing `command grep` opts out entirely.
 - **search stderr guard** — denies `2>/dev/null` on a search: it hides wrong paths and
   unreadable dirs, and `-s`/`--no-messages` suppresses just the file noise instead.
 
