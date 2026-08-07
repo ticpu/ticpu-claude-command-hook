@@ -135,7 +135,7 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("psql -f /x/q.sql | jq .", Pass),
     // A bare `echo` is not company, and `timeout` is a wrapper around the client.
     (
-        "timeout 45 ssh -o BatchMode=yes p4 'prompt-try wofi'; echo \"rc=$? (0=allow)\"",
+        "timeout 45 ssh -o BatchMode=yes host 'run-probe'; echo \"rc=$? (0=allow)\"",
         Pass,
     ),
     ("ssh host 'cd /x && make'", Pass),
