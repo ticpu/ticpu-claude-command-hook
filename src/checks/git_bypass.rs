@@ -90,19 +90,11 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
         // the body is message text, so a commit message may name `--no-verify` —
         // while the TDD exemption still reads the body it lives in.
         None => mentions_git(cmd)
-            .then(|| deny(before_heredoc(cmd), cmd, &input.cwd))
+            .then(|| deny(shell::before_heredoc(cmd), cmd, &input.cwd))
             .flatten(),
     };
     // Last, so a bypass flag in the same command is reported before the cd.
     flagged.or_else(|| cd_before_commit(cmd).then(|| HookOutput::deny("PreToolUse", CD_COMMIT)))
-}
-
-/// Everything before a heredoc marker. Past it is message text, not options — a
-/// commit message may name a flag, or describe this very command shape.
-fn before_heredoc(cmd: &str) -> &str {
-    cmd.split("<<")
-        .next()
-        .unwrap_or(cmd)
 }
 
 /// A `cd` preceding a `git commit` in the same command. Deliberately not routed
@@ -110,7 +102,7 @@ fn before_heredoc(cmd: &str) -> &str {
 /// which that parser refuses on principle. Balanced quotes are dropped first, so
 /// only operators the shell would act on remain.
 fn cd_before_commit(cmd: &str) -> bool {
-    let head = before_heredoc(cmd);
+    let head = shell::before_heredoc(cmd);
     let head = shell::unquoted(head).unwrap_or_else(|| head.to_string());
     let tokens: Vec<&str> = head
         .split_whitespace()
@@ -120,7 +112,7 @@ fn cd_before_commit(cmd: &str) -> bool {
         .iter()
         .enumerate()
     {
-        if !starts_a_command(&tokens, i) {
+        if !shell::starts_a_command(&tokens, i) {
             continue;
         }
         if *token == "cd" {
@@ -135,12 +127,6 @@ fn cd_before_commit(cmd: &str) -> bool {
         }
     }
     false
-}
-
-/// A token in command position: first, or right after a chain operator. Glued
-/// forms (`cd /x; git …`) count, since this runs on text `shell` gave up on.
-fn starts_a_command(tokens: &[&str], i: usize) -> bool {
-    i == 0 || tokens[i - 1].ends_with(['&', ';', '|'])
 }
 
 /// Auto-allows the git commands that run no hook of their own, so the `cd` Claude
