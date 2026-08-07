@@ -61,6 +61,12 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   something behind, so it is not the no-op this denies.
 - `broad_find` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
   repo parent; a find scoped to one repo under GIT is allowed.
+- `remote_session` — denies an `ssh`/`sshfs`/`psql`/`mysql`/`mariadb`/`mongosh` bundled with
+  anything else: no `;`, `&&`, `||`, `&`, and no unquoted newline. It must also lead its
+  pipeline, since a producer feeding it rides along on its approval; a consumer after it
+  (`| jq`) is fine, and chaining inside the quoted remote command or SQL body is the far
+  end's. A heredoc is judged on the text before the marker — the body is data, so the usual
+  `psql <<EOF` shape passes, at the cost of not seeing a chain past the terminator.
 - `design_rationale` — on any edit to a `design-rationale.md`, injects the stop-for-review
   reminder.
 - `grep_fold` — rewrites searches to pipe through the sibling `gf`, per chain segment, so a

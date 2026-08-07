@@ -127,6 +127,14 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("cd /x && cargo test", Pass),
     // The allow must not cover a second command riding on the same decision.
     ("git -C /x status; rm -rf /y", Pass),
+    // A remote/database client shares its approval with whatever it is chained to.
+    ("cd /x && psql -c 'select 1'", Deny),
+    ("ssh host uptime && rm -rf /x", Deny),
+    ("mariadb -e 'show tables'; echo done", Deny),
+    ("cat dump.sql | mysql mydb", Deny),
+    ("psql -f /x/q.sql | jq .", Pass),
+    ("ssh host 'cd /x && make'", Pass),
+    ("mongosh <<'EOF'\ndb.x.find() && db.y.find()\nEOF", Pass),
     // A read-only git still reaches the fold, so the allow runs after grep_fold.
     (
         "cd /x && git grep -n foo",

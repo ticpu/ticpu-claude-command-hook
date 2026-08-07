@@ -4,6 +4,7 @@ mod git_bypass;
 mod glab_skill;
 mod grep_fold;
 mod lone_cd;
+mod remote_session;
 mod search_flags;
 mod search_stderr;
 mod shell;
@@ -24,6 +25,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| git_bypass::check(input))
                 .or_else(|| lone_cd::check(cmd))
                 .or_else(|| broad_find::check(cmd))
+                .or_else(|| remote_session::check(cmd))
                 .or_else(|| search_stderr::check(cmd))
                 .or_else(|| search_flags::check(cmd))
                 // Last, in order: an allow ends the chain, so every objection gets
