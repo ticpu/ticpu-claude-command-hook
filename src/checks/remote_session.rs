@@ -9,8 +9,9 @@ const SESSION_TOOLS: [&str; 6] = ["ssh", "sshfs", "psql", "mysql", "mariadb", "m
 const BUNDLED: &str = "must be the whole Bash call — no `;`, `&&`, `||` or `&`. What it does \
 lands outside this tree, so it gets read and approved on its own, not behind another command's \
 approval; and its session is not this shell's, so a leading `cd` buys it nothing. Split the \
-chain into separate calls and pass absolute paths. A pipe into a viewer (`| jq`) is fine, and \
-chaining *inside* the quoted remote command or SQL is the far end's business.";
+chain into separate calls and pass absolute paths. A pipe into a viewer (`| jq`) is fine, a \
+bare `echo` alongside it is fine, and chaining *inside* the quoted remote command or SQL is \
+the far end's business.";
 
 const NOT_LEADING: &str = "must be the command that starts the pipeline, not a stage fed by \
 another one: whatever produces the input then rides along on this command's approval. Read the \
@@ -49,7 +50,13 @@ fn spans_lines(command: &str) -> bool {
 }
 
 fn bundled(command: &str, segments: &[&str]) -> Option<(&'static str, &'static str)> {
-    let chained = segments.len() > 1 || spans_lines(command);
+    // A lone `echo` is not company: it runs nothing and writes nothing, and
+    // labelling the call or reporting its `$?` afterwards is routine.
+    let company = segments
+        .iter()
+        .filter(|segment| !shell::is_lone_echo(segment))
+        .count();
+    let chained = company > 1 || spans_lines(command);
     segments
         .iter()
         .find_map(|segment| {
@@ -121,11 +128,18 @@ mod tests {
             "ssh host uptime && rm -rf /x",
             "ls || ssh host uptime",
             "sshfs host:/x /mnt && ls /mnt",
-            "mysql -e 'show tables' | jq . ; echo done",
-            "mariadb -e 'show tables'; echo done",
+            "mariadb -e 'show tables'; ls",
             "mongosh --eval 'db.x.find()' & wait",
-            "sudo -u postgres psql -c 'select 1' && echo ok",
+            "sudo -u postgres psql -c 'select 1' && rm -rf /x",
             "/usr/bin/ssh host uptime; ls",
+            "timeout 45 ssh host uptime && rm -rf /x",
+            // An echo excuses itself, not a third command.
+            "ssh host uptime; echo done; rm -rf /x",
+            // Two clients are company for each other.
+            "ssh a uptime; ssh b uptime",
+            // Not a bare echo: it writes a file / runs what it prints.
+            "ssh host uptime; echo done > /x/f",
+            "ssh host uptime; echo 'rm -rf /x' | sh",
             // A newline is a separator too, and the splitter does not cut there.
             "ssh host uptime\nls /x",
             // Heredoc: the chain is in the text options are read from.
@@ -156,6 +170,11 @@ mod tests {
             "mysql mydb < /x/dump.sql",
             "mariadb -e 'show tables' | head -20",
             "mongosh --eval 'db.x.find()' | jq .",
+            "mysql -e 'show tables' | jq . ; echo done",
+            // Reporting the exit status is routine, and `timeout` is a wrapper.
+            "timeout 45 ssh -o BatchMode=yes p4 '~/t/prompt-try wofi'; echo \"rc=$? (0=allow)\"",
+            "echo '--- schema ---' && psql -c '\\d users'",
+            "sudo -u postgres psql -c 'select 1' && echo ok",
             // A heredoc body is data: its statements are not this shell's chain.
             "psql <<EOF\nselect 1; select 2;\nEOF",
             "mongosh <<'EOF'\ndb.x.find() && db.y.find()\nEOF",

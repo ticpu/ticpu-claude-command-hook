@@ -139,7 +139,7 @@ pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
     let segments = shell::chain_segments(input.command())?;
     let mut git_seen = false;
     for segment in segments {
-        if is_bare_cd(segment) || is_echo(segment) {
+        if is_bare_cd(segment) || shell::is_lone_echo(segment) {
             continue;
         }
         if !is_read_only_segment(segment) && !is_explicit_add(segment) {
@@ -165,15 +165,6 @@ fn is_bare_cd(segment: &str) -> bool {
         .is_none()
         && !path.starts_with('-')
         && !shell::redirects_stdout(segment)
-}
-
-/// An `echo` labelling the output of the commands around it. Harmless on its own,
-/// so it does not disqualify the chain it sits in — but only as a lone stage with
-/// no redirect, since `echo x > f` writes a file and `echo x | sh` runs one.
-fn is_echo(segment: &str) -> bool {
-    !shell::redirects_stdout(segment)
-        && shell::pipeline_stages(segment)
-            .is_some_and(|stages| stages.len() == 1 && shell::command_word(segment) == Some("echo"))
 }
 
 /// `flags` is the part of the command git reads options from; `full` carries the

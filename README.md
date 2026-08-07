@@ -19,8 +19,8 @@ fail-open) so a bug in the hook never blocks your tools.
 - **remote session guard** — denies `ssh`, `sshfs`, `psql`, `mysql`, `mariadb` or `mongosh`
   bundled with another command (`;`, `&&`, `||`, `&`, or a second line), or fed by one
   (`cat dump.sql | mysql`). They must be the whole call, optionally piped into a viewer
-  (`| jq`); chaining inside the quoted remote command or SQL body is the far end's business
-  and passes through.
+  (`| jq`); a bare `echo` alongside is allowed, and chaining inside the quoted remote command
+  or SQL body is the far end's business and passes through.
 - **design-rationale review gate** — when an edit touches a `design-rationale.md`, injects a
   reminder to stop and present the diff for review.
 - **grep fold** — rewrites `grep`/`rg`/`git grep` commands to pipe through `gf`, so repeated

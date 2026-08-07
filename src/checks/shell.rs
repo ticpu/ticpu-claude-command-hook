@@ -8,7 +8,11 @@ const SEARCHERS: [&str; 7] = ["grep", "egrep", "fgrep", "rgrep", "ugrep", "ug", 
 /// Wrappers that take the real command as their arguments. `command` is
 /// deliberately absent: writing `command grep` is how a caller asks for the real
 /// binary and to be left alone, so it must not classify as a search.
-const WRAPPERS: [&str; 5] = ["env", "sudo", "time", "nice", "stdbuf"];
+const WRAPPERS: [&str; 6] = ["env", "sudo", "time", "nice", "stdbuf", "timeout"];
+
+/// Wrappers whose arguments include a bare value of their own before the command:
+/// `timeout 45 ssh …` runs ssh, not `45`.
+const WRAPPER_VALUES: [(&str, usize); 1] = [("timeout", 1)];
 
 /// Later pipeline stages that only display what they receive. Anything else may
 /// parse the path off each line — folding would feed it truncated paths — or,
@@ -94,6 +98,7 @@ fn stderr_fd(b: &[u8], i: usize) -> bool {
 pub fn command_word(stage: &str) -> Option<&str> {
     let mut words = stage.split_whitespace();
     let mut in_wrapper_options = false;
+    let mut wrapper_values = 0;
     while let Some(raw) = words.next() {
         let word = basename(raw);
         if word == "git" {
@@ -103,6 +108,10 @@ pub fn command_word(stage: &str) -> Option<&str> {
         }
         if WRAPPERS.contains(&word) {
             in_wrapper_options = true;
+            wrapper_values += WRAPPER_VALUES
+                .iter()
+                .find(|(name, _)| *name == word)
+                .map_or(0, |(_, count)| *count);
             continue;
         }
         if word.contains('=') && !word.starts_with('-') {
@@ -112,6 +121,10 @@ pub fn command_word(stage: &str) -> Option<&str> {
             if !raw.contains('=') {
                 let _ = words.next();
             }
+            continue;
+        }
+        if wrapper_values > 0 {
+            wrapper_values -= 1;
             continue;
         }
         return Some(word);
@@ -128,6 +141,15 @@ pub fn is_search(segment: &str) -> bool {
 /// rather than reading files, but it is still matching against whole paths.
 pub fn is_searcher(stage: &str) -> bool {
     command_word(stage).is_some_and(|w| SEARCHERS.contains(&w))
+}
+
+/// An `echo` labelling the output of the commands around it: it runs nothing and
+/// writes nothing, so it does not count as company in a chain. Only as a lone
+/// stage with no redirect — `echo x > f` writes a file and `echo x | sh` runs one.
+pub fn is_lone_echo(segment: &str) -> bool {
+    !redirects_stdout(segment)
+        && pipeline_stages(segment)
+            .is_some_and(|stages| stages.len() == 1 && command_word(segment) == Some("echo"))
 }
 
 /// True when a pipeline stage only displays what it is handed.
