@@ -175,15 +175,32 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ),
 ];
 
+/// Judged from a subdirectory of this repo, which `CASES` cannot express: a
+/// pathspec spelled from the repo root only exists as a shape below the root.
+const SUBDIR_CASES: &[(&str, Verdict<&str>)] = &[
+    ("git add src/main.rs", Deny),
+    ("git add main.rs", Allow),
+    // Resolves from neither the subdirectory nor the root: a deletion, or a typo.
+    ("git add src/gone.rs", Pass),
+];
+
 #[test]
 fn verdicts_match() {
     for (command, expected) in CASES {
-        assert_eq!(verdict(command), expected.owned(), "command: {command}");
+        assert_eq!(verdict(command, "."), expected.owned(), "command: {command}");
+    }
+    let subdir = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+    for (command, expected) in SUBDIR_CASES {
+        assert_eq!(
+            verdict(command, subdir),
+            expected.owned(),
+            "command: {command}"
+        );
     }
 }
 
-fn verdict(command: &str) -> Verdict<String> {
-    let stdout = run_hook(command);
+fn verdict(command: &str, cwd: &str) -> Verdict<String> {
+    let stdout = run_hook(command, cwd);
     if stdout
         .trim()
         .is_empty()
@@ -203,7 +220,7 @@ fn verdict(command: &str) -> Verdict<String> {
     }
 }
 
-fn run_hook(command: &str) -> String {
+fn run_hook(command: &str, cwd: &str) -> String {
     let mut child = Command::new(env!("CARGO_BIN_EXE_ticpu-claude-command-hook"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -212,7 +229,7 @@ fn run_hook(command: &str) -> String {
     let payload = serde_json::json!({
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
-        "cwd": ".",
+        "cwd": cwd,
         "tool_input": { "command": command },
     });
     child

@@ -263,6 +263,45 @@ fn a_pathspec_that_is_not_a_named_file_prompts() {
     }
 }
 
+/// A pathspec spelled from the repo root while the command runs in a subdirectory:
+/// git would answer `did not match any files`, so the deny names the spelling that
+/// works and where "here" is.
+#[test]
+fn a_misrooted_pathspec_is_denied_with_the_correction() {
+    let sub = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+    for cmd in [
+        "git add src/main.rs",
+        "git add src/checks/mod.rs main.rs",
+        "cd /x && git add src/checks/mod.rs",
+    ] {
+        assert_eq!(decision(cmd, sub), "deny", "{cmd}");
+    }
+    for cmd in [
+        // Spelled from here.
+        "git add main.rs",
+        "git add checks/mod.rs",
+    ] {
+        assert_eq!(decision(cmd, sub), "allow", "{cmd}");
+    }
+    // Resolves from neither: a deletion being staged, or a typo with no correction.
+    for cmd in ["git add gone.rs", "git add src/gone.rs"] {
+        assert_eq!(decision(cmd, sub), "prompt", "{cmd}");
+    }
+}
+
+#[test]
+fn the_deny_names_the_correction_and_the_directory() {
+    let sub = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
+    let reason = check(&input("git add src/checks/mod.rs", sub))
+        .and_then(|out| {
+            out.hook_specific_output
+                .and_then(|h| h.permission_decision_reason)
+        })
+        .expect("deny with a reason");
+    assert!(reason.contains("`checks/mod.rs`"), "{reason}");
+    assert!(reason.contains(env!("CARGO_MANIFEST_DIR")), "{reason}");
+}
+
 /// Quoting a blanket pathspec changes nothing for git, so it must not change
 /// the verdict here either.
 #[test]
