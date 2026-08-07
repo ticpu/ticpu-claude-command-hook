@@ -130,9 +130,14 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // A remote/database client shares its approval with whatever it is chained to.
     ("cd /x && psql -c 'select 1'", Deny),
     ("ssh host uptime && rm -rf /x", Deny),
-    ("mariadb -e 'show tables'; echo done", Deny),
+    ("mariadb -e 'show tables'; ls", Deny),
     ("cat dump.sql | mysql mydb", Deny),
     ("psql -f /x/q.sql | jq .", Pass),
+    // A bare `echo` is not company, and `timeout` is a wrapper around the client.
+    (
+        "timeout 45 ssh -o BatchMode=yes p4 'prompt-try wofi'; echo \"rc=$? (0=allow)\"",
+        Pass,
+    ),
     ("ssh host 'cd /x && make'", Pass),
     ("mongosh <<'EOF'\ndb.x.find() && db.y.find()\nEOF", Pass),
     // A read-only git still reaches the fold, so the allow runs after grep_fold.
