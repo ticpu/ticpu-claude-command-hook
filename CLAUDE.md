@@ -26,12 +26,15 @@ user's tools. Checks never silence their own IO errors — they log and allow.
 ## Checks
 
 - `glab_skill` — first `glab` per session is denied to force `Skill("glab")`; a marker in
-  `$XDG_RUNTIME_DIR/claude-hooks/` lets later calls through.
+  `$XDG_RUNTIME_DIR/claude-hooks/` lets later calls through. Any pipeline stage of any segment
+  counts, so a `cd`, a wrapper or an absolute path does not skip the gate.
 - `git_bypass` — two decisions, both per chain segment. **Denies** `--no-verify` (unless the
-  commit message starts with `test`), `--no-gpg-sign`, and `commit.gpgsign=false/0` on any
-  segment, plus a non-read-only `git -C` pointing at the current workdir ("drop the -C"), plus
-  `git add -A`/`.`/`-u`/`*` (CLAUDE.md: stage explicit paths — a plain `Bash(git add:*)`
-  allowlist entry does not stop those), plus a `cd` before a `git commit` (a commit is
+  commit message starts with `test`) in every spelling git accepts it — the long flag, a
+  wholly-quoted `"--no-verify"`, and the `-n` that means it on `commit` alone — plus
+  `--no-gpg-sign` and `commit.gpgsign=` set to any of git's four off values, case-insensitively,
+  plus a non-read-only `git -C` pointing at the current workdir ("drop the -C"), plus
+  `git add -A`/`.`/`-u`/`*` quoted or not (CLAUDE.md: stage explicit paths — a plain
+  `Bash(git add:*)` allowlist entry does not stop those), plus a `cd` before a `git commit` (a commit is
   repo-wide, so the `cd` buys nothing and runs the *target* repo's hooks — the one case Claude
   Code's warning is literally about). That last one is the only check that does not go through
   `shell`: the shape worth catching is `-m "$(cat <<EOF …)"`, which the parser refuses on
@@ -39,14 +42,19 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   stripped — a message describing the rule does not trip it.
   Bypass flags count only where git reads options: whole
   tokens, outside quotes, before a heredoc marker — so a commit message may name a flag it
-  isn't using. **Allows** a command whose every segment is a bare `cd`, a lone `echo`, a
-  provably read-only git pipeline, or a `git add` naming at least one path; the allowlist
+  isn't using. `git` is recognized by `shell::program`, so a path, a wrapper or a brace group
+  carries the same denies a bare `git` does. **Allows** a command whose every segment is a bare
+  `cd`, a lone `echo`, a
+  provably read-only git pipeline, or a `git add` naming at least one path that exists as a
+  file — a directory, glob or variable stages whatever is under it, which is the sweep the
+  blanket forms are denied for; the allowlist
   can't express that, and it covers `git -C <anypath> status` as well as
   `cd <path> && git diff|add …`, which Claude Code otherwise prompts about however the
   allowlist reads (hooks from the target directory — neither a read-only subcommand nor
   `git add` runs one, and staging is undone by `git restore --staged`). The allow is
   whole-command, not per segment,
-  because one allow decides the whole call: a stdout redirect, or a consumer that can write or
+  because one allow decides the whole call: any redirect at all — `2>file` truncates what it
+  names even though it is not a stdout redirect — or a consumer that can write or
   run something (`| sh`, `| sed -i`, `; rm -rf`), keeps the prompt. A consumer here only has to
   add no side effect of its own, which is weaker than grep_fold's display-only test — that one
   also has to survive gf's folding — so `wc` and a line-selecting `sed` qualify here and not
@@ -54,7 +62,8 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   objection gets first say and a `git grep` still reaches the fold. Read-only classification
   is fail-safe — a whitelist of always-safe subcommands plus explicit read-only modes for the
   mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or
-  verb prompts.
+  verb prompts, as does an option that writes a file or runs a program (`--output=`, `-O`) and
+  any `-c`, which can point config at a program under a read-only verb.
 - `lone_cd` — denies a command whose every segment is just a `cd`. Each Bash call gets a fresh
   shell, so nothing observes the change; the shape only shows up as a retry after a chained `cd`
   was refused, which splitting cannot fix. A redirect or a pipe means the segment leaves
@@ -75,11 +84,16 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   chained or `cd`-prefixed grep still folds. `gf` lands after the *last* search stage, since a
   later `grep`/`rg` filters lines and its pattern can match the prefix gf strips; everything
   past that point must only display (a path-consuming `xargs`/`awk` would get truncated
-  paths). Refuses a segment whose flags change the output shape gf parses, or that redirects
+  paths). Refuses a segment whose flags change the output shape gf parses, that runs a program
+  of its own (`--pre`, `git grep -O`), or that redirects
   stdout — a stderr-only redirect (`2>&1`, `2>file`) still folds, gf passes the error lines
   through.
   When gf ends the pipeline it would swallow the search's exit status, so `PIPESTATUS` puts it
   back, brace-grouped so it stays attached to that segment.
+  A rewrite is only honoured next to an `allow`, and that allow covers the *whole* call — so
+  the fold is emitted only when every segment is one it can vouch for (a folded search, a bare
+  `cd`, a read-only utility). A chain carrying anything else keeps its prompt and forfeits the
+  fold, rather than having the fold grant it permission.
 - `search_stderr` — denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped
   alternative.
 - `search_flags` — two denies for flags a grep habit reads wrong. `rg -r` in any form is
@@ -93,9 +107,13 @@ user's tools. Checks never silence their own IO errors — they log and allow.
 `command grep` is the documented opt-out from both: `shell::WRAPPERS` deliberately omits
 `command`, so it never classifies as a search.
 
-`src/checks/shell.rs` is the only shell parser — one quote mask feeds chain splitting,
-pipeline splitting, redirect detection and unquoting. A second ad-hoc matcher already caused
-one bug (a `2>/dev/null` inside a search *pattern* read as a real redirect).
+`src/checks/shell.rs` is the only shell parser — one mask feeds chain splitting, pipeline
+splitting, redirect detection and unquoting. It marks the bytes outside quotes *and* outside
+command substitutions, so `grep -rn foo $(pwd) 2>/dev/null` still reads as a search with a
+silenced stderr; only a heredoc or an unbalanced quote makes a command unanalyzable. A newline
+separates commands like `;` does. A second ad-hoc matcher already caused one bug (a
+`2>/dev/null` inside a search *pattern* read as a real redirect), and every check that grew its
+own notion of "is this git / glab / a search" grew an evasion with it — ask `shell::program`.
 
 ## Adding a check
 
