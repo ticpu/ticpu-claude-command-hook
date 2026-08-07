@@ -48,10 +48,16 @@ const CASES: &[(&str, Verdict<&str>)] = &[
              { grep -rn b y | {gf}; (exit ${PIPESTATUS[0]}); }",
         ),
     ),
-    // A segment that cannot be folded costs only itself.
+    // A rewrite carries an allow for the whole call, so a segment the fold cannot
+    // vouch for forfeits the fold instead of being granted permission by it.
+    ("grep -rn foo src > out; grep -rn bar src", Pass),
+    ("grep -rn foo src; rm -rf /zztest", Pass),
+    ("grep -rn foo src && git push origin master", Pass),
+    ("grep -rn foo src\nrm -rf /zztest", Pass),
+    // A read-only utility alongside is vouched for, so that chain still folds.
     (
-        "grep -rn foo src > out; grep -rn bar src",
-        Fold("grep -rn foo src > out ; { grep -rn bar src | {gf}; (exit ${PIPESTATUS[0]}); }"),
+        "ls -l /x; grep -rn bar src",
+        Fold("ls -l /x ; { grep -rn bar src | {gf}; (exit ${PIPESTATUS[0]}); }"),
     ),
     // The filtering search keeps whole paths to match on; gf runs after it.
     (
@@ -99,12 +105,34 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("cd /x && git stash pop", Pass),
     ("cd /x && git commit --no-verify -m 'feat: x'", Deny),
     // Staging named paths runs no hook either; the blanket forms are denied.
-    (
-        "cd /x && git add crates/w/src/mod.rs crates/w/src/queue.rs",
-        Allow,
-    ),
+    // The paths must exist, so these name real files in this repo.
+    ("cd /x && git add src/checks/shell.rs src/main.rs", Allow),
     ("cd /x && git add -A", Deny),
     ("git add .", Deny),
+    // Quoting a blanket pathspec changes nothing for git.
+    ("git add \".\"", Deny),
+    ("git add '*'", Deny),
+    ("sudo git add -A", Deny),
+    // A directory or a variable sweeps whatever is under it.
+    ("git add src", Pass),
+    ("git add \"$PWD\"", Pass),
+    // git is git however it is reached.
+    ("/usr/bin/git commit --no-verify -m \"feat: x\"", Deny),
+    ("{ git commit --no-verify -m \"feat: x\"; }", Deny),
+    ("git commit -n -m \"feat: x\"", Deny),
+    ("git commit \"--no-verify\" -m \"feat: x\"", Deny),
+    ("git -c 'commit.gpgsign=false' commit -m \"feat: x\"", Deny),
+    ("git -c commit.gpgsign=off commit -m \"feat: x\"", Deny),
+    ("cargo build\ngit commit --no-verify -m \"feat: x\"", Deny),
+    // An option that writes a file or runs a program is not read-only.
+    ("git diff --output=/zztest/pwned", Pass),
+    ("git grep --open-files-in-pager=rm -n foo", Pass),
+    ("git -c core.pager=rm log", Pass),
+    // `2>` truncates the file it names, so the allow must not cover it.
+    ("git log 2>/zztest/clobbered", Pass),
+    // A search whose path comes from a substitution is still a search.
+    ("grep -rn foo $(pwd) 2>/dev/null", Deny),
+    ("rg -rn foo $(pwd)", Deny),
     // A commit runs the target repo's hooks and the cd buys nothing; the same shape
     // quoted in a message does not count.
     (

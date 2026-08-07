@@ -1,6 +1,10 @@
 //! Just enough shell parsing to tell a plain pipeline from everything else.
-//! Quote-aware, and it refuses to guess: anything with command substitution or a
-//! heredoc comes back as `None` so callers fail open instead of mis-splitting.
+//! Quote-aware — quoted spans and command substitutions are masked out, so an
+//! operator inside either is never read as one — and it refuses to guess: a
+//! heredoc or an unbalanced quote comes back as `None` so callers fail open
+//! instead of mis-splitting.
+
+use std::str::SplitWhitespace;
 
 /// Commands that read files and print `path:line:` — the ones worth folding.
 const SEARCHERS: [&str; 7] = ["grep", "egrep", "fgrep", "rgrep", "ugrep", "ug", "rg"];
@@ -20,11 +24,27 @@ const WRAPPER_VALUES: [(&str, usize); 1] = [("timeout", 1)];
 /// `wc` would count folded lines, and `sort -o <file>` writes a file.
 const DISPLAY_ONLY: [&str; 5] = ["head", "tail", "less", "cat", "nl"];
 
+/// Commands that read and print and cannot write a file or run a program. Used
+/// where one decision covers a whole chain: such a segment can ride along on an
+/// auto-allow without widening what it permits.
+const READ_ONLY_UTILS: [&str; 13] = [
+    "ls", "pwd", "file", "stat", "wc", "basename", "dirname", "realpath", "readlink", "date",
+    "uname", "id", "printf",
+];
+
+/// Tokens that introduce a command without being one. Stepping over them is what
+/// lets a loop body or a brace group be classified as the command it runs.
+const GROUPING: [&str; 6] = ["{", "(", "!", "do", "then", "else"];
+
+/// git's own global options. The value-taking ones must not have their value
+/// mistaken for the subcommand.
+const GIT_VALUE_OPTIONS: [&str; 5] = ["-C", "-c", "--git-dir", "--work-tree", "--namespace"];
+
 /// Top-level segments paired with the operator that follows each one (`""` for
 /// the last), so a caller can rewrite one segment and rebuild the command.
 pub fn chain_parts(command: &str) -> Option<Vec<(&str, &str)>> {
     split(command, |b, i| match b[i] {
-        b';' => Some(1),
+        b';' | b'\n' => Some(1),
         b'&' if b.get(i + 1) == Some(&b'&') => Some(2),
         b'&' if amp_joins_a_redirect(b, i) => None,
         b'&' => Some(1),
@@ -89,22 +109,36 @@ fn stderr_fd(b: &[u8], i: usize) -> bool {
     preceded_by(b, i, b'2') && !(i > 1 && b[i - 2].is_ascii_digit())
 }
 
-/// The command word of a stage: `VAR=v` assignments and wrappers are stepped
-/// over, and `git` yields its subcommand so `git grep` classifies as a search.
-/// A wrapper's own options are stepped over too, each taking the following token
-/// as a possible value — `sudo -u postgres psql` runs psql. A value-less flag
-/// therefore eats the command word and the stage comes back unclassified, which
-/// is the safe way to be wrong here.
+/// The program a stage runs, by basename, with no subcommand lookup: `sudo git
+/// commit` and `/usr/bin/git commit` both come back as `git`. `VAR=v`
+/// assignments, grouping punctuation and wrappers are stepped over, and a
+/// wrapper's own options take the following token as a possible value —
+/// `sudo -u postgres psql` runs psql. A value-less wrapper flag therefore eats
+/// the program name and the stage comes back unclassified, which is the safe way
+/// to be wrong here.
+pub fn program(stage: &str) -> Option<&str> {
+    program_and_args(stage).map(|(program, _)| program)
+}
+
+/// The command word of a stage: as `program`, except `git` yields its subcommand
+/// so `git grep` classifies as a search. Global options are stepped over first,
+/// so `git -C /x grep` is still a grep.
 pub fn command_word(stage: &str) -> Option<&str> {
+    let (program, args) = program_and_args(stage)?;
+    if program == "git" {
+        return git_subcommand(args);
+    }
+    Some(program)
+}
+
+fn program_and_args(stage: &str) -> Option<(&str, SplitWhitespace<'_>)> {
     let mut words = stage.split_whitespace();
     let mut in_wrapper_options = false;
     let mut wrapper_values = 0;
     while let Some(raw) = words.next() {
         let word = basename(raw);
-        if word == "git" {
-            return words
-                .next()
-                .map(basename);
+        if GROUPING.contains(&word) {
+            continue;
         }
         if WRAPPERS.contains(&word) {
             in_wrapper_options = true;
@@ -127,7 +161,23 @@ pub fn command_word(stage: &str) -> Option<&str> {
             wrapper_values -= 1;
             continue;
         }
-        return Some(word);
+        return Some((word, words));
+    }
+    None
+}
+
+/// The first token past git's global options — the subcommand, or `None` when the
+/// invocation is only global options.
+fn git_subcommand<'a>(mut args: SplitWhitespace<'a>) -> Option<&'a str> {
+    while let Some(token) = args.next() {
+        if GIT_VALUE_OPTIONS.contains(&token) {
+            let _ = args.next();
+            continue;
+        }
+        if token.starts_with('-') {
+            continue;
+        }
+        return Some(basename(token));
     }
     None
 }
@@ -150,6 +200,40 @@ pub fn is_lone_echo(segment: &str) -> bool {
     !redirects_stdout(segment)
         && pipeline_stages(segment)
             .is_some_and(|stages| stages.len() == 1 && command_word(segment) == Some("echo"))
+}
+
+/// `cd <path>` and nothing else. A flag, a bare `cd` (to `$HOME`), `cd -`, or a
+/// redirect glued to the path (`cd /x>y` truncates `y`) all disqualify it.
+pub fn is_bare_cd(segment: &str) -> bool {
+    let mut words = segment.split_whitespace();
+    if words.next() != Some("cd") {
+        return false;
+    }
+    let Some(path) = words.next() else {
+        return false;
+    };
+    words
+        .next()
+        .is_none()
+        && !path.starts_with('-')
+        && !redirects_stdout(segment)
+}
+
+/// A segment that only reads and prints: every stage is a utility that cannot
+/// write a file or run a program, and stdout goes nowhere but the terminal.
+pub fn is_read_only_util(segment: &str) -> bool {
+    !redirects_stdout(segment)
+        && pipeline_stages(segment).is_some_and(|stages| {
+            stages
+                .iter()
+                .all(|stage| {
+                    command_word(stage).is_some_and(|word| {
+                        READ_ONLY_UTILS.contains(&word)
+                            || DISPLAY_ONLY.contains(&word)
+                            || word == "echo"
+                    })
+                })
+        })
 }
 
 /// True when a pipeline stage only displays what it is handed.
@@ -177,8 +261,10 @@ fn basename(word: &str) -> &str {
         .unwrap_or(word)
 }
 
+/// A heredoc is the one shape left that cannot be masked: its body is arbitrary
+/// text whose end this does not track.
 fn analyzable(command: &str) -> bool {
-    !command.contains("$(") && !command.contains('`') && !command.contains("<<")
+    !command.contains("<<")
 }
 
 /// The command with quoted spans dropped, so a *pattern* containing shell syntax
@@ -193,13 +279,16 @@ pub fn unquoted(command: &str) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
-/// Marks the bytes that are outside quotes and are not escapes — the only ones
-/// that can be shell operators. Sole quote parser in this module.
+/// Marks the bytes that are outside quotes and substitutions and are not escapes
+/// — the only ones that can be shell operators. Sole quote parser in this module.
+/// An unterminated quote or `$(` means the shape cannot be trusted, so `None`.
 fn unquoted_mask(s: &str) -> Option<Vec<bool>> {
     let b = s.as_bytes();
     let mut mask = vec![false; b.len()];
     let mut i = 0;
     let mut quote: Option<u8> = None;
+    let mut depth = 0usize;
+    let mut backtick = false;
     while i < b.len() {
         match quote {
             // Single quotes take everything literally, including backslashes.
@@ -219,16 +308,26 @@ fn unquoted_mask(s: &str) -> Option<Vec<bool>> {
                     quote = Some(b[i]);
                     i += 1;
                 }
+                b'`' => {
+                    backtick = !backtick;
+                    i += 1;
+                }
+                b'$' if b.get(i + 1) == Some(&b'(') => {
+                    depth += 1;
+                    i += 2;
+                }
+                b')' if depth > 0 => {
+                    depth -= 1;
+                    i += 1;
+                }
                 _ => {
-                    mask[i] = true;
+                    mask[i] = depth == 0 && !backtick;
                     i += 1;
                 }
             },
         }
     }
-    quote
-        .is_none()
-        .then_some(mask)
+    (quote.is_none() && depth == 0 && !backtick).then_some(mask)
 }
 
 /// Splits on the operators `op` reports, pairing each part with the operator text
@@ -256,6 +355,15 @@ fn split(s: &str, op: impl Fn(&[u8], usize) -> Option<usize>) -> Option<Vec<(&st
         }
     }
     parts.push((s[start..].trim(), ""));
+    // A command may end on its separator — a trailing `;` or newline is normal,
+    // not the malformed input the emptiness check below is there to reject.
+    if parts.len() > 1
+        && parts
+            .last()
+            .is_some_and(|(part, _)| part.is_empty())
+    {
+        parts.pop();
+    }
     parts
         .iter()
         .all(|(part, _)| !part.is_empty())
@@ -314,13 +422,82 @@ mod tests {
     #[test]
     fn refuses_to_guess() {
         for cmd in [
-            "echo $(grep x .)",
-            "echo `grep x .`",
             "cat <<'EOF'\ngrep x\nEOF",
             "grep 'unbalanced",
+            "echo $(grep x .",
+            "echo `grep x .",
         ] {
             assert_eq!(chain_segments(cmd), None, "{cmd}");
         }
+    }
+
+    /// A substitution is masked, not refused: the operators inside it belong to
+    /// the inner command, and the outer one is still a single segment.
+    #[test]
+    fn substitutions_are_masked() {
+        assert_eq!(
+            chain_segments("echo $(ls; pwd)").unwrap(),
+            ["echo $(ls; pwd)"]
+        );
+        assert_eq!(
+            chain_segments("echo `ls; pwd`").unwrap(),
+            ["echo `ls; pwd`"]
+        );
+        assert_eq!(
+            chain_segments("grep -rn foo $(pwd) && ls").unwrap(),
+            ["grep -rn foo $(pwd)", "ls"]
+        );
+        assert_eq!(
+            unquoted("grep -rn foo $(pwd) 2>/dev/null").unwrap(),
+            "grep -rn foo  2>/dev/null"
+        );
+    }
+
+    /// A newline separates two commands as surely as `;`, and a command may end
+    /// on its separator.
+    #[test]
+    fn newlines_separate_and_trailing_ones_do_not() {
+        assert_eq!(
+            chain_segments("cargo build\ngit status").unwrap(),
+            ["cargo build", "git status"]
+        );
+        assert_eq!(chain_segments("ls /x\n").unwrap(), ["ls /x"]);
+        assert_eq!(chain_segments("ls /x;").unwrap(), ["ls /x"]);
+        // A continuation is one command: the escape takes the newline with it.
+        assert_eq!(
+            chain_segments("psql \\\n  -c 'select 1'").unwrap(),
+            ["psql \\\n  -c 'select 1'"]
+        );
+    }
+
+    #[test]
+    fn program_sees_through_paths_wrappers_and_groups() {
+        for stage in [
+            "git commit -m x",
+            "/usr/bin/git commit -m x",
+            "sudo git commit -m x",
+            "env git commit -m x",
+            "{ git commit -m x",
+            "do git commit -m x",
+        ] {
+            assert_eq!(program(stage), Some("git"), "{stage}");
+        }
+        assert_eq!(program("cargo test"), Some("cargo"));
+    }
+
+    /// A global option must not have its value read as the subcommand.
+    #[test]
+    fn git_global_options_do_not_hide_the_subcommand() {
+        for stage in [
+            "git grep -n foo",
+            "git -C /x grep -n foo",
+            "git -C=/x grep -n foo",
+            "git --no-pager grep -n foo",
+            "git -c core.pager=less grep -n foo",
+        ] {
+            assert_eq!(command_word(stage), Some("grep"), "{stage}");
+        }
+        assert!(is_search("do grep -n foo x"));
     }
 
     #[test]
