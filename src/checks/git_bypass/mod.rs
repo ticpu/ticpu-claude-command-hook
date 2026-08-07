@@ -5,9 +5,11 @@ mod read_only;
 #[cfg(test)]
 mod tests;
 
-use crate::checks::git_bypass::add::{is_blanket_add, is_explicit_add};
-use crate::checks::git_bypass::location::points_at_cwd;
-use crate::checks::git_bypass::parse::{git_c_path, has_token, is_git, mentions_git, parse, unquote};
+use crate::checks::git_bypass::add::{is_blanket_add, is_explicit_add, misrooted_paths};
+use crate::checks::git_bypass::location::{hint, points_at_cwd};
+use crate::checks::git_bypass::parse::{
+    git_c_path, has_token, is_git, mentions_git, parse, unquote,
+};
 use crate::checks::git_bypass::read_only::is_read_only_segment;
 use crate::checks::shell;
 use crate::input::HookInput;
@@ -34,6 +36,8 @@ const BLANKET_ADD: &str = "`git add -A` / `.` / `-u` / `*` sweeps untracked scra
 index — CLAUDE.md forbids it (it once staged real PII). Stage explicit paths; `git status` \
 first if unsure what is untracked.";
 
+const MISROOTED_ADD: &str = "Pathspec spelled from the repo root, not from here: ";
+
 const ALLOW_SAFE: &str = "read-only git, or `git add` on explicit paths (auto-allowed by the hook)";
 
 /// Config values git reads as "off". Keys are case-insensitive, so the whole
@@ -59,7 +63,7 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
             .flatten(),
     };
     // Last, so a bypass flag in the same command is reported before the cd.
-    flagged.or_else(|| cd_before_commit(cmd).then(|| HookOutput::deny("PreToolUse", CD_COMMIT)))
+    flagged.or_else(|| cd_before_commit(cmd).then(|| located(CD_COMMIT, &input.cwd)))
 }
 
 /// A `cd` preceding a `git commit` in the same command. Deliberately not routed
@@ -132,7 +136,7 @@ fn redirects_anything(segment: &str) -> bool {
 /// message too, which is where the TDD exemption looks.
 fn deny(flags: &str, full: &str, cwd: &str) -> Option<HookOutput> {
     if git_c_path(flags).is_some() && !is_read_only_segment(flags) && points_at_cwd(flags, cwd) {
-        return Some(HookOutput::deny("PreToolUse", REDUNDANT_C));
+        return Some(located(REDUNDANT_C, cwd));
     }
     // Quoted spans are message text, not options: `-m "no --no-verify here"` is a
     // description of the flag, not a use of it. Unbalanced quotes fall back to the
@@ -154,9 +158,25 @@ fn deny(flags: &str, full: &str, cwd: &str) -> Option<HookOutput> {
     // Pathspecs are read from the raw text: `git add "."` has to keep its quoted
     // token, which the span-deleting unquote would drop entirely.
     if is_blanket_add(flags) {
-        return Some(HookOutput::deny("PreToolUse", BLANKET_ADD));
+        return Some(located(BLANKET_ADD, cwd));
+    }
+    let misrooted = misrooted_paths(flags, cwd);
+    if !misrooted.is_empty() {
+        let pairs: Vec<String> = misrooted
+            .iter()
+            .map(|(given, corrected)| format!("`{given}` → `{corrected}`"))
+            .collect();
+        return Some(located(
+            &format!("{MISROOTED_ADD}{}.", pairs.join(", ")),
+            cwd,
+        ));
     }
     None
+}
+
+/// A deny that only makes sense once the reader knows where the command runs.
+fn located(reason: &str, cwd: &str) -> HookOutput {
+    HookOutput::deny("PreToolUse", &format!("{reason}{}", hint(cwd)))
 }
 
 /// `--no-verify`, or the `-n` that means it. `-n` counts only on `commit`: on

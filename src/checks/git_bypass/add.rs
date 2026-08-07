@@ -1,6 +1,8 @@
 //! `git add`: which staging is a named-file operation and which is a sweep.
 
-use crate::checks::git_bypass::location::names_a_file;
+use std::path::Path;
+
+use crate::checks::git_bypass::location::{names_a_file, rebase_on_cwd, repo_root, resolve};
 use crate::checks::git_bypass::parse::{parse, unquote};
 use crate::checks::git_bypass::read_only::git_producer;
 
@@ -60,6 +62,34 @@ fn adds_explicit_paths(cmd: &str, cwd: &str) -> bool {
         paths += 1;
     }
     paths > 0
+}
+
+/// Pathspecs spelled from the repo root instead of from the directory the command
+/// runs in, each paired with the spelling that would work. Only a path that
+/// resolves from the root qualifies: one that resolves nowhere is a deletion being
+/// staged, or a typo this cannot correct.
+pub fn misrooted_paths(cmd: &str, cwd: &str) -> Vec<(String, String)> {
+    let p = parse(cmd);
+    if p.subcommand != Some("add") || cwd.is_empty() {
+        return Vec::new();
+    }
+    let Some(root) = repo_root(cwd).filter(|root| *root != Path::new(cwd)) else {
+        return Vec::new();
+    };
+    p.args
+        .iter()
+        .map(|arg| unquote(arg))
+        .filter(|arg| {
+            !arg.starts_with('-')
+                && !arg.contains(['*', '?', '[', '$', '~'])
+                && !BLANKET_PATHS.contains(arg)
+                && !resolve(arg, cwd).exists()
+                && root
+                    .join(arg)
+                    .exists()
+        })
+        .map(|arg| (arg.to_string(), rebase_on_cwd(arg, cwd, root)))
+        .collect()
 }
 
 /// `-A`/`--all`/`-u`/`--update` — including inside a short bundle like `-Av` — or a

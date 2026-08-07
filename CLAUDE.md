@@ -39,7 +39,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   Code's warning is literally about). That last one is the only check that does not go through
   `shell`: the shape worth catching is `-m "$(cat <<EOF …)"`, which the parser refuses on
   principle, so it walks tokens over the text before the heredoc marker with balanced quotes
-  stripped — a message describing the rule does not trip it.
+  stripped — a message describing the rule does not trip it. Last, a `git add` pathspec that
+  resolves under the repo root but not under the working directory: it is spelled from the wrong
+  root, so the deny names the spelling that works. These four denies carry a `cwd: … — git repo
+  root: …` line, since none of it is answerable from a tool result.
   Bypass flags count only where git reads options: whole
   tokens, outside quotes, before a heredoc marker — so a commit message may name a flag it
   isn't using. `git` is recognized by `shell::program`, so a path, a wrapper or a brace group
