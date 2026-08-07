@@ -87,20 +87,36 @@ fn stderr_fd(b: &[u8], i: usize) -> bool {
 
 /// The command word of a stage: `VAR=v` assignments and wrappers are stepped
 /// over, and `git` yields its subcommand so `git grep` classifies as a search.
+/// A wrapper's own options are stepped over too, each taking the following token
+/// as a possible value — `sudo -u postgres psql` runs psql. A value-less flag
+/// therefore eats the command word and the stage comes back unclassified, which
+/// is the safe way to be wrong here.
 pub fn command_word(stage: &str) -> Option<&str> {
     let mut words = stage.split_whitespace();
-    loop {
-        let word = basename(words.next()?);
+    let mut in_wrapper_options = false;
+    while let Some(raw) = words.next() {
+        let word = basename(raw);
         if word == "git" {
             return words
                 .next()
                 .map(basename);
         }
-        if WRAPPERS.contains(&word) || (word.contains('=') && !word.starts_with('-')) {
+        if WRAPPERS.contains(&word) {
+            in_wrapper_options = true;
+            continue;
+        }
+        if word.contains('=') && !word.starts_with('-') {
+            continue;
+        }
+        if in_wrapper_options && raw.starts_with('-') {
+            if !raw.contains('=') {
+                let _ = words.next();
+            }
             continue;
         }
         return Some(word);
     }
+    None
 }
 
 /// True when this pipeline's first stage is a file search.
@@ -117,6 +133,20 @@ pub fn is_searcher(stage: &str) -> bool {
 /// True when a pipeline stage only displays what it is handed.
 pub fn is_display_only(stage: &str) -> bool {
     command_word(stage).is_some_and(|w| DISPLAY_ONLY.contains(&w))
+}
+
+/// Everything before a heredoc marker. Past it is data — a commit message, a SQL
+/// body — not options, so a check reading flags must stop here.
+pub fn before_heredoc(cmd: &str) -> &str {
+    cmd.split("<<")
+        .next()
+        .unwrap_or(cmd)
+}
+
+/// A token in command position: first, or right after a chain operator or pipe.
+/// For use on text the splitters gave up on, so glued forms (`cd /x; git …`) count.
+pub fn starts_a_command(tokens: &[&str], i: usize) -> bool {
+    i == 0 || tokens[i - 1].ends_with(['&', ';', '|'])
 }
 
 fn basename(word: &str) -> &str {
@@ -309,6 +339,8 @@ mod tests {
         );
         assert_eq!(command_word("git grep -n x").unwrap(), "grep");
         assert_eq!(command_word("cargo test").unwrap(), "cargo");
+        assert_eq!(command_word("sudo -u postgres psql -c x").unwrap(), "psql");
+        assert_eq!(command_word("sudo apt install mysql").unwrap(), "apt");
     }
 
     /// `command grep` is the caller's opt-out; it must not read as a search.
