@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::checks::shell;
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
@@ -19,9 +20,26 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
     decide(Path::new(&runtime), &input.session_id)
 }
 
+/// True when any segment of the command runs glab, however it is reached — a
+/// leading `cd`, a wrapper or an absolute path must not skip the gate.
 fn is_glab(command: &str) -> bool {
-    let cmd = command.trim_start();
-    cmd == "glab" || cmd.starts_with("glab ")
+    match shell::chain_segments(command) {
+        Some(segments) => segments
+            .iter()
+            .any(|segment| {
+                shell::pipeline_stages(segment).is_some_and(|stages| {
+                    stages
+                        .iter()
+                        .any(|stage| shell::program(stage) == Some("glab"))
+                })
+            }),
+        // Unanalyzable: fall back to the token the gate originally keyed on rather
+        // than let a heredoc carry the first call of the session through.
+        None => {
+            let cmd = command.trim_start();
+            cmd == "glab" || cmd.starts_with("glab ")
+        }
+    }
 }
 
 fn decide(runtime: &Path, session_id: &str) -> Option<HookOutput> {
@@ -53,6 +71,24 @@ mod tests {
         assert!(is_glab("  glab ci"));
         assert!(!is_glab("glabber"));
         assert!(!is_glab("git status"));
+    }
+
+    /// The gate exists to force the skill load, so no prefix may skip it.
+    #[test]
+    fn a_prefix_does_not_skip_the_gate() {
+        for cmd in [
+            "cd /x && glab mr list",
+            "sudo glab mr list",
+            "/usr/bin/glab mr list",
+            "ls; glab ci status",
+            "glab mr list | head",
+            "glab mr view 1\nls",
+        ] {
+            assert!(is_glab(cmd), "{cmd}");
+        }
+        for cmd in ["cd /x && git status", "echo 'run glab later'"] {
+            assert!(!is_glab(cmd), "{cmd}");
+        }
     }
 
     #[test]
