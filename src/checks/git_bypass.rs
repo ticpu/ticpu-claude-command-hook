@@ -47,6 +47,21 @@ const ADD_FLAGS: &[&str] = &[
 /// Pathspecs that mean "whatever is in this tree", untracked files included.
 const BLANKET_PATHS: &[&str] = &[".", "./", "..", "../", "*", "*/", ":/", ":/*"];
 
+/// Options that make an otherwise read-only subcommand write a file or run a
+/// program: `git diff --output=<path>` writes, `git grep -O<prog>` executes.
+/// Their presence disqualifies the command however read-only its verb looks.
+const WRITES_OR_RUNS: &[&str] = &[
+    "--output",
+    "-O",
+    "--open-files-in-pager",
+    "--ext-cmd",
+    "--exec",
+];
+
+/// Config values git reads as "off". Keys are case-insensitive, so the whole
+/// token is lowercased before comparison.
+const FALSY: &[&str] = &["false", "0", "no", "off"];
+
 /// Subcommands that never mutate the repo or worktree in *any* invocation; safe
 /// to auto-allow with `-C <path>` regardless of their arguments.
 const ALWAYS_READ_ONLY: &[&str] = &[
@@ -139,10 +154,15 @@ pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
     let segments = shell::chain_segments(input.command())?;
     let mut git_seen = false;
     for segment in segments {
-        if is_bare_cd(segment) || shell::is_lone_echo(segment) {
+        // A `2>` is not a stdout redirect, but it still truncates whatever path it
+        // names — an allow must not cover that.
+        if redirects_anything(segment) {
+            return None;
+        }
+        if shell::is_bare_cd(segment) || shell::is_lone_echo(segment) {
             continue;
         }
-        if !is_read_only_segment(segment) && !is_explicit_add(segment) {
+        if !is_read_only_segment(segment) && !is_explicit_add(segment, &input.cwd) {
             return None;
         }
         git_seen = true;
@@ -150,21 +170,12 @@ pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
     git_seen.then(|| HookOutput::allow("PreToolUse", ALLOW_SAFE))
 }
 
-/// `cd <path>` and nothing else. A flag, a bare `cd` (to `$HOME`), `cd -`, or a
-/// redirect glued to the path (`cd /x>y` truncates `y`) all disqualify it.
-fn is_bare_cd(segment: &str) -> bool {
-    let mut words = segment.split_whitespace();
-    if words.next() != Some("cd") {
-        return false;
-    }
-    let Some(path) = words.next() else {
-        return false;
-    };
-    words
-        .next()
-        .is_none()
-        && !path.starts_with('-')
-        && !shell::redirects_stdout(segment)
+/// Any redirect at all. `redirects_stdout` deliberately lets `2>` through — for
+/// the fold that is right, since gf still sees stdout — but here the question is
+/// whether the command can touch a file, and `2>file` truncates it.
+fn redirects_anything(segment: &str) -> bool {
+    shell::redirects_stdout(segment)
+        || shell::unquoted(segment).is_none_or(|bare| bare.contains('>'))
 }
 
 /// `flags` is the part of the command git reads options from; `full` carries the
@@ -175,21 +186,70 @@ fn deny(flags: &str, full: &str, cwd: &str) -> Option<HookOutput> {
     }
     // Quoted spans are message text, not options: `-m "no --no-verify here"` is a
     // description of the flag, not a use of it. Unbalanced quotes fall back to the
-    // raw text so a deny is never lost to a parse failure.
-    let flags = shell::unquoted(flags).unwrap_or_else(|| flags.to_string());
-    if has_token(&flags, "--no-verify") && !allows_no_verify(full) {
+    // raw text so a deny is never lost to a parse failure. A whole token wrapped
+    // in quotes is the flag itself — the shell strips those before git reads it —
+    // so it is checked against `flags` too, where the span survives as a token.
+    let bare = shell::unquoted(flags).unwrap_or_else(|| flags.to_string());
+    if (has_option(&bare, "--no-verify") || quotes_an_option(flags, "--no-verify"))
+        && !allows_no_verify(full)
+    {
         return Some(HookOutput::deny("PreToolUse", NO_VERIFY));
     }
-    if has_token(&flags, "--no-gpg-sign")
-        || flags.contains("commit.gpgsign=false")
-        || flags.contains("commit.gpgsign=0")
+    if has_option(&bare, "--no-gpg-sign")
+        || quotes_an_option(flags, "--no-gpg-sign")
+        || disables_signing(flags)
     {
         return Some(HookOutput::deny("PreToolUse", NO_SIGN));
     }
-    if is_blanket_add(&flags) {
+    // Pathspecs are read from the raw text: `git add "."` has to keep its quoted
+    // token, which the span-deleting unquote would drop entirely.
+    if is_blanket_add(flags) {
         return Some(HookOutput::deny("PreToolUse", BLANKET_ADD));
     }
     None
+}
+
+/// `--no-verify`, or the `-n` that means it. `-n` counts only on `commit`: on
+/// `push` and `merge` the same letter is a different option entirely.
+fn has_option(cmd: &str, flag: &str) -> bool {
+    if has_token(cmd, flag) {
+        return true;
+    }
+    if flag != "--no-verify" {
+        return false;
+    }
+    let p = parse(cmd);
+    p.subcommand == Some("commit")
+        && p.args
+            .iter()
+            .any(|arg| arg.starts_with('-') && !arg.starts_with("--") && arg.contains('n'))
+}
+
+/// A whole token wrapped in quotes and nothing else. A message *containing* the
+/// flag splits into several tokens, none of which is the flag fully quoted.
+fn quotes_an_option(cmd: &str, flag: &str) -> bool {
+    cmd.split_whitespace()
+        .any(|word| {
+            word.len() > flag.len()
+                && matches!(
+                    word.as_bytes()
+                        .first(),
+                    Some(b'"') | Some(b'\'')
+                )
+                && unquote(word) == flag
+        })
+}
+
+/// `-c commit.gpgsign=<falsy>` in any spelling git accepts: the key is
+/// case-insensitive and the value has four off forms. The token has to match
+/// exactly, so a commit message mentioning the setting is not a use of it.
+fn disables_signing(cmd: &str) -> bool {
+    cmd.split_whitespace()
+        .any(|word| {
+            let word = unquote(word).to_ascii_lowercase();
+            word.strip_prefix("commit.gpgsign=")
+                .is_some_and(|value| FALSY.contains(&value))
+        })
 }
 
 /// The git invocation a segment produces its output with — but only when the
@@ -253,14 +313,20 @@ fn is_read_only_segment(segment: &str) -> bool {
     git_producer(segment).is_some_and(is_read_only)
 }
 
-fn is_explicit_add(segment: &str) -> bool {
-    git_producer(segment).is_some_and(adds_explicit_paths)
+fn is_explicit_add(segment: &str, cwd: &str) -> bool {
+    git_producer(segment).is_some_and(|cmd| adds_explicit_paths(cmd, cwd))
 }
 
 /// `git add` naming at least one path, with no flag that widens what gets staged.
 /// Staging named files runs no hook and `git restore --staged` undoes it, so the
 /// prompt has nothing to protect; the blanket forms are denied instead.
-fn adds_explicit_paths(cmd: &str) -> bool {
+///
+/// Every pathspec has to resolve to an existing regular file. A directory, a
+/// glob or a variable stages whatever happens to be under it — untracked scratch
+/// included — which is the same sweep `git add .` is denied for. Staging a
+/// deletion names a path that no longer exists and so falls through to the
+/// normal prompt.
+fn adds_explicit_paths(cmd: &str, cwd: &str) -> bool {
     let p = parse(cmd);
     if p.subcommand != Some("add") {
         return false;
@@ -276,7 +342,8 @@ fn adds_explicit_paths(cmd: &str) -> bool {
             }
             continue;
         }
-        if BLANKET_PATHS.contains(arg) {
+        let path = unquote(arg);
+        if BLANKET_PATHS.contains(&path) || !names_a_file(path, cwd) {
             return false;
         }
         paths += 1;
@@ -284,8 +351,21 @@ fn adds_explicit_paths(cmd: &str) -> bool {
     paths > 0
 }
 
+fn names_a_file(path: &str, cwd: &str) -> bool {
+    if path.contains(['*', '?', '[', '$', '~']) {
+        return false;
+    }
+    let path = if Path::new(path).is_absolute() {
+        Path::new(path).to_path_buf()
+    } else {
+        Path::new(cwd).join(path)
+    };
+    path.is_file()
+}
+
 /// `-A`/`--all`/`-u`/`--update` — including inside a short bundle like `-Av` — or a
-/// pathspec standing for the whole tree.
+/// pathspec standing for the whole tree. Quotes are stripped per token, since
+/// `git add "."` reaches git as the same pathspec the bare form does.
 fn is_blanket_add(cmd: &str) -> bool {
     let p = parse(cmd);
     if p.subcommand != Some("add") {
@@ -293,9 +373,10 @@ fn is_blanket_add(cmd: &str) -> bool {
     }
     p.args
         .iter()
+        .map(|arg| unquote(arg))
         .any(|arg| {
-            BLANKET_PATHS.contains(arg)
-                || matches!(*arg, "--all" | "--update")
+            BLANKET_PATHS.contains(&arg)
+                || matches!(arg, "--all" | "--update")
                 || (arg.starts_with('-') && !arg.starts_with("--") && arg.contains(['A', 'u']))
         })
 }
@@ -343,12 +424,27 @@ struct Parsed<'a> {
     subcommand: Option<&'a str>,
     /// Tokens following the subcommand — the subcommand's own args/flags.
     args: Vec<&'a str>,
+    /// A `-c`/`--config-env` was given. Config can point at a program to run
+    /// (a pager, an external diff, an ssh command), so no invocation carrying one
+    /// is classified read-only.
+    sets_config: bool,
 }
 
 fn parse<'a>(cmd: &'a str) -> Parsed<'a> {
     let mut c_path = None;
+    let mut sets_config = false;
     let mut tokens = cmd.split_whitespace();
-    let _ = tokens.next(); // "git"
+    // Step over everything up to and including the `git` token itself, so a path
+    // or a wrapper (`/usr/bin/git`, `sudo git`) parses like a bare `git`.
+    for token in tokens.by_ref() {
+        if token
+            .rsplit('/')
+            .next()
+            == Some("git")
+        {
+            break;
+        }
+    }
     let mut subcommand = None;
     while let Some(tok) = tokens.next() {
         if let Some(rest) = tok.strip_prefix("-C") {
@@ -366,10 +462,12 @@ fn parse<'a>(cmd: &'a str) -> Parsed<'a> {
         // a following token; the only one we must not misread as a subcommand is
         // the two-token `-c val` form.
         if tok == "-c" || tok == "--git-dir" || tok == "--work-tree" || tok == "--namespace" {
+            sets_config |= tok == "-c";
             let _ = tokens.next();
             continue;
         }
         if tok.starts_with('-') {
+            sets_config |= tok.starts_with("-c") || tok.starts_with("--config-env");
             continue;
         }
         subcommand = Some(tok);
@@ -379,6 +477,7 @@ fn parse<'a>(cmd: &'a str) -> Parsed<'a> {
         c_path,
         subcommand,
         args: tokens.collect(),
+        sets_config,
     }
 }
 
@@ -397,6 +496,13 @@ fn is_read_only(cmd: &str) -> bool {
     let Some(sub) = p.subcommand else {
         return false;
     };
+    if p.sets_config
+        || p.args
+            .iter()
+            .any(|arg| writes_or_runs(arg))
+    {
+        return false;
+    }
     if ALWAYS_READ_ONLY.contains(&sub) {
         return true;
     }
@@ -518,8 +624,20 @@ fn unquote(tok: &str) -> &str {
         .unwrap_or(tok)
 }
 
+/// The stage runs git, however it is reached — a path, a wrapper, a brace group.
 fn is_git(cmd: &str) -> bool {
-    cmd == "git" || cmd.starts_with("git ")
+    shell::program(cmd) == Some("git")
+}
+
+/// An option that makes the command write a file or execute a program. The name
+/// is taken before any `=`, and `-O` is matched as a prefix since its value glues
+/// on (`-Oless`).
+fn writes_or_runs(arg: &str) -> bool {
+    let name = arg
+        .split('=')
+        .next()
+        .unwrap_or(arg);
+    WRITES_OR_RUNS.contains(&name) || arg.starts_with("-O")
 }
 
 /// TDD escape hatch: a commit whose message starts with "test", supplied either
@@ -588,6 +706,86 @@ mod tests {
         assert!(blocked("git commit --no-gpg-sign -m \"feat: x\""));
         assert!(blocked("git -c commit.gpgsign=false commit -m \"x\""));
         assert!(blocked("git -c commit.gpgsign=0 commit -m \"x\""));
+    }
+
+    /// git is git however it is reached; the deny cannot key on the literal word
+    /// starting the segment.
+    #[test]
+    fn git_reached_indirectly_is_still_git() {
+        for cmd in [
+            "/usr/bin/git commit --no-verify -m \"feat: x\"",
+            "sudo git commit --no-verify -m \"feat: x\"",
+            "env git commit --no-verify -m \"feat: x\"",
+            "{ git commit --no-verify -m \"feat: x\"; }",
+            "sudo git add -A",
+            "{ git add -A; }",
+            "/usr/bin/git add .",
+        ] {
+            assert!(blocked(cmd), "{cmd}");
+        }
+    }
+
+    /// The shell strips quotes before git reads the option, and git reads its
+    /// config keys case-insensitively with four spellings of "off".
+    #[test]
+    fn quoted_and_spelled_out_bypasses() {
+        for cmd in [
+            "git commit \"--no-verify\" -m \"feat: x\"",
+            "git commit '--no-verify' -m \"feat: x\"",
+            "git commit -n -m \"feat: x\"",
+            "git commit -an -m \"feat: x\"",
+            "git -c 'commit.gpgsign=false' commit -m \"feat: x\"",
+            "git -c \"commit.gpgsign=false\" commit -m \"feat: x\"",
+            "git -c commit.gpgSign=false commit -m \"feat: x\"",
+            "git -c commit.gpgsign=no commit -m \"feat: x\"",
+            "git -c commit.gpgsign=off commit -m \"feat: x\"",
+        ] {
+            assert!(blocked(cmd), "{cmd}");
+        }
+    }
+
+    /// `-n` is `--no-verify` only where git spells it that way.
+    #[test]
+    fn short_n_elsewhere_is_a_different_option() {
+        for cmd in [
+            // --dry-run
+            "git push -n origin master",
+            // --no-stat
+            "git merge -n topic",
+            "git clean -n",
+        ] {
+            assert!(!blocked(cmd), "{cmd}");
+        }
+    }
+
+    /// A read-only verb stops being read-only when an option writes a file or
+    /// runs a program, and `-c` can point config at either.
+    #[test]
+    fn read_only_verbs_with_a_writing_option_prompt() {
+        for cmd in [
+            "git diff --output=/x/pwned",
+            "git log --output=/x/pwned --oneline",
+            "git show --output=/x/pwned HEAD",
+            "git grep --open-files-in-pager=rm -n foo",
+            "git grep -Orm -n foo",
+            "git -c core.pager=rm log",
+            "git -c core.sshCommand=rm ls-remote",
+            "git --config-env=core.pager=EVIL log",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
+        }
+    }
+
+    /// `2>` is not a stdout redirect, but it still truncates the file it names.
+    #[test]
+    fn a_stderr_redirect_is_not_covered_by_the_allow() {
+        for cmd in [
+            "git log 2>/home/jerome.poulin/.bashrc",
+            "git -C /x status 2>&-",
+            "cd /x && git status 2>errs",
+        ] {
+            assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
+        }
     }
 
     #[test]
@@ -689,17 +887,60 @@ mod tests {
     }
 
     /// Staging named paths runs no hook, so the `cd` warning has nothing to add and
-    /// the allowlist entry it overrode (`Bash(git add:*)`) applies again.
+    /// the allowlist entry it overrode (`Bash(git add:*)`) applies again. The paths
+    /// have to exist, so these name real files in this repo.
     #[test]
     fn staging_explicit_paths_auto_allowed() {
+        let root = env!("CARGO_MANIFEST_DIR");
         for cmd in [
-            "cd /x && git add crates/w/src/mod.rs crates/w/src/queue.rs",
             "git add src/checks/git_bypass.rs",
-            "cd /x && git add -f vendor/patched.rs",
-            "cd /x && git status && git add a.rs",
-            "git add -- a.rs b.rs",
+            "git add src/checks/git_bypass.rs src/checks/shell.rs",
+            "cd /x && git add src/main.rs",
+            "cd /x && git status && git add Cargo.toml",
+            "git add -- README.md CLAUDE.md",
+            "git add -f src/checks/mod.rs",
         ] {
-            assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
+            assert_eq!(decision(cmd, root), "allow", "{cmd}");
+        }
+    }
+
+    /// A pathspec that is not one named file sweeps whatever is under it — the
+    /// same staging `git add .` is denied for, so it does not get the auto-allow.
+    #[test]
+    fn a_pathspec_that_is_not_a_named_file_prompts() {
+        let root = env!("CARGO_MANIFEST_DIR");
+        for cmd in [
+            // A directory stages every untracked file inside it.
+            "git add src",
+            "git add src/checks",
+            // Globs and variables expand to whatever happens to be there.
+            "git add src/*",
+            "git add *.rs",
+            "git add \"$PWD\"",
+            "git add $HOME/x.rs",
+            // Absolute path to the repo root is `git add .` spelled long.
+            "git add /home/jerome.poulin/GIT/ticpu-claude-command-hook",
+            // Staging a deletion: the path is gone, so it takes the normal prompt.
+            "git add src/checks/removed.rs",
+        ] {
+            assert_eq!(decision(cmd, root), "prompt", "{cmd}");
+        }
+    }
+
+    /// Quoting a blanket pathspec changes nothing for git, so it must not change
+    /// the verdict here either.
+    #[test]
+    fn quoted_blanket_staging_denied() {
+        let root = env!("CARGO_MANIFEST_DIR");
+        for cmd in [
+            "git add \".\"",
+            "git add '.'",
+            "git add '*'",
+            "git add \"*\"",
+            "git add ':/'",
+            "git add \"-A\"",
+        ] {
+            assert_eq!(decision(cmd, root), "deny", "{cmd}");
         }
     }
 
