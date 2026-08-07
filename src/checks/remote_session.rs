@@ -172,7 +172,7 @@ mod tests {
             "mongosh --eval 'db.x.find()' | jq .",
             "mysql -e 'show tables' | jq . ; echo done",
             // Reporting the exit status is routine, and `timeout` is a wrapper.
-            "timeout 45 ssh -o BatchMode=yes p4 '~/t/prompt-try wofi'; echo \"rc=$? (0=allow)\"",
+            "timeout 45 ssh -o BatchMode=yes host 'run-probe'; echo \"rc=$? (0=allow)\"",
             "echo '--- schema ---' && psql -c '\\d users'",
             "sudo -u postgres psql -c 'select 1' && echo ok",
             // A heredoc body is data: its statements are not this shell's chain.
