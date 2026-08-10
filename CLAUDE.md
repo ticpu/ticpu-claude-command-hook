@@ -25,9 +25,20 @@ user's tools. Checks never silence their own IO errors — they log and allow.
 
 ## Checks
 
-- `glab_skill` — first `glab` per session is denied to force `Skill("glab")`; a marker in
+- `glab_skill` — first `glab` per session is denied; a marker in
   `$XDG_RUNTIME_DIR/claude-hooks/` lets later calls through. Any pipeline stage of any segment
-  counts, so a `cd`, a wrapper or an absolute path does not skip the gate.
+  counts, so a `cd`, a wrapper or an absolute path does not skip the gate. The denial *carries*
+  the guidance rather than pointing at `Skill("glab")`: a hardcoded list of traps, then
+  `~/.claude/skills/glab/SKILL.md` (`CLAUDE_CONFIG_DIR` honoured) with its frontmatter dropped.
+  A deny reason reaches the model, so this spends the same round trip the gate already cost and
+  the retry is the corrected command instead of a detour through the skill tool. glab ships that
+  file itself (`glab skills install --path ~/.claude/skills`), which is why the check reads it
+  instead of embedding it — but a `--path` install is invisible to `glab skills update`, so it is
+  refreshed by re-running install. The traps are the part the shipped skill omits: which `api`
+  calls now have subcommands, and which verbs mean the opposite of what they read like
+  (`repo archive` downloads). Refresh them when glab grows a subcommand for something the list
+  still sends to `api`. A missing skill file degrades to the traps plus an install hint, since
+  the traps are the half that cannot be recovered by loading anything.
 - `git_bypass` — two decisions, both per chain segment. **Denies** `--no-verify` (unless the
   commit message starts with `test`) in every spelling git accepts it — the long flag, a
   wholly-quoted `"--no-verify"`, and the `-n` that means it on `commit` alone — plus
