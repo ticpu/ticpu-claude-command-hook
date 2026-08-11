@@ -94,13 +94,13 @@ fn a_headless_body_is_measured_too() {
 /// so a reformat of that file would otherwise silently stop naming anything.
 #[test]
 fn every_listed_rule_resolves_and_nothing_else_does() {
-    for number in 1..=6 {
+    for number in 1..=5 {
         let rule = headline(number).unwrap_or_else(|| panic!("rule {number} has no headline"));
         assert!(!rule.is_empty());
         assert!(!rule.contains('.'), "{rule}");
     }
     assert!(headline(0).is_none());
-    assert!(headline(7).is_none());
+    assert!(headline(6).is_none());
 }
 
 /// The model writes the finding line, so the citation is read tolerantly — but
@@ -108,16 +108,16 @@ fn every_listed_rule_resolves_and_nothing_else_does() {
 /// rule the passage has nothing to do with.
 #[test]
 fn a_cited_rule_is_named_beside_the_line_that_cited_it() {
-    let reason = objection("REVISE\nRule 4: \"the cost of a single parser is\"");
+    let reason = objection("REVISE\nRule 5: \"the cost of a single parser is\"");
     assert!(
-        reason.contains("Rule 4: \"the cost of a single parser is\""),
+        reason.contains("Rule 5: \"the cost of a single parser is\""),
         "{reason}"
     );
-    assert!(reason.contains("NO DERIVABLE CONSEQUENCE"), "{reason}");
+    assert!(reason.contains("NO SPEC RESTATEMENT"), "{reason}");
 
     for line in [
-        "- **Rule 5**: \"one evasion instead of five\"",
-        "rule #5 — \"one evasion\"",
+        "- **Rule 4**: \"one evasion instead of five\"",
+        "rule #4 — \"one evasion\"",
     ] {
         let reason = objection(&format!("REVISE\n{line}"));
         assert!(reason.contains("NO ENUMERATED VALUES"), "{line}: {reason}");
