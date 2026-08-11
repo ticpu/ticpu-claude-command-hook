@@ -356,6 +356,19 @@ fn other_add_forms_prompt() {
     }
 }
 
+/// The working directory persists between Bash calls, so a `cd` on its own is the
+/// work rather than a no-op, and it leaves nothing else behind.
+#[test]
+fn a_cd_on_its_own_is_allowed() {
+    for cmd in ["cd /x", "cd /x && cd /y", "cd /x; echo done"] {
+        assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
+    }
+    // Still not a bare `cd`: an argument it does not take, or something left behind.
+    for cmd in ["cd", "cd -", "cd /x /y", "cd /x>y", "pushd /x"] {
+        assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
+    }
+}
+
 /// A `cd` that is not just a directory change, or a write anywhere in the
 /// chain, drops the whole command back to the normal prompt.
 #[test]
@@ -371,8 +384,6 @@ fn a_cd_chain_with_anything_else_prompts() {
         "cd /x>y && git log",
         "cd /x /y && git log",
         "pushd /x && git log",
-        // A `cd` alone has no git segment to justify the allow; `lone_cd` denies it.
-        "cd /x",
     ] {
         assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
     }

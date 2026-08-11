@@ -38,7 +38,8 @@ first if unsure what is untracked.";
 
 const MISROOTED_ADD: &str = "Pathspec spelled from the repo root, not from here: ";
 
-const ALLOW_SAFE: &str = "read-only git, or `git add` on explicit paths (auto-allowed by the hook)";
+const ALLOW_SAFE: &str =
+    "a bare `cd`, read-only git, or `git add` on explicit paths (auto-allowed by the hook)";
 
 /// Config values git reads as "off". Keys are case-insensitive, so the whole
 /// token is lowercased before comparison.
@@ -107,13 +108,18 @@ fn cd_before_commit(cmd: &str) -> bool {
 pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
     let segments = shell::chain_segments(input.command())?;
     let mut git_seen = false;
+    let mut cd_seen = false;
     for segment in segments {
         // A `2>` is not a stdout redirect, but it still truncates whatever path it
         // names — an allow must not cover that.
         if redirects_anything(segment) {
             return None;
         }
-        if shell::is_bare_cd(segment) || shell::is_lone_echo(segment) {
+        if shell::is_bare_cd(segment) {
+            cd_seen = true;
+            continue;
+        }
+        if shell::is_lone_echo(segment) {
             continue;
         }
         if !is_read_only_segment(segment) && !is_explicit_add(segment, &input.cwd) {
@@ -121,7 +127,9 @@ pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
         }
         git_seen = true;
     }
-    git_seen.then(|| HookOutput::allow("PreToolUse", ALLOW_SAFE))
+    // A `cd` earns the allow on its own: the working directory persists between Bash
+    // calls, so moving it is the work, and nothing else is left behind.
+    (git_seen || cd_seen).then(|| HookOutput::allow("PreToolUse", ALLOW_SAFE))
 }
 
 /// Any redirect at all. `redirects_stdout` deliberately lets `2>` through — for
