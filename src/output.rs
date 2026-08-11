@@ -38,6 +38,22 @@ impl HookOutput {
         }
     }
 
+    /// PreToolUse "ask" decision: the user is prompted whatever the permission
+    /// rules say, with `reason` beside the tool's own diff or command. Used where
+    /// the call is for the user to weigh, not for this binary to settle.
+    pub fn ask(event: &str, reason: &str) -> Self {
+        HookOutput {
+            system_message: None,
+            hook_specific_output: Some(HookSpecificOutput {
+                hook_event_name: event.to_string(),
+                permission_decision: Some("ask".to_string()),
+                permission_decision_reason: Some(reason.to_string()),
+                additional_context: None,
+                updated_input: None,
+            }),
+        }
+    }
+
     /// PreToolUse "allow" decision: bypasses the normal permission prompt.
     pub fn allow(event: &str, reason: &str) -> Self {
         HookOutput {
@@ -64,30 +80,6 @@ impl HookOutput {
                 permission_decision_reason: Some(reason.to_string()),
                 additional_context: None,
                 updated_input: Some(updated_input),
-            }),
-        }
-    }
-
-    /// A user-facing line that decides nothing, so the tool takes its normal
-    /// course. Used where a check could not reach a verdict: staying silent would
-    /// read as approval.
-    pub fn note(system: &str) -> Self {
-        HookOutput {
-            system_message: Some(system.to_string()),
-            hook_specific_output: None,
-        }
-    }
-
-    /// PostToolUse advisory: a user-facing line plus context injected to the model.
-    pub fn context(system: &str, context: &str) -> Self {
-        HookOutput {
-            system_message: Some(system.to_string()),
-            hook_specific_output: Some(HookSpecificOutput {
-                hook_event_name: "PostToolUse".to_string(),
-                permission_decision: None,
-                permission_decision_reason: None,
-                additional_context: Some(context.to_string()),
-                updated_input: None,
             }),
         }
     }

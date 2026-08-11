@@ -8,7 +8,7 @@ use std::process::{Command, Stdio};
 
 use serde_json::Value;
 
-use Verdict::{Allow, Deny, Fold, Pass};
+use Verdict::{Allow, Ask, Deny, Fold, Pass};
 
 #[derive(Debug, PartialEq)]
 enum Verdict<S> {
@@ -17,6 +17,8 @@ enum Verdict<S> {
     Deny,
     /// An explicit allow decision: the permission prompt is skipped.
     Allow,
+    /// The user is prompted whatever the permission rules say.
+    Ask,
     /// Rewritten command, with `{gf}` standing in for the absolute gf path.
     Fold(S),
 }
@@ -27,6 +29,7 @@ impl Verdict<&str> {
             Pass => Pass,
             Deny => Deny,
             Allow => Allow,
+            Ask => Ask,
             Fold(rewritten) => Fold(rewritten.to_string()),
         }
     }
@@ -225,9 +228,10 @@ const EDIT_CASES: &[(&str, Verdict<&str>)] = &[
       section must not say so, and this body clears the floor.\n",
         Deny,
     ),
-    // Short enough that there is no prose to judge: a deletion or a link fix.
-    ("", Pass),
-    ("## A heading rename with no body\n", Pass),
+    // Short enough that there is no prose to judge — still the user's to approve,
+    // since approving is the review and nothing asks for one after the write.
+    ("", Ask),
+    ("## A heading rename with no body\n", Ask),
 ];
 
 #[test]
@@ -248,9 +252,9 @@ fn edit_verdicts_match() {
 }
 
 /// The judge itself, which needs ollama up with the model resident:
-/// `cargo test -- --ignored`. Only the deny direction is asserted — the judge is a
-/// model, so an occasional objection to a clean section is expected behaviour, and
-/// asserting that direction would buy a flaky test instead of a signal.
+/// `cargo test -- --ignored`. Only that it reaches a prompt carrying the objection
+/// is asserted — the judge is a model, so which rules it cites varies, and pinning
+/// that would buy a flaky test instead of a signal.
 #[test]
 #[ignore = "needs a local ollama with the judge model resident"]
 fn the_judge_objects_to_prose_the_rules_forbid() {
@@ -259,7 +263,24 @@ fn the_judge_objects_to_prose_the_rules_forbid() {
 not message framing, so a reader has to cope with partial reads and re-assemble frames \
 itself. Previously the reader used a fixed 4096-byte buffer, and an earlier version grew it \
 on demand. The consequence is that frames larger than the buffer were split across reads.\n";
-    assert_eq!(edit_verdict(path, added), Deny);
+    assert_eq!(edit_verdict(path, added), Ask);
+    let reason = edit_reason(path, added);
+    assert!(reason.contains("judge objects"), "{reason}");
+    assert!(reason.contains("Rule "), "{reason}");
+}
+
+fn edit_reason(file_path: &str, new_string: &str) -> String {
+    let payload = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Edit",
+        "cwd": env!("CARGO_MANIFEST_DIR"),
+        "tool_input": { "file_path": file_path, "old_string": "", "new_string": new_string },
+    });
+    let json: Value = serde_json::from_str(&feed(&payload)).expect("hook JSON");
+    json["hookSpecificOutput"]["permissionDecisionReason"]
+        .as_str()
+        .expect("a decision carries a reason")
+        .to_string()
 }
 
 fn edit_verdict(file_path: &str, new_string: &str) -> Verdict<String> {
@@ -280,6 +301,7 @@ fn edit_verdict(file_path: &str, new_string: &str) -> Verdict<String> {
     match json["hookSpecificOutput"]["permissionDecision"].as_str() {
         Some("deny") => Deny,
         Some("allow") => Allow,
+        Some("ask") => Ask,
         _ => panic!("unexpected hook output: {stdout}"),
     }
 }

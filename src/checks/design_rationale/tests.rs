@@ -1,6 +1,6 @@
 use super::judge::{headline, parse_for_test};
 use super::mechanical::check;
-use super::{FLOOR, is_rationale, post_tool_use};
+use super::{FLOOR, is_rationale};
 
 fn objection(reply: &str) -> String {
     parse_for_test(reply).expect("findings")
@@ -25,21 +25,6 @@ fn fires_only_on_a_rationale_file() {
     assert!(!is_rationale("src/main.rs"));
     assert!(!is_rationale("README.md"));
     assert!(!is_rationale(""));
-    assert!(post_tool_use("docs/design-rationale.md").is_some());
-    assert!(post_tool_use("README.md").is_none());
-}
-
-/// The review reminder must not ask for the diff back: the tool result already
-/// rendered it, and repeating it is what this check exists to stop.
-#[test]
-fn the_reminder_does_not_ask_for_the_diff_again() {
-    let output = post_tool_use("docs/design-rationale.md").expect("fires");
-    let context = output
-        .hook_specific_output
-        .and_then(|h| h.additional_context)
-        .expect("carries context");
-    assert!(context.contains("Do not restate"), "{context}");
-    assert!(!context.contains("present the diff"), "{context}");
 }
 
 #[test]
