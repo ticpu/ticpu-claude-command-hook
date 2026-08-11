@@ -103,8 +103,10 @@ mod tests {
     #[test]
     fn dash_c_after_subcommand_is_not_workdir() {
         // `git branch -C old new` renames; the -C is a branch flag, no c_path.
-        assert!(parse("git branch -C old new")
-            .c_path
-            .is_none());
+        assert!(
+            parse("git branch -C old new")
+                .c_path
+                .is_none()
+        );
     }
 }

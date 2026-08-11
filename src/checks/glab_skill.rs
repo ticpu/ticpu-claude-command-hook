@@ -39,7 +39,11 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
         return None;
     }
     let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
-    decide(Path::new(&runtime), &input.session_id, &reason(load_skill()))
+    decide(
+        Path::new(&runtime),
+        &input.session_id,
+        &reason(load_skill()),
+    )
 }
 
 /// `~/.claude/skills/glab/SKILL.md`, or the same path under `CLAUDE_CONFIG_DIR`.
@@ -72,7 +76,12 @@ fn strip_frontmatter(text: &str) -> &str {
 }
 
 fn reason(skill: Option<String>) -> String {
-    format!("{TRAPS}\n\n{}", skill.as_deref().unwrap_or(NO_SKILL))
+    format!(
+        "{TRAPS}\n\n{}",
+        skill
+            .as_deref()
+            .unwrap_or(NO_SKILL)
+    )
 }
 
 /// True when any segment of the command runs glab, however it is reached — a

@@ -15,8 +15,7 @@ use crate::checks::shell;
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
-const NO_VERIFY: &str =
-    "`--no-verify` is only allowed for TDD (commit message starts with \"test\"). \
+const NO_VERIFY: &str = "`--no-verify` is only allowed for TDD (commit message starts with \"test\"). \
 CLAUDE.md forbids skipping git hooks otherwise.";
 
 const NO_SIGN: &str = "Command bypasses git signing (--no-gpg-sign / commit.gpgsign=false). \
