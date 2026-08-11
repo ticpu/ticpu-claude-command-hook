@@ -103,9 +103,59 @@ fn ask(prompt: &str) -> Result<String> {
     }
 }
 
+/// The rule as written, for a number the model cited. Asking the model to restate
+/// the rule would be more generation under the padding pressure that invents
+/// findings, so it is only ever asked for the number.
+pub(super) fn headline(number: u32) -> Option<&'static str> {
+    let body = RULES
+        .lines()
+        .find_map(|line| {
+            line.trim_start()
+                .strip_prefix(&format!("{number}. "))
+        })?;
+    let end = body.find('.')?;
+    Some(&body[..end])
+}
+
+/// Tolerant of how the model spells a citation — bare, bulleted or bold — but only
+/// where one opens the line, so the word inside a quoted passage is not read as one.
+fn cited_rule(line: &str) -> Option<u32> {
+    let at = line
+        .to_ascii_lowercase()
+        .find("rule")?;
+    if line[..at]
+        .chars()
+        .any(char::is_alphanumeric)
+    {
+        return None;
+    }
+    line[at + 4..]
+        .trim_start_matches([' ', ':', '#', '*'])
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect::<String>()
+        .parse()
+        .ok()
+}
+
+/// The model's line is kept verbatim and the rule named beneath it: a number that
+/// does not match the passage it quotes has to stay visible, not be dressed up.
+fn annotate(findings: &str) -> String {
+    findings
+        .lines()
+        .flat_map(|line| {
+            let named = cited_rule(line)
+                .and_then(headline)
+                .map(|rule| format!("    ({rule})"));
+            std::iter::once(line.to_string()).chain(named)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// The first line decides. Anything else is a judge that did not answer the
 /// question asked, which is a failure to review and never a reason to block.
-fn verdict(reply: &str) -> Option<HookOutput> {
+pub(super) fn verdict(reply: &str) -> Option<HookOutput> {
     let body = reply.trim();
     let (first, rest) = body
         .split_once('\n')
@@ -124,7 +174,7 @@ fn verdict(reply: &str) -> Option<HookOutput> {
         {
             Some(HookOutput::deny(
                 "PreToolUse",
-                &format!("{DENY_HEAD}\n\n{}", rest.trim()),
+                &format!("{DENY_HEAD}\n\n{}", annotate(rest.trim())),
             ))
         }
         // A verdict with nothing to act on is worse than none: it would cost a

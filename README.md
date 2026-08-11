@@ -27,7 +27,8 @@ fail-open) so a bug in the hook never blocks your tools.
 - **design-rationale gate** — an edit to a `design-rationale.md` is reviewed before it lands.
   The countable rules are decided in code (a `## Why …` heading, a section past the length
   bound, a CLAUDE.md reference) and deny with the offending text quoted. The prose rules go to
-  a local model, which denies with the rule number and the passage it objects to. Deletions and
+  a local model, which denies with the passage it objects to and the rule it cited — the model
+  is asked only for the rule's number, and the rule itself is named from the list afterwards. Deletions and
   one-line fixes are too small to carry prose and never reach the model; an unreachable model
   allows the edit and says no judgement was made. Afterwards, a reminder to stop for review —
   without asking for the section back, since the tool result already showed it.
