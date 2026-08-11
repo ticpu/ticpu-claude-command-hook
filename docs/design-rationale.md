@@ -46,3 +46,21 @@ a separator lose the text.
 adds a position or filename prefix of its own makes every line unfoldable. Teaching gf to skip
 such a prefix is the wrong repair: those positions count the piped stream, so they name no line
 in any file, and folding around them would dress up output that is already wrong. Deny instead.
+
+## Countable rules are checked in code, judged rules in the model
+
+Every rule a program can decide stays in the program; the model is asked only what it can point
+at and quote. A small model flags textbook knowledge and narration reliably, and misses what it
+has to count just as reliably — a forbidden heading form and a section at twice the length bound
+survive the same review that catches the prose faults beside them.
+
+## The judge is trusted only where it was measured
+
+Its rule list is closed and deliberately shorter than the authoring rules: given every rule, the
+same model on the same edits rule-shops until something matches, and denies nearly everything. A
+rule joins that list only after it earns its place against labelled sections.
+
+A judge that did not run must never look like one that passed. The context length is stated on
+every request rather than left to server configuration, where a short default truncates the
+prompt and the model answers confidently from the fragment that survived; an unreachable or
+unparseable reply allows the write and says on screen that no judgement was made.
