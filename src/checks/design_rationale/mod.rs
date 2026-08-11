@@ -71,27 +71,47 @@ fn introduced<'a>(replaced: &str, added: &'a str) -> &'a str {
     }
 }
 
-/// What the edit introduces, with the text shared at both ends stripped. An edit
-/// appending a section carries an anchor copied out of the document, and one editing
-/// a section in place carries whatever it leaves standing around the change.
+/// What the edit introduces, with the whole lines shared at both ends stripped. An
+/// edit appending a section carries an anchor copied out of the document, and one
+/// editing a section in place carries whatever it leaves standing around the change.
+///
+/// Whole lines only. An edit inserting a section before an existing one shares that
+/// heading's marker, and a strip that ran inside the line would take the marker with
+/// it and hand the judge a bare sentence the author never wrote — which then reads,
+/// correctly, as a flat assertion about the world rather than the name of a section.
 pub(super) fn new_text<'a>(replaced: &str, added: &'a str) -> &'a str {
-    let head = common_len(replaced.chars(), added.chars());
-    let rest = &added[head..];
-    let tail = common_len(
-        replaced[head..]
-            .chars()
+    let (old, new) = (lines(replaced), lines(added));
+    let head: usize = common(old.iter(), new.iter());
+    // Never past what the head already claimed, or a line counts at both ends.
+    let tail: usize = common(
+        old[head..]
+            .iter()
             .rev(),
-        rest.chars()
+        new[head..]
+            .iter()
             .rev(),
     );
-    &rest[..rest.len() - tail]
+    let start = new[..head]
+        .iter()
+        .map(|line| line.len())
+        .sum();
+    let end = new[new.len() - tail..]
+        .iter()
+        .map(|line| line.len())
+        .sum::<usize>();
+    &added[start..added.len() - end]
 }
 
-fn common_len(a: impl Iterator<Item = char>, b: impl Iterator<Item = char>) -> usize {
+/// Lines with their terminators kept, so the pieces re-assemble into the original.
+fn lines(text: &str) -> Vec<&str> {
+    text.split_inclusive('\n')
+        .collect()
+}
+
+fn common<'a>(a: impl Iterator<Item = &'a &'a str>, b: impl Iterator<Item = &'a &'a str>) -> usize {
     a.zip(b)
         .take_while(|(x, y)| x == y)
-        .map(|(x, _)| x.len_utf8())
-        .sum()
+        .count()
 }
 
 /// The document is hard-wrapped, so a sentence quoted back as one line is the same
