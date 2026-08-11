@@ -126,8 +126,11 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   reaches the model, which either revises or argues the finding to the user; an Edit's permission
   prompt renders the diff and nothing else, so an objection carried on an `ask` is one nobody
   reads before deciding. Everything else — a clean verdict, an edit under the floor, a waived one
-  — is an `ask`, which prompts however the permission rules read: approving *is* the review, which
-  is why nothing asks for one after the write and there is no PostToolUse output at all. A wrong
+  — is an `ask`, which prompts however the permission rules read: approving *is* the review. The
+  PostToolUse entry says so afterwards and does nothing else, since a writer that is not told
+  presents the diff and waits for a second review; a prompt's `permissionDecisionReason` cannot
+  carry it, being rendered for whoever answers the prompt — which is why a deny reaches the model
+  at all, refusing being the answer — so it travels as `additionalContext`. A wrong
   finding is overruled by `bypass`: a marker under `$XDG_RUNTIME_DIR/claude-hooks/`, named in the
   deny as the command that makes it, consumed by the next judged edit and deleted as it is read
   (before judging, so a failed delete cannot leave a standing waiver). Creating it is forced to a
