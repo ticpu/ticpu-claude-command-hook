@@ -28,7 +28,10 @@ fail-open) so a bug in the hook never blocks your tools.
   The countable rules are decided in code (a `## Why …` heading, a section past the length
   bound, a CLAUDE.md reference) and deny with the offending text quoted. The prose rules go to
   a local model, which denies with the passage it objects to and the rule it cited — the model
-  is asked only for the rule's number, and the rule itself is named from the list afterwards. Deletions and
+  is asked only for the rule's number, and the rule itself is named from the list afterwards.
+  A second, separate call asks whether a section already records the decision, and has to copy
+  out the sentence that says so — checked against that section before it can deny, since a model
+  asked only to name a section names one whenever the words overlap. Both calls run at once. Deletions and
   one-line fixes are too small to carry prose and never reach the model; an unreachable model
   allows the edit and says no judgement was made. Afterwards, a reminder to stop for review —
   without asking for the section back, since the tool result already showed it.

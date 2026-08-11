@@ -99,12 +99,30 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   twice the length bound while catching textbook knowledge beside them — so a countable rule
   never moves into the prompt. `rules.md` is the judge's closed list, deliberately shorter than
   CLAUDE.md's authoring rules: given every rule the same model rule-shops until something matches
-  and denies nearly everything, so a rule is added only against a labelled set. The whole document
-  plus the edit goes in the prompt with `num_ctx` stated explicitly — ollama's default truncates
-  it and the model then answers from the surviving fragment with no error. Text under the floor
-  (a deletion, a link fix, a heading rename) never reaches the model. Any failure — unreachable,
-  no verdict, a REVISE naming nothing — allows the edit and says so in a `systemMessage`, since a
-  deny nobody can act on costs a rewrite in the dark. `MultiEdit` is not matched: Claude Code no
+  and denies nearly everything, so a rule is added only against a labelled set. A finding names a
+  rule *number*; the rule's text is looked up from that list afterwards and printed under the
+  model's own line, so a number that does not match its quote stays visible — making the model
+  restate the rule is more generation under the pressure that invents findings. `overlap.rs` asks
+  the second question — does a section already own this decision — in a call of its own, run
+  beside the rules one in a `thread::scope`; ollama batches them, so two cost about what one does.
+  It is separate because a duplicate is a relation to the rest of the file rather than a fault
+  quotable inside the new text, and beside six rules met by quoting a bad passage it is never what
+  the model reaches for: on the shared list it missed a near-verbatim clone of an existing section.
+  Asked alone it names a section whenever the vocabulary overlaps, so it must also copy out the
+  sentence that already says it, and that sentence is checked against that section (whitespace
+  collapsed — the file is hard-wrapped) before the deny is emitted. An edit rewriting a section in
+  place can't duplicate it, which is why the anchor an append re-emits verbatim is stripped before
+  the passage is judged. The whole document plus the edit goes in each prompt with `num_ctx`
+  stated explicitly — ollama's default truncates it and the model then answers from the surviving
+  fragment with no error. Text under the floor (a deletion, a link fix, a heading rename) never
+  reaches the model, and neither does an edit whose new text alone is under it. Any failure —
+  unreachable, no verdict, a REVISE naming nothing — allows the edit and says so in a
+  `systemMessage`, per review, since a deny nobody can act on costs a rewrite in the dark; an
+  objection from one review stands whatever the other did. Trying either review by hand needs a
+  passage on some unrelated topic: this repo's own `design-rationale.md` is *about* the judge, so
+  a probe written about the judge shares its vocabulary with the sections describing it and a
+  verdict on it says nothing — the duplication call has a genuine section to point at, and the
+  rules call is reading prose about the rules it is applying. `MultiEdit` is not matched: Claude Code no
   longer emits it. On PostToolUse, the stop-for-review reminder, which forbids restating the
   section — the tool result already rendered it.
 - `grep_fold` — rewrites searches to pipe through the sibling `gf`, per chain segment, so a

@@ -1,13 +1,9 @@
-use super::judge::{headline, verdict};
+use super::judge::{headline, parse_for_test};
 use super::mechanical::check;
 use super::{FLOOR, is_rationale, post_tool_use};
 
 fn objection(reply: &str) -> String {
-    verdict(reply)
-        .expect("a verdict")
-        .hook_specific_output
-        .and_then(|h| h.permission_decision_reason)
-        .expect("a deny carries a reason")
+    parse_for_test(reply).expect("findings")
 }
 
 fn denied(added: &str) -> bool {
@@ -108,13 +104,13 @@ fn a_headless_body_is_measured_too() {
 /// so a reformat of that file would otherwise silently stop naming anything.
 #[test]
 fn every_listed_rule_resolves_and_nothing_else_does() {
-    for number in 1..=7 {
+    for number in 1..=6 {
         let rule = headline(number).unwrap_or_else(|| panic!("rule {number} has no headline"));
         assert!(!rule.is_empty());
         assert!(!rule.contains('.'), "{rule}");
     }
     assert!(headline(0).is_none());
-    assert!(headline(8).is_none());
+    assert!(headline(7).is_none());
 }
 
 /// The model writes the finding line, so the citation is read tolerantly — but
@@ -129,7 +125,7 @@ fn a_cited_rule_is_named_beside_the_line_that_cited_it() {
     );
     assert!(reason.contains("NO DERIVABLE CONSEQUENCE"), "{reason}");
 
-    for line in ["- **Rule 6**: \"x\"", "rule #6 — \"x\""] {
+    for line in ["- **Rule 5**: \"x\"", "rule #5 — \"x\""] {
         let reason = objection(&format!("REVISE\n{line}"));
         assert!(reason.contains("NO ENUMERATED VALUES"), "{line}: {reason}");
     }
