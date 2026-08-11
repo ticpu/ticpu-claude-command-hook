@@ -1,7 +1,6 @@
 use crate::output::HookOutput;
 
-const REASON: &str =
-    "Broad `find` walk blocked (/, ~, $HOME, the home dir, or the GIT repo parent). \
+const REASON: &str = "Broad `find` walk blocked (/, ~, $HOME, the home dir, or the GIT repo parent). \
 These trees are massive and slow to walk. Scope to a specific project dir or subdir, use \
 `rg --files <dir>`, or hand a narrow path to the Explore agent. A find inside one repo \
 (e.g. ~/GIT/eido/...) is fine — its parent is not.";

@@ -3,8 +3,7 @@
 use crate::checks::shell;
 use crate::output::HookOutput;
 
-const RG_REPLACE: &str =
-    "`rg -r` is `--replace`, not grep's `--recursive`: `rg -rn PAT dir` prints \
+const RG_REPLACE: &str = "`rg -r` is `--replace`, not grep's `--recursive`: `rg -rn PAT dir` prints \
 every match rewritten to `n`, and the rewritten text still looks like a normal hit. rg recurses \
 by default and `-n` alone numbers the lines. Pass `--replace=` if substitution really is what you \
 want.";
