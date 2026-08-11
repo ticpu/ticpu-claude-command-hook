@@ -64,9 +64,10 @@ quiet while a better match exists, and one that needs its neighbours to outbid i
 nothing. A finding is taken only where the quoted passage can carry it. Qualifying the rule's own text does not hold
 the model to it — under pressure to answer it reaches for whichever rule is nearest — so where a
 rule has a precondition a program can see, the finding is checked against its quote and dropped
-when it fails: a line naming no rule, a quote absent from the added text, or one making no
-reference to the past at all under the rule against narrating a previous state. The first of
-those is what a model does when it reasons in the open — it answers with the verdict, then argues
+when it fails: a line naming no rule, a quote absent from the added text, or a quote carrying
+nothing the rule it names needs — no reference to the past under the rule against narrating a
+previous state, no value of any kind under the one against enumerating them. A line naming no
+rule is what a model does when it reasons in the open: it answers with the verdict, then argues
 itself to the other one, and every line of the argument quotes the passage it is weighing.
 
 A judge that did not run must never look like one that passed. The context length is stated on
