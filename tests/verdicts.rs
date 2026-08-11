@@ -106,7 +106,15 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("cd /x && git commit --no-verify -m 'feat: x'", Deny),
     // Staging named paths runs no hook either; the blanket forms are denied.
     // The paths must exist, so these name real files in this repo.
-    ("cd /x && git add src/checks/shell.rs src/main.rs", Allow),
+    // The `cd` moves where the add runs, so the paths are spelled from there.
+    (
+        concat!(
+            "cd ",
+            env!("CARGO_MANIFEST_DIR"),
+            " && git add src/checks/shell.rs src/main.rs"
+        ),
+        Allow,
+    ),
     ("cd /x && git add -A", Deny),
     ("git add .", Deny),
     // Quoting a blanket pathspec changes nothing for git.

@@ -231,13 +231,40 @@ fn staging_explicit_paths_auto_allowed() {
     for cmd in [
         "git add src/checks/git_bypass/mod.rs",
         "git add src/checks/git_bypass/mod.rs src/checks/shell.rs",
-        "cd /x && git add src/main.rs",
-        "cd /x && git status && git add Cargo.toml",
+        concat!("cd ", env!("CARGO_MANIFEST_DIR"), " && git add src/main.rs"),
+        concat!(
+            "cd ",
+            env!("CARGO_MANIFEST_DIR"),
+            " && git status && git add Cargo.toml"
+        ),
         "git add -- README.md CLAUDE.md",
         "git add -f src/checks/mod.rs",
     ] {
         assert_eq!(decision(cmd, root), "allow", "{cmd}");
     }
+}
+
+/// A leading `cd` moves where the later segments run, so their pathspecs are
+/// spelled from the target. Resolving them against the directory the tool started
+/// in reports a correctly-spelled path as misrooted.
+#[test]
+fn a_leading_cd_rebases_the_pathspecs_after_it() {
+    let sub = concat!(env!("CARGO_MANIFEST_DIR"), "/src/checks");
+    assert_eq!(
+        decision(
+            concat!("cd ", env!("CARGO_MANIFEST_DIR"), " && git add README.md"),
+            sub
+        ),
+        "allow"
+    );
+    // Spelled from where it started, which the `cd` has left behind.
+    assert_eq!(
+        decision(
+            concat!("cd ", env!("CARGO_MANIFEST_DIR"), " && git add mod.rs"),
+            sub
+        ),
+        "prompt"
+    );
 }
 
 /// A pathspec that is not one named file sweeps whatever is under it — the
@@ -272,7 +299,11 @@ fn a_misrooted_pathspec_is_denied_with_the_correction() {
     for cmd in [
         "git add src/main.rs",
         "git add src/checks/mod.rs main.rs",
-        "cd /x && git add src/checks/mod.rs",
+        concat!(
+            "cd ",
+            env!("CARGO_MANIFEST_DIR"),
+            "/src && git add src/checks/mod.rs"
+        ),
     ] {
         assert_eq!(decision(cmd, sub), "deny", "{cmd}");
     }

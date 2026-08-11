@@ -202,21 +202,25 @@ pub fn is_lone_echo(segment: &str) -> bool {
             .is_some_and(|stages| stages.len() == 1 && command_word(segment) == Some("echo"))
 }
 
-/// `cd <path>` and nothing else. A flag, a bare `cd` (to `$HOME`), `cd -`, or a
-/// redirect glued to the path (`cd /x>y` truncates `y`) all disqualify it.
-pub fn is_bare_cd(segment: &str) -> bool {
+/// The directory a `cd <path>` segment moves to, when that is all it does. A flag,
+/// a bare `cd` (to `$HOME`), `cd -`, or a redirect glued to the path (`cd /x>y`
+/// truncates `y`) all disqualify it.
+pub fn bare_cd_target(segment: &str) -> Option<&str> {
     let mut words = segment.split_whitespace();
     if words.next() != Some("cd") {
-        return false;
+        return None;
     }
-    let Some(path) = words.next() else {
-        return false;
-    };
-    words
+    let path = words.next()?;
+    (words
         .next()
         .is_none()
         && !path.starts_with('-')
-        && !redirects_stdout(segment)
+        && !redirects_stdout(segment))
+    .then_some(path)
+}
+
+pub fn is_bare_cd(segment: &str) -> bool {
+    bare_cd_target(segment).is_some()
 }
 
 /// A segment that only reads and prints: every stage is a utility that cannot

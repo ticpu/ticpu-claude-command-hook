@@ -6,7 +6,7 @@ mod read_only;
 mod tests;
 
 use crate::checks::git_bypass::add::{is_blanket_add, is_explicit_add, misrooted_paths};
-use crate::checks::git_bypass::location::{hint, points_at_cwd};
+use crate::checks::git_bypass::location::{hint, points_at_cwd, resolve};
 use crate::checks::git_bypass::parse::{
     git_c_path, has_token, is_git, mentions_git, parse, unquote,
 };
@@ -50,11 +50,11 @@ const FALSY: &[&str] = &["false", "0", "no", "off"];
 pub fn check(input: &HookInput) -> Option<HookOutput> {
     let cmd = input.command();
     let flagged = match shell::chain_segments(cmd) {
-        Some(segments) => segments
-            .into_iter()
-            .map(str::trim_start)
-            .filter(|segment| is_git(segment))
-            .find_map(|segment| deny(segment, segment, &input.cwd)),
+        Some(segments) => walk(segments, &input.cwd, |segment, cwd| {
+            is_git(segment)
+                .then(|| deny(segment, segment, cwd))
+                .flatten()
+        }),
         // Unanalyzable (heredoc, substitution): the whole command is the only unit
         // left to judge. Flags are read from the part before the heredoc marker —
         // the body is message text, so a commit message may name `--no-verify` —
@@ -65,6 +65,30 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
     };
     // Last, so a bypass flag in the same command is reported before the cd.
     flagged.or_else(|| cd_before_commit(cmd).then(|| located(CD_COMMIT, &input.cwd)))
+}
+
+/// Segments in order, each judged against the directory it will actually run in:
+/// a bare `cd` moves that directory for everything after it, so a path argument
+/// in a later segment resolves from there and not from where the tool started.
+fn walk<T>(
+    segments: Vec<&str>,
+    cwd: &str,
+    mut judge: impl FnMut(&str, &str) -> Option<T>,
+) -> Option<T> {
+    let mut here = cwd.to_string();
+    for segment in segments {
+        let segment = segment.trim_start();
+        if let Some(target) = shell::bare_cd_target(segment) {
+            here = resolve(unquote(target), &here)
+                .display()
+                .to_string();
+            continue;
+        }
+        if let Some(found) = judge(segment, &here) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 /// A `cd` preceding a `git commit` in the same command. Deliberately not routed
@@ -109,20 +133,26 @@ pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
     let segments = shell::chain_segments(input.command())?;
     let mut git_seen = false;
     let mut cd_seen = false;
+    let mut here = input
+        .cwd
+        .clone();
     for segment in segments {
         // A `2>` is not a stdout redirect, but it still truncates whatever path it
         // names — an allow must not cover that.
         if redirects_anything(segment) {
             return None;
         }
-        if shell::is_bare_cd(segment) {
+        if let Some(target) = shell::bare_cd_target(segment) {
+            here = resolve(unquote(target), &here)
+                .display()
+                .to_string();
             cd_seen = true;
             continue;
         }
         if shell::is_lone_echo(segment) {
             continue;
         }
-        if !is_read_only_segment(segment) && !is_explicit_add(segment, &input.cwd) {
+        if !is_read_only_segment(segment) && !is_explicit_add(segment, &here) {
             return None;
         }
         git_seen = true;

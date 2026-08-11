@@ -52,7 +52,9 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   principle, so it walks tokens over the text before the heredoc marker with balanced quotes
   stripped — a message describing the rule does not trip it. Last, a `git add` pathspec that
   resolves under the repo root but not under the working directory: it is spelled from the wrong
-  root, so the deny names the spelling that works. These four denies carry a `cwd: … — git repo
+  root, so the deny names the spelling that works. A bare `cd` earlier in the chain moves that
+  working directory first, so every segment is judged where the shell will actually run it —
+  otherwise `cd <root> && git add <path-from-root>` reads as misrooted precisely when it is right. These four denies carry a `cwd: … — git repo
   root: …` line, since none of it is answerable from a tool result.
   Bypass flags count only where git reads options: whole
   tokens, outside quotes, before a heredoc marker — so a commit message may name a flag it
