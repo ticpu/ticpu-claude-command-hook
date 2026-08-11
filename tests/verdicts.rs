@@ -36,6 +36,13 @@ impl Verdict<&str> {
 }
 
 const CASES: &[(&str, Verdict<&str>)] = &[
+    // The waiver for a judged objection: always prompted, so an allowlisted
+    // `touch` cannot hand one out unseen.
+    (
+        "touch \"$XDG_RUNTIME_DIR/claude-hooks/design-rationale-judge-bypass\"",
+        Ask,
+    ),
+    ("touch \"$XDG_RUNTIME_DIR/claude-hooks/glab-skill-x\"", Pass),
     (
         "grep -rn \"enum C911pVariable\" -A 60 /x/variables.rs | head -80; ls /x/",
         Fold("grep -rn \"enum C911pVariable\" -A 60 /x/variables.rs | {gf} | head -80 ; ls /x/"),
@@ -263,10 +270,12 @@ fn the_judge_objects_to_prose_the_rules_forbid() {
 not message framing, so a reader has to cope with partial reads and re-assemble frames \
 itself. Previously the reader used a fixed 4096-byte buffer, and an earlier version grew it \
 on demand. The consequence is that frames larger than the buffer were split across reads.\n";
-    assert_eq!(edit_verdict(path, added), Ask);
+    assert_eq!(edit_verdict(path, added), Deny);
     let reason = edit_reason(path, added);
     assert!(reason.contains("judge objects"), "{reason}");
     assert!(reason.contains("Rule "), "{reason}");
+    // The deny has to carry the way past it, or the objection is unappealable.
+    assert!(reason.contains("design-rationale-judge-bypass"), "{reason}");
 }
 
 fn edit_reason(file_path: &str, new_string: &str) -> String {
@@ -322,6 +331,7 @@ fn verdict(command: &str, cwd: &str) -> Verdict<String> {
         None => match specific["permissionDecision"].as_str() {
             Some("deny") => Deny,
             Some("allow") => Allow,
+            Some("ask") => Ask,
             _ => panic!("unexpected hook output: {stdout}"),
         },
     }

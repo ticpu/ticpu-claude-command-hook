@@ -122,9 +122,19 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   passage on some unrelated topic: this repo's own `design-rationale.md` is *about* the judge, so
   a probe written about the judge shares its vocabulary with the sections describing it and a
   verdict on it says nothing — the duplication call has a genuine section to point at, and the
-  rules call is reading prose about the rules it is applying. `MultiEdit` is not matched: Claude Code no
-  longer emits it. On PostToolUse, the stop-for-review reminder, which forbids restating the
-  section — the tool result already rendered it.
+  rules call is reading prose about the rules it is applying. A judged objection denies, so it
+  reaches the model, which either revises or argues the finding to the user; an Edit's permission
+  prompt renders the diff and nothing else, so an objection carried on an `ask` is one nobody
+  reads before deciding. Everything else — a clean verdict, an edit under the floor, a waived one
+  — is an `ask`, which prompts however the permission rules read: approving *is* the review, which
+  is why nothing asks for one after the write and there is no PostToolUse output at all. A wrong
+  finding is overruled by `bypass`: a marker under `$XDG_RUNTIME_DIR/claude-hooks/`, named in the
+  deny as the command that makes it, consumed by the next judged edit and deleted as it is read
+  (before judging, so a failed delete cannot leave a standing waiver). Creating it is forced to a
+  prompt so an allowlisted `touch` cannot grant one unseen — but only *creating* it: matching the
+  name alone made a `test -e` prompt with a confirmation claiming it granted a waiver, and a
+  confirmation that misdescribes itself is worse than none. The countable rules are outside the
+  waiver, having nothing to overrule. `MultiEdit` is not matched: Claude Code no longer emits it.
 - `grep_fold` — rewrites searches to pipe through the sibling `gf`, per chain segment, so a
   chained or `cd`-prefixed grep still folds. `gf` lands after the *last* search stage, since a
   later `grep`/`rg` filters lines and its pattern can match the prefix gf strips; everything

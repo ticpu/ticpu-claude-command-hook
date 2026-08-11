@@ -1,6 +1,7 @@
 //! `design-rationale.md` gates. Countable rules are decided here; the rest go to a
 //! local model, which catches what it can quote and not what it has to count.
 
+pub mod bypass;
 mod judge;
 mod mechanical;
 mod ollama;
@@ -35,24 +36,33 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
         _ => (input.old_string(), input.new_string()),
     };
     // Every edit to the file stops for the user, judged or not: approving is the
-    // review, so an edit that slipped past on size would be one nobody saw.
+    // review, so an edit that slipped past on size would be one nobody saw. The
+    // countable rules are not covered by the bypass — a heading form is not a
+    // finding anyone needs to overrule.
     mechanical::check(added).or_else(|| match added.len() >= FLOOR {
-        true => reviewed(&document, replaced, added),
         false => Some(HookOutput::ask("PreToolUse", UNJUDGED)),
+        true if bypass::spend() => Some(HookOutput::ask("PreToolUse", BYPASSED)),
+        true => reviewed(&document, replaced, added),
     })
 }
 
-/// The judged reviews ask rather than deny: a small model on a short rule list is
-/// wrong often enough that settling it here would lose correct passages to invented
-/// findings, and the reader who can tell the difference is the one being prompted.
-/// Approving is also the review — which is why nothing asks for one afterwards.
-const OBJECTION: &str = "The design-rationale judge objects — approve to keep the text as \
-written, reject to have it revised. It is a small local model on a short rule list, and its \
-usual mistake is reading domain behaviour this project depends on as textbook knowledge, so an \
-objection quoting something specific to this codebase is likely wrong.";
+/// A judged objection stops the edit rather than riding along on a permission
+/// prompt: an Edit's prompt renders the diff alone, so an objection carried there
+/// is one the user never reads before deciding. Stopping puts it in front of the
+/// model instead, which can act on it — and the user overrules it with `bypass`.
+const OBJECTION: &str = "The design-rationale judge objects. It is a small local model on a \
+short rule list, and its usual mistake is reading domain behaviour this project depends on as \
+textbook knowledge, so an objection quoting something specific to this codebase is likely wrong.
+
+Revise and re-issue if the objection is right. If it is wrong, say so to the user with the \
+finding and why the passage stands, rather than watering the passage down until it passes. They \
+can wave it through with:";
 
 const CLEAN: &str = "design-rationale.md — the judge raised nothing. Approve to write it, \
 reject to say what should change.";
+
+const BYPASSED: &str = "design-rationale.md — judged review waived for this edit, and the \
+waiver is now spent.";
 
 /// Two reviews of the same edit, run together: one asks what is wrong inside the new
 /// text, the other whether the document already says it. A model answers the second
@@ -89,15 +99,21 @@ fn reviewed(document: &str, replaced: &str, added: &str) -> Option<HookOutput> {
             failures.join("; ")
         )
     });
-    let reason = match objections.is_empty() {
-        false => format!("{OBJECTION}\n\n{}", objections.join("\n")),
-        true => CLEAN.to_string(),
+    let mut decision = match objections.is_empty() {
+        false => HookOutput::deny(
+            "PreToolUse",
+            &format!(
+                "{OBJECTION}\n\n    {}\n\n{}",
+                bypass::command(),
+                objections.join("\n")
+            ),
+        ),
+        true => HookOutput::ask("PreToolUse", CLEAN),
     };
     // A review that did not happen is said out loud rather than assumed to pass,
-    // and never blocks: the prompt stands whatever the reviewers managed.
-    let mut prompt = HookOutput::ask("PreToolUse", &reason);
-    prompt.system_message = unreviewed;
-    Some(prompt)
+    // and never blocks: the edit is decided on whatever the reviewers managed.
+    decision.system_message = unreviewed;
+    Some(decision)
 }
 
 fn is_rationale(file_path: &str) -> bool {

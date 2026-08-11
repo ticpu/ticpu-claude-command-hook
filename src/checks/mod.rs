@@ -21,6 +21,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
         "PreToolUse" if input.tool_name == "Bash" => {
             let cmd = input.command();
             glab_skill::check(input)
+                .or_else(|| design_rationale::bypass::requested(cmd))
                 .or_else(|| git_bypass::check(input))
                 .or_else(|| broad_find::check(cmd))
                 .or_else(|| remote_session::check(cmd))

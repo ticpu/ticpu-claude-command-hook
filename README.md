@@ -33,8 +33,10 @@ fail-open) so a bug in the hook never blocks your tools.
   out the sentence that says so — checked against that section before it can deny, since a model
   asked only to name a section names one whenever the words overlap. Both calls run at once. Deletions and
   one-line fixes are too small to carry prose and never reach the model; an unreachable model
-  allows the edit and says no judgement was made. Afterwards, a reminder to stop for review —
-  without asking for the section back, since the tool result already showed it.
+  allows the edit and says no judgement was made. Every other edit to the file prompts for your
+  approval whatever your permission rules say, so the review happens before the write rather than
+  after it. A judged objection you disagree with is overruled by approving the command the denial
+  hands you, which drops a marker the next edit consumes.
 - **grep fold** — rewrites `grep`/`rg`/`git grep` commands to pipe through `gf`, so repeated
   file paths collapse instead of eating the model's context. Chains are handled per segment
   (`cd /x && grep …` folds the grep and leaves the `cd`), and a segment that cannot be
