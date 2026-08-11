@@ -196,4 +196,12 @@ changing a check — and `gf` must stay beside it, which `cargo build` handles.
 rewritten-command; add a row there for any new shape. `./probe.sh` prints the same verdicts
 for commands on stdin when you just want to try one.
 
+`./replay.sh <session-id>` replays a past session's design-rationale edits through the built
+binary, and `./replay.sh <session-id> <n>` prints the strings the hook was handed for one of
+them. Reach for it before writing a probe by hand: an edit inserting a section before an
+existing one re-emits that heading, and both the anchor strip and the finding parser were
+caught mangling exactly that shape, which no hand-written probe had. Verdicts vary between
+runs — the two judge calls race and ollama batches them — so read one replay as a lead and not
+as proof.
+
 License GPL-3.0-only. Commits run `gitleaks git --staged` via `core.hooksPath=githooks`.
