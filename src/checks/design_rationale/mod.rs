@@ -47,14 +47,8 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
             .len()
             >= FLOOR
         {
-            false => Some(HookOutput::ask(
-                "PreToolUse",
-                &format!("{UNJUDGED}{REVIEWED}"),
-            )),
-            true if bypass::spend() => Some(HookOutput::ask(
-                "PreToolUse",
-                &format!("{BYPASSED}{REVIEWED}"),
-            )),
+            false => Some(HookOutput::ask("PreToolUse", UNJUDGED)),
+            true if bypass::spend() => Some(HookOutput::ask("PreToolUse", BYPASSED)),
             true => reviewed(&document, replaced, added, introduced),
         }
     })
@@ -136,11 +130,17 @@ the passage stands, then run the command below yourself and re-issue the edit un
 permission prompt is where they decide, so putting the same question to them first only spends \
 a round trip — and never paste the command for them to run:";
 
-/// Approving the write is the review. Said on every prompt because the writer that
-/// asks for one afterwards is asking for a second review of what was just approved,
-/// and waits on an answer nobody owes it.
-const REVIEWED: &str = " Approving is the review — commit it, and do not ask for another after \
-the write.";
+/// Approving the write was the review, said once the write has happened. A writer
+/// told this on the prompt is not told at all: that text is addressed to whoever
+/// answers the prompt, and the writer only ever reads a decision that refused it.
+const REVIEWED: &str = "The design-rationale edit you just made was reviewed at the gate — the \
+prompt you were shown was the review, and approving it was the verdict. Do not present the diff \
+and ask for another review of it. Commit it and carry on.";
+
+/// The write happened; the only thing left to say is that it was already reviewed.
+pub fn post_tool_use(input: &HookInput) -> Option<HookOutput> {
+    is_rationale(input.file_path()).then(|| HookOutput::advise("PostToolUse", REVIEWED))
+}
 
 const CLEAN: &str = "design-rationale.md — the judge raised nothing. Approve to write it, \
 reject to say what should change.";
@@ -215,7 +215,7 @@ fn reviewed(document: &str, replaced: &str, added: &str, introduced: &str) -> Op
                 objections.join("\n")
             ),
         ),
-        true => HookOutput::ask("PreToolUse", &format!("{CLEAN}{REVIEWED}")),
+        true => HookOutput::ask("PreToolUse", CLEAN),
     };
     // A review that did not happen is said out loud rather than assumed to pass,
     // and never blocks: the edit is decided on whatever the reviewers managed.

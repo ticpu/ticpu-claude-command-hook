@@ -36,6 +36,11 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
         "PreToolUse" if input.tool_name == "Edit" || input.tool_name == "Write" => {
             design_rationale::pre_tool_use(input)
         }
+        // The gate already reviewed it; this only says so, where the writer can read
+        // it. A permission prompt's reason cannot: it is addressed to the reader.
+        "PostToolUse" if input.tool_name == "Edit" || input.tool_name == "Write" => {
+            design_rationale::post_tool_use(input)
+        }
         _ => None,
     }
 }
