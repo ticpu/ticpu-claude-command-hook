@@ -150,8 +150,8 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Allow,
     ),
     ("git show HEAD:a.c | sed -i '1d'", Pass),
-    // The next call gets a fresh shell, so a `cd` with no work behind it is noise.
-    ("cd /x", Deny),
+    // The working directory persists between calls, so moving it is the work.
+    ("cd /x", Allow),
     ("cd /x && cargo test", Pass),
     // The allow must not cover a second command riding on the same decision.
     ("git -C /x status; rm -rf /y", Pass),
@@ -187,7 +187,11 @@ const SUBDIR_CASES: &[(&str, Verdict<&str>)] = &[
 #[test]
 fn verdicts_match() {
     for (command, expected) in CASES {
-        assert_eq!(verdict(command, "."), expected.owned(), "command: {command}");
+        assert_eq!(
+            verdict(command, "."),
+            expected.owned(),
+            "command: {command}"
+        );
     }
     let subdir = concat!(env!("CARGO_MANIFEST_DIR"), "/src");
     for (command, expected) in SUBDIR_CASES {

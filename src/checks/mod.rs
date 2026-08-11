@@ -3,7 +3,6 @@ mod design_rationale;
 mod git_bypass;
 mod glab_skill;
 mod grep_fold;
-mod lone_cd;
 mod remote_session;
 mod search_flags;
 mod search_stderr;
@@ -23,7 +22,6 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
             let cmd = input.command();
             glab_skill::check(input)
                 .or_else(|| git_bypass::check(input))
-                .or_else(|| lone_cd::check(cmd))
                 .or_else(|| broad_find::check(cmd))
                 .or_else(|| remote_session::check(cmd))
                 .or_else(|| search_stderr::check(cmd))

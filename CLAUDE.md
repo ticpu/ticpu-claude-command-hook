@@ -61,7 +61,9 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   `cd`, a lone `echo`, a
   provably read-only git pipeline, or a `git add` naming at least one path that exists as a
   file — a directory, glob or variable stages whatever is under it, which is the sweep the
-  blanket forms are denied for; the allowlist
+  blanket forms are denied for. A `cd` carries the allow on its own, with no git segment
+  behind it: the working directory persists between Bash calls, so moving it is the work.
+  The allowlist
   can't express that, and it covers `git -C <anypath> status` as well as
   `cd <path> && git diff|add …`, which Claude Code otherwise prompts about however the
   allowlist reads (hooks from the target directory — neither a read-only subcommand nor
@@ -78,10 +80,6 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or
   verb prompts, as does an option that writes a file or runs a program (`--output=`, `-O`) and
   any `-c`, which can point config at a program under a read-only verb.
-- `lone_cd` — denies a command whose every segment is just a `cd`. Each Bash call gets a fresh
-  shell, so nothing observes the change; the shape only shows up as a retry after a chained `cd`
-  was refused, which splitting cannot fix. A redirect or a pipe means the segment leaves
-  something behind, so it is not the no-op this denies.
 - `broad_find` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
   repo parent; a find scoped to one repo under GIT is allowed.
 - `remote_session` — denies an `ssh`/`sshfs`/`psql`/`mysql`/`mariadb`/`mongosh` bundled with
