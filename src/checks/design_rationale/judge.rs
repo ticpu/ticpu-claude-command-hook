@@ -95,12 +95,17 @@ fn findings(reply: &str, added: &str) -> Option<String> {
     (!kept.is_empty()).then(|| annotate(&kept.join("\n")))
 }
 
-/// Whether the quoted passage can carry the finding at all. The quote has to be in
-/// the text being judged — one that is not leaves nothing to rewrite — and a finding
-/// against the previous-state rule has to quote a passage that refers to the past.
-/// Both are refusals of an impossible finding, never a second opinion on a possible
-/// one: what survives is still the model's call.
+/// Whether the quoted passage can carry the finding at all. A finding names a rule and
+/// quotes the text being judged — a line doing neither is the model reasoning in the
+/// open, which it does by answering with a verdict and then arguing itself to the
+/// other one, quoting the passage on every line as it goes. A finding against the
+/// previous-state rule has to quote a passage that refers to the past. All three are
+/// refusals of an impossible finding, never a second opinion on a possible one: what
+/// survives is still the model's call.
 fn stands(line: &str, added: &str) -> bool {
+    let Some(rule) = cited_rule(line) else {
+        return false;
+    };
     let Some(quote) = quoted(line) else {
         return false;
     };
@@ -113,7 +118,7 @@ fn stands(line: &str, added: &str) -> bool {
     {
         return false;
     }
-    cited_rule(line) != Some(PREVIOUS_STATE)
+    rule != PREVIOUS_STATE
         || PAST_REFERENCE
             .iter()
             .any(|marker| quote.contains(marker))

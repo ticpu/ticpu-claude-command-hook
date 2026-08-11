@@ -123,9 +123,32 @@ fn a_cited_rule_is_named_beside_the_line_that_cited_it() {
         assert!(reason.contains("NO ENUMERATED VALUES"), "{line}: {reason}");
     }
 
-    // The number belongs to the quoted text, not to a citation.
-    let reason = objection("REVISE\nThis says the \"rule 3 steps\" are enumerated.");
-    assert!(!reason.contains("NO NARRATION"), "{reason}");
+    // The number belongs to the quoted text, so the line cites nothing and is not a
+    // finding at all — never a finding annotated with a rule it has nothing to do with.
+    assert_eq!(
+        parse_for_test(
+            "REVISE\nThis says the \"rule 3 steps\" are enumerated.",
+            JUDGED
+        ),
+        None
+    );
+}
+
+/// A model that reasons in the open answers with a verdict and then argues itself to
+/// the other one, quoting the passage on every line. None of those lines cites a rule,
+/// and serving them back as an objection denies on the model's own deliberation.
+#[test]
+fn deliberation_is_not_a_finding() {
+    let added = "One unknown-key walk, one deprecated-key list and one permission check cover \
+both files.";
+    let deliberating = "REVISE\n\
+The text says: \"one deprecated-key list\".\n\
+Wait, I see a potential Rule 4 violation here.\n\
+I will pass because I cannot find a clear violation of the rules provided.";
+    assert_eq!(parse_for_test(deliberating, added), None);
+
+    // A line that does cite one is still a finding.
+    assert!(parse_for_test("REVISE\nRule 4: \"one deprecated-key list\"", added).is_some());
 }
 
 /// The judged rules are the model's call; these two are refusals of a finding the
@@ -171,12 +194,14 @@ its error chain and still leave the next pass scheduled.";
 }
 
 /// An edit is judged on what it introduces: a removal re-emits the text around what
-/// it takes out, and that text is already in the file and already approved.
+/// it takes out, and that text is already in the file and already approved. Whole
+/// lines strip away entirely; a line the edit rewrote is the most that survives, and
+/// never the section it sits in.
 #[test]
-fn a_removal_introduces_nothing_to_judge() {
-    let section = "## A decision\n\nA first sentence that stands. A second sentence that goes \
-away because it repeated the first at greater length and taught nobody anything.\n";
-    let shortened = "## A decision\n\nA first sentence that stands.\n";
+fn a_removal_introduces_at_most_the_line_it_rewrote() {
+    let section = "## A decision\n\nA first sentence that stands.\nA second that goes away \
+because it repeated the first at greater length.\nA third that stays.\n";
+    let shortened = "## A decision\n\nA first sentence that stands.\nA third that stays.\n";
     assert_eq!(new_text(section, shortened), "");
     assert!(
         new_text(section, shortened)
@@ -184,6 +209,40 @@ away because it repeated the first at greater length and taught nobody anything.
             .len()
             < FLOOR
     );
+
+    // Cutting inside a line leaves that line, and nothing around it.
+    let trimmed = "## A decision\n\nA first sentence.\nA second that goes away \
+because it repeated the first at greater length.\nA third that stays.\n";
+    assert_eq!(new_text(section, trimmed), "A first sentence.\n");
+}
+
+/// An insert lands before an existing heading and re-emits it, so the two texts share
+/// that heading's marker. Stripping inside the line takes the marker with it, and the
+/// new section's own heading then reaches the judge as a flat claim about the world.
+#[test]
+fn an_insert_before_a_heading_keeps_its_own_marker() {
+    let replaced = "## A link reason is evidence\n";
+    let added = "## The index build is a loop, not a timer\n\nBody of it.\n\n\
+## A link reason is evidence\n";
+    let introduced = new_text(replaced, added);
+    assert!(
+        introduced.starts_with("## The index build"),
+        "heading lost its marker: {introduced:?}"
+    );
+    assert!(!introduced.contains("## A link reason"), "{introduced:?}");
+}
+
+/// Whole lines, so a slice never lands inside a multi-byte character.
+#[test]
+fn a_shared_line_is_stripped_only_as_a_whole() {
+    assert_eq!(new_text("a — b\n", "a — b\nc — d\n"), "c — d\n");
+    // Sharing only part of a line strips nothing: the line differs.
+    assert_eq!(
+        new_text("head tail", "head MIDDLE tail"),
+        "head MIDDLE tail"
+    );
+    assert_eq!(new_text("", "all of it"), "all of it");
+    assert_eq!(new_text("same", "same"), "");
 }
 
 /// Re-wrapping a paragraph rewrites every line of it and says nothing new, so the
