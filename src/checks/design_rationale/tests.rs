@@ -117,7 +117,7 @@ fn a_cited_rule_is_named_beside_the_line_that_cited_it() {
 
     // The number belongs to the quoted text, not to a citation.
     let reason = objection("REVISE\nThis says the rule 3 steps are enumerated.");
-    assert!(!reason.contains("NO BEFORE"), "{reason}");
+    assert!(!reason.contains("NO NARRATION"), "{reason}");
 }
 
 /// The floor exists to keep deletions and one-line fixes off the judge; it must
