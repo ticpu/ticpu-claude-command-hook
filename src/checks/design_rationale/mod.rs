@@ -55,8 +55,9 @@ short rule list, and its usual mistake is reading domain behaviour this project 
 textbook knowledge, so an objection quoting something specific to this codebase is likely wrong.
 
 Revise and re-issue if the objection is right. If it is wrong, say so to the user with the \
-finding and why the passage stands, rather than watering the passage down until it passes. They \
-can wave it through with:";
+finding and why the passage stands, rather than watering the passage down until it passes. If \
+they agree it is wrong, run the command below yourself and then re-issue the edit unchanged — \
+approving its prompt is how they overrule the judge, so do not paste it for them to run:";
 
 const CLEAN: &str = "design-rationale.md — the judge raised nothing. Approve to write it, \
 reject to say what should change.";

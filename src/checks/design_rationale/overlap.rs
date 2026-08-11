@@ -34,7 +34,7 @@ pub(super) fn review(document: &str, replaced: &str, added: &str) -> Result<Opti
     }
     let reply = super::ollama::ask(&prompt(document, new))?;
     Ok(owner(document, &reply)
-        .filter(|(heading, _)| Some(*heading) != rewritten_section(document, replaced, added))
+        .filter(|(heading, _)| Some(*heading) != landing_section(document, replaced, added))
         .map(|(heading, evidence)| {
             format!(
                 "Already recorded under \"{heading}\" — fold it in there rather than adding a \
@@ -116,14 +116,15 @@ fn common_len(a: impl Iterator<Item = char>, b: impl Iterator<Item = char>) -> u
         .sum()
 }
 
-/// The section an edit rewrites in place, which can never be the section it
-/// duplicates. An anchor re-emitted verbatim means the edit inserts around it
-/// rather than rewriting it, and then the surrounding section is fair game.
-fn rewritten_section<'a>(document: &'a str, replaced: &str, added: &str) -> Option<&'a str> {
+/// The section the edit lands in, which can never be the section it duplicates —
+/// it is either being rewritten, or added to, and "fold it in there" names where
+/// the text is already going. Only text arriving under a heading of its own stands
+/// as a separate section, and then the one holding the anchor is fair game.
+fn landing_section<'a>(document: &'a str, replaced: &str, added: &str) -> Option<&'a str> {
     if replaced
         .trim()
         .is_empty()
-        || added.contains(replaced)
+        || (added.contains(replaced) && new_text(replaced, added).contains("## "))
     {
         return None;
     }
@@ -201,17 +202,28 @@ reach it.\n";
     }
 
     #[test]
-    fn a_section_being_rewritten_is_not_a_section_being_duplicated() {
+    fn a_section_being_written_into_is_not_a_section_being_duplicated() {
         let replaced = "Body of the second.";
         assert_eq!(
-            rewritten_section(DOC, replaced, "Rewritten body."),
+            landing_section(DOC, replaced, "Rewritten body."),
             Some("## A second decision")
         );
-        // The anchor comes back verbatim, so this appends rather than rewrites.
+        // A heading of its own: the new text stands beside that section, not in it.
         assert_eq!(
-            rewritten_section(DOC, replaced, "Body of the second.\n\n## A third\n\nMore."),
+            landing_section(DOC, replaced, "Body of the second.\n\n## A third\n\nMore."),
             None
         );
-        assert_eq!(rewritten_section(DOC, "", "Anything."), None);
+        assert_eq!(landing_section(DOC, "", "Anything."), None);
+    }
+
+    /// A sentence appended to a section is being folded into it already, so naming
+    /// that section as the one to fold into is an objection with nothing to do.
+    #[test]
+    fn a_sentence_appended_to_a_section_lands_in_it() {
+        let replaced = "Body of the second.";
+        assert_eq!(
+            landing_section(DOC, replaced, "Body of the second. And one sentence more."),
+            Some("## A second decision")
+        );
     }
 }
