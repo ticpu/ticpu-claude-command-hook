@@ -58,8 +58,10 @@ survive the same review that catches the prose faults beside them.
 
 Its rule list is closed and deliberately shorter than the authoring rules: given every rule, the
 same model on the same edits rule-shops until something matches, and denies nearly everything. A
-rule joins that list only after it earns its place against labelled sections, and a finding is
-taken only where the quoted passage can carry it. Qualifying the rule's own text does not hold
+rule joins that list only after it earns its place against labelled sections, and only if it
+holds up asked on its own: the list is read as a set, so a rule matching almost any passage stays
+quiet while a better match exists, and one that needs its neighbours to outbid it is deciding
+nothing. A finding is taken only where the quoted passage can carry it. Qualifying the rule's own text does not hold
 the model to it — under pressure to answer it reaches for whichever rule is nearest — so where a
 rule has a precondition a program can see, the finding is checked against its quote and dropped
 when it fails: a quote absent from the added text, or one making no reference to the past at all
