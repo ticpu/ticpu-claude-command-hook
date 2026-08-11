@@ -68,6 +68,22 @@ impl HookOutput {
         }
     }
 
+    /// PostToolUse advisory: `context` is injected into the model's context after
+    /// the tool ran. The only channel that reaches the writer without refusing it —
+    /// a permission prompt's reason is written for whoever answers the prompt.
+    pub fn advise(event: &str, context: &str) -> Self {
+        HookOutput {
+            system_message: None,
+            hook_specific_output: Some(HookSpecificOutput {
+                hook_event_name: event.to_string(),
+                permission_decision: None,
+                permission_decision_reason: None,
+                additional_context: Some(context.to_string()),
+                updated_input: None,
+            }),
+        }
+    }
+
     /// PreToolUse rewrite: the tool runs `updated_input` instead of what the
     /// model sent. Claude Code only honours it alongside an "allow" decision,
     /// so a rewritten command also skips the permission prompt.

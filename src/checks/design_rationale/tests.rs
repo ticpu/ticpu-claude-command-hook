@@ -1,6 +1,18 @@
+use serde_json::json;
+
 use super::judge::{headline, parse_for_test};
 use super::mechanical::check;
-use super::{FLOOR, framing, introduced, is_rationale, new_text};
+use super::{FLOOR, framing, introduced, is_rationale, new_text, post_tool_use};
+use crate::input::HookInput;
+
+fn edit(file_path: &str) -> HookInput {
+    HookInput {
+        hook_event_name: "PostToolUse".to_string(),
+        tool_name: "Edit".to_string(),
+        tool_input: json!({ "file_path": file_path }),
+        ..HookInput::default()
+    }
+}
 
 /// Every finding is checked against the text it quotes, so a probe reply needs one
 /// the text really contains.
@@ -291,6 +303,22 @@ rewriting or deleting, for the same reason.";
     let with_a_change = "A section named as already owning the decision may never be one\nthe \
 edit is rewriting or deleting, for the same reason.";
     assert!(!introduced(wrapped, with_a_change).is_empty());
+}
+
+/// The gate reviewed it, and the writer has to be told so or it stops and asks for a
+/// second review. It travels after the write: a permission prompt's reason is written
+/// for whoever answers the prompt, which the writer only reads when it refused them.
+#[test]
+fn the_write_says_it_was_already_reviewed() {
+    let advice = post_tool_use(&edit("docs/design-rationale.md")).expect("advice");
+    let context = advice
+        .hook_specific_output
+        .and_then(|h| h.additional_context)
+        .expect("carried as context, never as a decision");
+    assert!(context.contains("was the review"), "{context}");
+
+    // Every other Edit and Write goes through this same entry point.
+    assert!(post_tool_use(&edit("src/main.rs")).is_none());
 }
 
 /// A first section is judged with no document behind it, so the rules asking what a
