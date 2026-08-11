@@ -35,7 +35,6 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
         "PreToolUse" if input.tool_name == "Edit" || input.tool_name == "Write" => {
             design_rationale::pre_tool_use(input)
         }
-        "PostToolUse" => design_rationale::post_tool_use(input.file_path()),
         _ => None,
     }
 }

@@ -14,17 +14,11 @@ use std::io::ErrorKind;
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
-const SYSTEM: &str = "design-rationale.md edited — stopping for review.";
-
-const CONTEXT: &str = "Edited a design-rationale.md. STOP: wait for the user to review it. No \
-further edits, no commit, no proceeding to code until they approve. Do not restate or re-quote \
-the section — the tool result already shows it. Say in a line or two which decision it records \
-and what standing constraint it adds, then stop. Write only sourced rationale — never fabricate \
-a reason.";
-
 /// Below this the edit carries no prose to judge: a deletion, a link fix, a heading
 /// rename. Measured against real edits, which cluster well under it or well over.
 const FLOOR: usize = 200;
+
+const UNJUDGED: &str = "design-rationale.md — too small to judge, so nobody read it but you.";
 
 pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
     let path = input.file_path();
@@ -40,12 +34,25 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
         "Write" => (document.as_str(), input.content()),
         _ => (input.old_string(), input.new_string()),
     };
-    mechanical::check(added)
-        .or_else(|| (added.len() >= FLOOR).then(|| reviewed(&document, replaced, added))?)
+    // Every edit to the file stops for the user, judged or not: approving is the
+    // review, so an edit that slipped past on size would be one nobody saw.
+    mechanical::check(added).or_else(|| match added.len() >= FLOOR {
+        true => reviewed(&document, replaced, added),
+        false => Some(HookOutput::ask("PreToolUse", UNJUDGED)),
+    })
 }
 
-const DENY_HEAD: &str = "The design-rationale judge objects. Revise the section and re-issue \
-the edit — or say why the objection is wrong and I will pass it on.";
+/// The judged reviews ask rather than deny: a small model on a short rule list is
+/// wrong often enough that settling it here would lose correct passages to invented
+/// findings, and the reader who can tell the difference is the one being prompted.
+/// Approving is also the review — which is why nothing asks for one afterwards.
+const OBJECTION: &str = "The design-rationale judge objects — approve to keep the text as \
+written, reject to have it revised. It is a small local model on a short rule list, and its \
+usual mistake is reading domain behaviour this project depends on as textbook knowledge, so an \
+objection quoting something specific to this codebase is likely wrong.";
+
+const CLEAN: &str = "design-rationale.md — the judge raised nothing. Approve to write it, \
+reject to say what should change.";
 
 /// Two reviews of the same edit, run together: one asks what is wrong inside the new
 /// text, the other whether the document already says it. A model answers the second
@@ -82,24 +89,15 @@ fn reviewed(document: &str, replaced: &str, added: &str) -> Option<HookOutput> {
             failures.join("; ")
         )
     });
-    match objections.is_empty() {
-        false => {
-            let mut denial = HookOutput::deny(
-                "PreToolUse",
-                &format!("{DENY_HEAD}\n\n{}", objections.join("\n")),
-            );
-            denial.system_message = unreviewed;
-            Some(denial)
-        }
-        // Never a deny: an edit is not blocked because a reviewer could not be
-        // reached. Not a silent pass either — this line is the only sign that
-        // nothing was read.
-        true => unreviewed.map(|why| HookOutput::note(&why)),
-    }
-}
-
-pub fn post_tool_use(file_path: &str) -> Option<HookOutput> {
-    is_rationale(file_path).then(|| HookOutput::context(SYSTEM, CONTEXT))
+    let reason = match objections.is_empty() {
+        false => format!("{OBJECTION}\n\n{}", objections.join("\n")),
+        true => CLEAN.to_string(),
+    };
+    // A review that did not happen is said out loud rather than assumed to pass,
+    // and never blocks: the prompt stands whatever the reviewers managed.
+    let mut prompt = HookOutput::ask("PreToolUse", &reason);
+    prompt.system_message = unreviewed;
+    Some(prompt)
 }
 
 fn is_rationale(file_path: &str) -> bool {
