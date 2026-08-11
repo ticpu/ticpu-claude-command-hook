@@ -8,11 +8,16 @@ Only these rules. Do not invent others, and do not judge against rules not liste
 
 2. NO ALLUSION TO AN OCCASION. Nothing that requires having been there: "the incident", "the
    outage", "last round", or any definite reference to an event the file does not describe.
-   State the mechanism that makes the rule true, not the occasion that taught it.
+   State the mechanism that makes the rule true, not the occasion that taught it. A passage
+   naming no event is never a violation of this rule, however much it speaks of time.
 
-3. NO BEFORE/AFTER NARRATION. Describe the design as it now stands. No "used to be",
-   "previously", "an earlier version", "the parser changed this", no scene-setting first
-   sentence, no naming the alternative that was rejected as a narrative.
+3. NO NARRATION OF A PREVIOUS STATE. Judge only claims about how this project used to be:
+   "used to be", "previously", "an earlier version", "the parser changed this", or an opening
+   that sets a scene by describing earlier behaviour. State the design that binds now.
+   Nothing else falls under this rule. Describing how the design works — what runs before
+   what, what is settled at which stage, what is refused where — is mechanism, and mechanism
+   is never a violation of this rule however many ordering words it carries; neither is
+   naming an alternative the design does not take ("X rather than Y", "not Z").
 
 4. NO DERIVABLE CONSEQUENCE. Never state a cost, consequence or tradeoff that follows from
    the mechanism just described. Only the RESPONSE to a consequence earns a line.

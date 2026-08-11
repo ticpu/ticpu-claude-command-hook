@@ -278,6 +278,21 @@ on demand. The consequence is that frames larger than the buffer were split acro
     assert!(reason.contains("design-rationale-judge-bypass"), "{reason}");
 }
 
+/// Ordering inside a design reads as before/after narration to a model matching the
+/// rule on its wording, and the passages that say when a thing happens are exactly
+/// the ones worth keeping. Same invocation as above.
+#[test]
+#[ignore = "needs a local ollama with the judge model resident"]
+fn stated_ordering_is_not_narration() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    let added = "## Frame length is read before the body is buffered\n\nThe reader takes the \
+length prefix before it reserves anything for the body, and refuses a length above the cap \
+rather than growing to meet it: a body sized from the wire lets the peer name the allocation. \
+Reserving first would need the same check one stage later, with the memory already \
+committed.\n";
+    assert_eq!(edit_verdict(path, added), Ask);
+}
+
 fn edit_reason(file_path: &str, new_string: &str) -> String {
     let payload = serde_json::json!({
         "hook_event_name": "PreToolUse",
