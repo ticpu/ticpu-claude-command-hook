@@ -31,7 +31,11 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| grep_fold::check(input))
                 .or_else(|| git_bypass::allow_safe(input))
         }
-        "PostToolUse" => design_rationale::check(input.file_path()),
+        // MultiEdit is vestigial — Claude Code no longer emits it — so it is not matched.
+        "PreToolUse" if input.tool_name == "Edit" || input.tool_name == "Write" => {
+            design_rationale::pre_tool_use(input)
+        }
+        "PostToolUse" => design_rationale::post_tool_use(input.file_path()),
         _ => None,
     }
 }

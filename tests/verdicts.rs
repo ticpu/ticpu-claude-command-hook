@@ -211,6 +211,79 @@ fn verdicts_match() {
     }
 }
 
+/// Edits to a `design-rationale.md`, judged by the countable rules alone. Every row
+/// is decided before the model is consulted, so the table needs no ollama — the
+/// judge itself is covered by the ignored test beside it.
+const EDIT_CASES: &[(&str, Verdict<&str>)] = &[
+    (
+        "## Why we split the parser\n\nA body long enough to clear the floor, with several \
+      more words after it so nothing is skipped for being short.\n",
+        Deny,
+    ),
+    (
+        "## A rule worth stating\n\nCLAUDE.md already covers this, which is exactly why the \
+      section must not say so, and this body clears the floor.\n",
+        Deny,
+    ),
+    // Short enough that there is no prose to judge: a deletion or a link fix.
+    ("", Pass),
+    ("## A heading rename with no body\n", Pass),
+];
+
+#[test]
+fn edit_verdicts_match() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    for (added, expected) in EDIT_CASES {
+        assert_eq!(
+            edit_verdict(path, added),
+            expected.owned(),
+            "added: {added}"
+        );
+    }
+    // A file this check has no business in never reaches either rule.
+    assert_eq!(
+        edit_verdict("/x/README.md", "## Why not\n\nlong body here"),
+        Pass
+    );
+}
+
+/// The judge itself, which needs ollama up with the model resident:
+/// `cargo test -- --ignored`. Only the deny direction is asserted — the judge is a
+/// model, so an occasional objection to a clean section is expected behaviour, and
+/// asserting that direction would buy a flaky test instead of a signal.
+#[test]
+#[ignore = "needs a local ollama with the judge model resident"]
+fn the_judge_objects_to_prose_the_rules_forbid() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    let added = "## Buffer sizing in the frame reader\n\nTCP guarantees ordered delivery but \
+not message framing, so a reader has to cope with partial reads and re-assemble frames \
+itself. Previously the reader used a fixed 4096-byte buffer, and an earlier version grew it \
+on demand. The consequence is that frames larger than the buffer were split across reads.\n";
+    assert_eq!(edit_verdict(path, added), Deny);
+}
+
+fn edit_verdict(file_path: &str, new_string: &str) -> Verdict<String> {
+    let payload = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Edit",
+        "cwd": env!("CARGO_MANIFEST_DIR"),
+        "tool_input": { "file_path": file_path, "old_string": "", "new_string": new_string },
+    });
+    let stdout = feed(&payload);
+    if stdout
+        .trim()
+        .is_empty()
+    {
+        return Pass;
+    }
+    let json: Value = serde_json::from_str(&stdout).expect("hook JSON");
+    match json["hookSpecificOutput"]["permissionDecision"].as_str() {
+        Some("deny") => Deny,
+        Some("allow") => Allow,
+        _ => panic!("unexpected hook output: {stdout}"),
+    }
+}
+
 fn verdict(command: &str, cwd: &str) -> Verdict<String> {
     let stdout = run_hook(command, cwd);
     if stdout
@@ -233,17 +306,20 @@ fn verdict(command: &str, cwd: &str) -> Verdict<String> {
 }
 
 fn run_hook(command: &str, cwd: &str) -> String {
+    feed(&serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "cwd": cwd,
+        "tool_input": { "command": command },
+    }))
+}
+
+fn feed(payload: &Value) -> String {
     let mut child = Command::new(env!("CARGO_BIN_EXE_ticpu-claude-command-hook"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
         .expect("spawn hook");
-    let payload = serde_json::json!({
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "cwd": cwd,
-        "tool_input": { "command": command },
-    });
     child
         .stdin
         .take()

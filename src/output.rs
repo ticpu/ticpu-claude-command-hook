@@ -68,6 +68,16 @@ impl HookOutput {
         }
     }
 
+    /// A user-facing line that decides nothing, so the tool takes its normal
+    /// course. Used where a check could not reach a verdict: staying silent would
+    /// read as approval.
+    pub fn note(system: &str) -> Self {
+        HookOutput {
+            system_message: Some(system.to_string()),
+            hook_specific_output: None,
+        }
+    }
+
     /// PostToolUse advisory: a user-facing line plus context injected to the model.
     pub fn context(system: &str, context: &str) -> Self {
         HookOutput {
