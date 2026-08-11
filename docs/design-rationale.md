@@ -81,11 +81,16 @@ thing twice, and the model is small enough to read domain behaviour a project de
 textbook knowledge — so the second ask is the common case, not the rare one. A countable rule
 refuses outright, having nothing to weigh.
 
-Approving is the review, so nothing asks for one after the write, and an edit too small to judge
-is prompted too rather than landing unseen. What is measured is what the edit introduces, with
-the text it copies out of the document stripped from both ends: an edit that removes a paragraph
-has to re-emit the section around it, and judged whole it draws findings against prose already
-in the file, which no revision can answer. A section named as already owning the decision may
+Approving is the review, so nothing asks for one after the write — the decision says so, or the
+writer asks for a second one nobody owes — and an edit too small to judge is prompted too rather
+than landing unseen. A file that does not exist yet is judged with nothing around it, and the
+rules asking what a reader holding this repo would already know have nothing to check against;
+the objection then asks for the frame the file is missing rather than for a narrower passage.
+
+What is measured is what the edit introduces, with the text it copies out of the document
+stripped from both ends: an edit that removes a paragraph has to re-emit the section around it,
+and judged whole it draws findings against prose already in the file, which no revision can
+answer. A re-wrap introduces nothing at all. A section named as already owning the decision may
 not be one the edit is rewriting or deleting, for the same reason.
 
 ## A bug here must not stop the tools
