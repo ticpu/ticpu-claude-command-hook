@@ -75,3 +75,11 @@ having nothing to weigh.
 
 Approving is the review, so nothing asks for one after the write, and an edit too small to judge
 is prompted too rather than landing unseen.
+
+## A bug here must not stop the tools
+
+Every failure path exits 0 with no decision, so a check that panics, mis-parses or cannot reach
+what it needs leaves the tool call to its normal permission rules. This binary sits in front of
+every Bash, Edit and Write call in every session, so a refusal it emits by accident is not one
+bad answer — it is the whole toolset down until someone edits settings.json. A wrong allow costs
+one prompt that should have been shown.
