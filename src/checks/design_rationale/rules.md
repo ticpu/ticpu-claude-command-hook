@@ -11,13 +11,10 @@ Only these rules. Do not invent others, and do not judge against rules not liste
    State the mechanism that makes the rule true, not the occasion that taught it. A passage
    naming no event is never a violation of this rule, however much it speaks of time.
 
-3. NO NARRATION OF A PREVIOUS STATE. Judge only claims about how this project used to be:
-   "used to be", "previously", "an earlier version", "the parser changed this", or an opening
-   that sets a scene by describing earlier behaviour. State the design that binds now.
-   Nothing else falls under this rule. Describing how the design works — what runs before
-   what, what is settled at which stage, what is refused where — is mechanism, and mechanism
-   is never a violation of this rule however many ordering words it carries; neither is
-   naming an alternative the design does not take ("X rather than Y", "not Z").
+3. NO NARRATION OF A PREVIOUS STATE. A violation says this project was once different —
+   "used to be", "previously", "an earlier version", "no longer" — or opens by setting a
+   scene out of earlier behaviour. Ordering inside the design, and naming an alternative it
+   does not take, are the decision itself and not narration.
 
 4. NO DERIVABLE CONSEQUENCE. Never state a cost, consequence or tradeoff that follows from
    the mechanism just described. Only the RESPONSE to a consequence earns a line.
