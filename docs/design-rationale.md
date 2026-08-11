@@ -64,3 +64,14 @@ A judge that did not run must never look like one that passed. The context lengt
 every request rather than left to server configuration, where a short default truncates the
 prompt and the model answers confidently from the fragment that survived; an unreachable or
 unparseable reply allows the write and says on screen that no judgement was made.
+
+## The judge asks, it does not decide
+
+A judged objection reaches the reader as a permission prompt rather than a refusal. The model is
+small enough to read domain behaviour a project depends on as textbook knowledge, and a refusal
+leaves nobody able to overrule that: the passage gets cut because cutting it is cheaper than
+arguing with something that cannot be argued with. A countable rule still refuses outright,
+having nothing to weigh.
+
+Approving is the review, so nothing asks for one after the write, and an edit too small to judge
+is prompted too rather than landing unseen.
