@@ -64,8 +64,10 @@ quiet while a better match exists, and one that needs its neighbours to outbid i
 nothing. A finding is taken only where the quoted passage can carry it. Qualifying the rule's own text does not hold
 the model to it — under pressure to answer it reaches for whichever rule is nearest — so where a
 rule has a precondition a program can see, the finding is checked against its quote and dropped
-when it fails: a quote absent from the added text, or one making no reference to the past at all
-under the rule against narrating a previous state.
+when it fails: a line naming no rule, a quote absent from the added text, or one making no
+reference to the past at all under the rule against narrating a previous state. The first of
+those is what a model does when it reasons in the open — it answers with the verdict, then argues
+itself to the other one, and every line of the argument quotes the passage it is weighing.
 
 A judge that did not run must never look like one that passed. The context length is stated on
 every request rather than left to server configuration, where a short default truncates the
@@ -89,8 +91,10 @@ than landing unseen. A file that does not exist yet is judged with nothing aroun
 rules asking what a reader holding this repo would already know have nothing to check against;
 the objection then asks for the frame the file is missing rather than for a narrower passage.
 
-What is measured is what the edit introduces, with the text it copies out of the document
-stripped from both ends: an edit that removes a paragraph has to re-emit the section around it,
+What is measured is what the edit introduces, with the whole lines it copies out of the document
+stripped from both ends — never part of one, since an insert lands before a heading and shares
+its marker, and a heading handed over with the marker gone is judged as the flat assertion it
+then reads as. An edit that removes a paragraph has to re-emit the section around it,
 and judged whole it draws findings against prose already in the file, which no revision can
 answer. A re-wrap introduces nothing at all. A section named as already owning the decision may
 not be one the edit is rewriting or deleting, for the same reason.
