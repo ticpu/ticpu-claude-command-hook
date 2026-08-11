@@ -26,10 +26,35 @@ Do not rewrite the text. Do not comment on style you merely dislike.";
 /// `Ok(None)` is a pass. A reply that is not a verdict is a failed review, never a
 /// deny: the model is not asked a question it could answer by blocking.
 pub(super) fn review(document: &str, replaced: &str, added: &str) -> Result<Option<String>> {
-    Ok(findings(&super::ollama::ask(&prompt(
-        document, replaced, added,
-    ))?))
+    Ok(findings(
+        &super::ollama::ask(&prompt(document, replaced, added))?,
+        added,
+    ))
 }
+
+/// A passage narrating a previous state has to refer to one. Qualifying the rule's
+/// own text does not hold the model to it — pressed for an answer it reaches for
+/// whichever rule is nearest, and this is the nearest one for any passage that
+/// contrasts, orders or chooses — so the precondition is checked here instead.
+const PAST_REFERENCE: &[&str] = &[
+    "used to",
+    "previously",
+    "earlier",
+    "formerly",
+    "originally",
+    "initially",
+    "no longer",
+    "in the past",
+    "prior to",
+    "legacy",
+    "was ",
+    "were ",
+    "had ",
+    "been ",
+];
+
+/// The rule whose findings carry that precondition.
+const PREVIOUS_STATE: u32 = 3;
 
 fn prompt(document: &str, replaced: &str, added: &str) -> String {
     let replaced = if replaced
@@ -49,26 +74,57 @@ fn prompt(document: &str, replaced: &str, added: &str) -> String {
 /// The first line decides. Anything else is a model that did not answer the
 /// question asked, and a verdict with nothing to act on is worse than none: it
 /// would cost a rewrite with no idea what to change.
-fn findings(reply: &str) -> Option<String> {
+fn findings(reply: &str, added: &str) -> Option<String> {
     let body = reply.trim();
     let (first, rest) = body
         .split_once('\n')
         .unwrap_or((body, ""));
-    match first
+    if !first
         .trim()
         .trim_end_matches(['.', ':'])
-        .to_ascii_uppercase()
-        .as_str()
+        .eq_ignore_ascii_case("REVISE")
     {
-        "REVISE"
-            if !rest
-                .trim()
-                .is_empty() =>
-        {
-            Some(annotate(rest.trim()))
-        }
-        _ => None,
+        return None;
     }
+    let kept: Vec<&str> = rest
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .filter(|line| stands(line, added))
+        .collect();
+    (!kept.is_empty()).then(|| annotate(&kept.join("\n")))
+}
+
+/// Whether the quoted passage can carry the finding at all. The quote has to be in
+/// the text being judged — one that is not leaves nothing to rewrite — and a finding
+/// against the previous-state rule has to quote a passage that refers to the past.
+/// Both are refusals of an impossible finding, never a second opinion on a possible
+/// one: what survives is still the model's call.
+fn stands(line: &str, added: &str) -> bool {
+    let Some(quote) = quoted(line) else {
+        return false;
+    };
+    // Case-insensitive: a passage quoted out of the middle of a sentence comes back
+    // with its first letter however the model felt like spelling it.
+    let quote = super::collapsed(quote).to_ascii_lowercase();
+    if !super::collapsed(added)
+        .to_ascii_lowercase()
+        .contains(&quote)
+    {
+        return false;
+    }
+    cited_rule(line) != Some(PREVIOUS_STATE)
+        || PAST_REFERENCE
+            .iter()
+            .any(|marker| quote.contains(marker))
+}
+
+/// The passage a finding quotes, between the outermost quotation marks on its line.
+/// A finding that quotes nothing is one there is no way to check or to act on.
+fn quoted(line: &str) -> Option<&str> {
+    let open = line.find('"')? + 1;
+    let close = line.rfind('"')?;
+    (close > open).then(|| &line[open..close])
 }
 
 /// The rule as written, for a number the model cited. Asking the model to restate
@@ -122,6 +178,6 @@ fn annotate(findings: &str) -> String {
 }
 
 #[cfg(test)]
-pub(super) fn parse_for_test(reply: &str) -> Option<String> {
-    findings(reply)
+pub(super) fn parse_for_test(reply: &str, added: &str) -> Option<String> {
+    findings(reply, added)
 }

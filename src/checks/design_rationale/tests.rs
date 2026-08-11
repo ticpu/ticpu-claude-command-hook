@@ -1,9 +1,14 @@
 use super::judge::{headline, parse_for_test};
 use super::mechanical::check;
-use super::{FLOOR, is_rationale};
+use super::{FLOOR, is_rationale, new_text};
+
+/// Every finding is checked against the text it quotes, so a probe reply needs one
+/// the text really contains.
+const JUDGED: &str = "The cost of a single parser is one evasion instead of five, and an \
+earlier version keyed the map on the identifier alone. The rule 3 steps are enumerated.";
 
 fn objection(reply: &str) -> String {
-    parse_for_test(reply).expect("findings")
+    parse_for_test(reply, JUDGED).expect("findings")
 }
 
 fn denied(added: &str) -> bool {
@@ -110,14 +115,75 @@ fn a_cited_rule_is_named_beside_the_line_that_cited_it() {
     );
     assert!(reason.contains("NO DERIVABLE CONSEQUENCE"), "{reason}");
 
-    for line in ["- **Rule 5**: \"x\"", "rule #5 — \"x\""] {
+    for line in [
+        "- **Rule 5**: \"one evasion instead of five\"",
+        "rule #5 — \"one evasion\"",
+    ] {
         let reason = objection(&format!("REVISE\n{line}"));
         assert!(reason.contains("NO ENUMERATED VALUES"), "{line}: {reason}");
     }
 
     // The number belongs to the quoted text, not to a citation.
-    let reason = objection("REVISE\nThis says the rule 3 steps are enumerated.");
+    let reason = objection("REVISE\nThis says the \"rule 3 steps\" are enumerated.");
     assert!(!reason.contains("NO NARRATION"), "{reason}");
+}
+
+/// The judged rules are the model's call; these two are refusals of a finding the
+/// quoted passage cannot support at all.
+#[test]
+fn a_finding_its_quote_cannot_carry_is_dropped() {
+    let added = "The loop belongs to the binary because only there does a failed pass keep \
+its error chain and still leave the next pass scheduled.";
+
+    // Nothing in that sentence refers to a previous state, so rule 3 cannot be it —
+    // this is the shape the model reaches for whenever a passage orders or contrasts.
+    assert_eq!(
+        parse_for_test(
+            "REVISE\nRule 3: \"The loop belongs to the binary\" (compared to an alternative)",
+            added
+        ),
+        None
+    );
+    // Another rule against the same passage is untouched.
+    assert!(parse_for_test("REVISE\nRule 1: \"The loop belongs to the binary\"", added).is_some());
+    // A quote the text does not contain leaves nothing to rewrite.
+    assert_eq!(
+        parse_for_test(
+            "REVISE\nRule 1: \"a sentence from another document\"",
+            added
+        ),
+        None
+    );
+    // A finding quoting nothing cannot be checked or acted on.
+    assert_eq!(
+        parse_for_test("REVISE\nRule 1: the passage is generic", added),
+        None
+    );
+    // Every finding dropped is a pass, not an empty objection.
+    assert_eq!(
+        parse_for_test("REVISE\nRule 3: \"belongs to the binary\"", added),
+        None
+    );
+
+    // The rule still fires where the passage really does narrate one.
+    let narrated = "An earlier version keyed the map on the identifier alone.";
+    assert!(parse_for_test(&format!("REVISE\nRule 3: \"{narrated}\""), narrated).is_some());
+}
+
+/// An edit is judged on what it introduces: a removal re-emits the text around what
+/// it takes out, and that text is already in the file and already approved.
+#[test]
+fn a_removal_introduces_nothing_to_judge() {
+    let section = "## A decision\n\nA first sentence that stands. A second sentence that goes \
+away because it repeated the first at greater length and taught nobody anything.\n";
+    let shortened = "## A decision\n\nA first sentence that stands.\n";
+    assert_eq!(new_text(section, shortened), "");
+    assert!(
+        new_text(section, shortened)
+            .trim()
+            .len()
+            < FLOOR
+    );
 }
 
 /// The floor exists to keep deletions and one-line fixes off the judge; it must

@@ -24,7 +24,7 @@ with ##, then the existing sentence copied verbatim. Nothing else.";
 const MIN_EVIDENCE: usize = 40;
 
 pub(super) fn review(document: &str, replaced: &str, added: &str) -> Result<Option<String>> {
-    let new = new_text(replaced, added);
+    let new = super::new_text(replaced, added);
     if new
         .trim()
         .len()
@@ -34,7 +34,10 @@ pub(super) fn review(document: &str, replaced: &str, added: &str) -> Result<Opti
     }
     let reply = super::ollama::ask(&prompt(document, new))?;
     Ok(owner(document, &reply)
-        .filter(|(heading, _)| Some(*heading) != landing_section(document, replaced, added))
+        .filter(|(heading, _)| {
+            Some(*heading) != landing_section(document, replaced, added)
+                && !replaced.contains(*heading)
+        })
         .map(|(heading, evidence)| {
             format!(
                 "Already recorded under \"{heading}\" — fold it in there rather than adding a \
@@ -65,7 +68,7 @@ fn owner<'a>(document: &'a str, reply: &str) -> Option<(&'a str, String)> {
         .trim_matches(['"', '\''])
         .to_string();
     (evidence.len() >= MIN_EVIDENCE
-        && collapsed(section(document, heading)).contains(&collapsed(&evidence)))
+        && super::collapsed(section(document, heading)).contains(&super::collapsed(&evidence)))
     .then_some((heading, evidence))
 }
 
@@ -81,39 +84,8 @@ fn section<'a>(document: &'a str, heading: &str) -> &'a str {
     }
 }
 
-/// The document is hard-wrapped, so a sentence quoted back as one line is the same
-/// sentence as one broken across two.
-fn collapsed(text: &str) -> String {
-    text.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn prompt(document: &str, added: &str) -> String {
     format!("{PREAMBLE}\n\n=== DOCUMENT ===\n{document}\n\n=== NEW PASSAGE ===\n{added}\n")
-}
-
-/// What the edit actually introduces. An edit appending a section carries an anchor
-/// copied out of the document, and that anchor is a perfect duplicate of the section
-/// it came from — left in, it is the only thing the reviewer would ever report.
-fn new_text<'a>(replaced: &str, added: &'a str) -> &'a str {
-    let head = common_len(replaced.chars(), added.chars());
-    let rest = &added[head..];
-    let tail = common_len(
-        replaced[head..]
-            .chars()
-            .rev(),
-        rest.chars()
-            .rev(),
-    );
-    &rest[..rest.len() - tail]
-}
-
-fn common_len(a: impl Iterator<Item = char>, b: impl Iterator<Item = char>) -> usize {
-    a.zip(b)
-        .take_while(|(x, y)| x == y)
-        .map(|(x, _)| x.len_utf8())
-        .sum()
 }
 
 /// The section the edit lands in, which can never be the section it duplicates —
@@ -124,7 +96,7 @@ fn landing_section<'a>(document: &'a str, replaced: &str, added: &str) -> Option
     if replaced
         .trim()
         .is_empty()
-        || (added.contains(replaced) && new_text(replaced, added).contains("## "))
+        || (added.contains(replaced) && super::new_text(replaced, added).contains("## "))
     {
         return None;
     }
@@ -142,30 +114,6 @@ mod tests {
     const DOC: &str = "# Design rationale\n\n## A first decision\n\nBody of the first.\n\n\
 ## A second decision\n\nBody of the second. The second is decided where the first\ncannot \
 reach it.\n";
-
-    #[test]
-    fn an_appended_section_is_judged_without_its_anchor() {
-        let replaced = "Body of the second.";
-        let added = "Body of the second.\n\n## A third\n\nBody of the third.";
-        assert_eq!(
-            new_text(replaced, added),
-            "\n\n## A third\n\nBody of the third."
-        );
-    }
-
-    /// Common text at both ends is anchor, not content.
-    #[test]
-    fn text_shared_at_both_ends_is_stripped() {
-        assert_eq!(new_text("head tail", "head MIDDLE tail"), "MIDDLE ");
-        assert_eq!(new_text("", "all of it"), "all of it");
-        assert_eq!(new_text("same", "same"), "");
-    }
-
-    /// An em dash must not be split; the document is full of them.
-    #[test]
-    fn multibyte_text_is_split_on_a_character_boundary() {
-        assert_eq!(new_text("a — b", "a — c"), "c");
-    }
 
     /// Both halves have to check out: a heading the document has, and a sentence
     /// that section really contains. Either one alone is a claim, not evidence.

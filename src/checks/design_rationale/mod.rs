@@ -35,15 +35,54 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
         "Write" => (document.as_str(), input.content()),
         _ => (input.old_string(), input.new_string()),
     };
-    // Every edit to the file stops for the user, judged or not: approving is the
-    // review, so an edit that slipped past on size would be one nobody saw. The
-    // countable rules are not covered by the bypass — a heading form is not a
-    // finding anyone needs to overrule.
-    mechanical::check(added).or_else(|| match added.len() >= FLOOR {
-        false => Some(HookOutput::ask("PreToolUse", UNJUDGED)),
-        true if bypass::spend() => Some(HookOutput::ask("PreToolUse", BYPASSED)),
-        true => reviewed(&document, replaced, added),
+    // The judge sees what the edit introduces, never the text it copies back out of
+    // the document to place it: a removal re-emits the section around what it takes
+    // out, and prose already in the file draws findings no revision can answer. The
+    // countable rules still measure the whole replacement, since a section left over
+    // the length bound is over it however much this edit trimmed.
+    let introduced = new_text(replaced, added);
+    mechanical::check(added).or_else(|| {
+        match introduced
+            .trim()
+            .len()
+            >= FLOOR
+        {
+            false => Some(HookOutput::ask("PreToolUse", UNJUDGED)),
+            true if bypass::spend() => Some(HookOutput::ask("PreToolUse", BYPASSED)),
+            true => reviewed(&document, replaced, added, introduced),
+        }
     })
+}
+
+/// What the edit introduces, with the text shared at both ends stripped. An edit
+/// appending a section carries an anchor copied out of the document, and one editing
+/// a section in place carries whatever it leaves standing around the change.
+pub(super) fn new_text<'a>(replaced: &str, added: &'a str) -> &'a str {
+    let head = common_len(replaced.chars(), added.chars());
+    let rest = &added[head..];
+    let tail = common_len(
+        replaced[head..]
+            .chars()
+            .rev(),
+        rest.chars()
+            .rev(),
+    );
+    &rest[..rest.len() - tail]
+}
+
+fn common_len(a: impl Iterator<Item = char>, b: impl Iterator<Item = char>) -> usize {
+    a.zip(b)
+        .take_while(|(x, y)| x == y)
+        .map(|(x, _)| x.len_utf8())
+        .sum()
+}
+
+/// The document is hard-wrapped, so a sentence quoted back as one line is the same
+/// sentence as one broken across two.
+pub(super) fn collapsed(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// A judged objection stops the edit rather than riding along on a permission
@@ -54,10 +93,11 @@ const OBJECTION: &str = "The design-rationale judge objects. It is a small local
 short rule list, and its usual mistake is reading domain behaviour this project depends on as \
 textbook knowledge, so an objection quoting something specific to this codebase is likely wrong.
 
-Revise and re-issue if the objection is right. If it is wrong, say so to the user with the \
-finding and why the passage stands, rather than watering the passage down until it passes. If \
-they agree it is wrong, run the command below yourself and then re-issue the edit unchanged — \
-approving its prompt is how they overrule the judge, so do not paste it for them to run:";
+Revise and re-issue if the objection is right. If it is wrong, do not water the passage down \
+until it passes, and do not ask the user whether to overrule: say what the finding is and why \
+the passage stands, then run the command below yourself and re-issue the edit unchanged. Its \
+permission prompt is where they decide, so putting the same question to them first only spends \
+a round trip — and never paste the command for them to run:";
 
 const CLEAN: &str = "design-rationale.md — the judge raised nothing. Approve to write it, \
 reject to say what should change.";
@@ -72,9 +112,9 @@ waiver is now spent.";
 ///
 /// Neither can block on the other's failure, and an objection stands whatever the
 /// other review did: a review that did not happen is reported, never assumed to pass.
-fn reviewed(document: &str, replaced: &str, added: &str) -> Option<HookOutput> {
+fn reviewed(document: &str, replaced: &str, added: &str, introduced: &str) -> Option<HookOutput> {
     let (rules, duplication) = std::thread::scope(|scope| {
-        let rules = scope.spawn(|| judge::review(document, replaced, added));
+        let rules = scope.spawn(|| judge::review(document, replaced, introduced));
         let duplication = overlap::review(document, replaced, added);
         (rules.join(), duplication)
     });
