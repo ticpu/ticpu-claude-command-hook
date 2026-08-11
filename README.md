@@ -40,6 +40,24 @@ fail-open) so a bug in the hook never blocks your tools.
 - **search stderr guard** — denies `2>/dev/null` on a search: it hides wrong paths and
   unreadable dirs, and `-s`/`--no-messages` suppresses just the file noise instead.
 
+## The design-rationale judge
+
+The design-rationale gate asks a local [ollama](https://ollama.com) to review the prose being
+written. It needs a model pulled and the service tuned:
+
+```
+ollama pull gemma4:12b
+sudo cp docs/ollama-tuning.conf /etc/systemd/system/ollama.service.d/
+sudo systemd-analyze verify ollama.service    # must print nothing
+sudo systemctl daemon-reload && sudo systemctl restart ollama
+```
+
+Only `OLLAMA_CONTEXT_LENGTH` in that drop-in is required — ollama's default is short enough to
+truncate a prompt carrying a whole file, and a truncated prompt does not fail, it answers from
+whatever survived. The rest of the file is VRAM sizing for one card; recompute it for yours.
+Everything is overridable by environment variable, and if ollama is unreachable the edit is
+allowed with a message saying no judgement was made.
+
 ## gf
 
 The second binary in this crate. It reads grep-style output and prints a file path once
