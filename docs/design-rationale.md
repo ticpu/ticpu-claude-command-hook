@@ -58,23 +58,35 @@ survive the same review that catches the prose faults beside them.
 
 Its rule list is closed and deliberately shorter than the authoring rules: given every rule, the
 same model on the same edits rule-shops until something matches, and denies nearly everything. A
-rule joins that list only after it earns its place against labelled sections.
+rule joins that list only after it earns its place against labelled sections, and a finding is
+taken only where the quoted passage can carry it. Qualifying the rule's own text does not hold
+the model to it — under pressure to answer it reaches for whichever rule is nearest — so where a
+rule has a precondition a program can see, the finding is checked against its quote and dropped
+when it fails: a quote absent from the added text, or one making no reference to the past at all
+under the rule against narrating a previous state.
 
 A judge that did not run must never look like one that passed. The context length is stated on
 every request rather than left to server configuration, where a short default truncates the
 prompt and the model answers confidently from the fragment that survived; an unreachable or
 unparseable reply allows the write and says on screen that no judgement was made.
 
-## The judge asks, it does not decide
+## A judged objection is overruled in one prompt
 
-A judged objection reaches the reader as a permission prompt rather than a refusal. The model is
-small enough to read domain behaviour a project depends on as textbook knowledge, and a refusal
-leaves nobody able to overrule that: the passage gets cut because cutting it is cheaper than
-arguing with something that cannot be argued with. A countable rule still refuses outright,
-having nothing to weigh.
+An objection stops the edit, since an Edit's permission prompt renders the diff and nothing
+else — carried there, it is read by nobody before deciding. Stopping puts the finding in front
+of the model instead, which can revise or argue it. The overrule is the bypass marker's own
+prompt: the model states the finding and creates the marker, and approving that creation is the
+decision. Putting the question to the reader first and creating it afterwards asks the same
+thing twice, and the model is small enough to read domain behaviour a project depends on as
+textbook knowledge — so the second ask is the common case, not the rare one. A countable rule
+refuses outright, having nothing to weigh.
 
 Approving is the review, so nothing asks for one after the write, and an edit too small to judge
-is prompted too rather than landing unseen.
+is prompted too rather than landing unseen. What is measured is what the edit introduces, with
+the text it copies out of the document stripped from both ends: an edit that removes a paragraph
+has to re-emit the section around it, and judged whole it draws findings against prose already
+in the file, which no revision can answer. A section named as already owning the decision may
+not be one the edit is rewriting or deleting, for the same reason.
 
 ## A bug here must not stop the tools
 
