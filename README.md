@@ -24,8 +24,13 @@ fail-open) so a bug in the hook never blocks your tools.
   (`cat dump.sql | mysql`). They must be the whole call, optionally piped into a viewer
   (`| jq`); a bare `echo` alongside is allowed, and chaining inside the quoted remote command
   or SQL body is the far end's business and passes through.
-- **design-rationale review gate** — when an edit touches a `design-rationale.md`, injects a
-  reminder to stop and present the diff for review.
+- **design-rationale gate** — an edit to a `design-rationale.md` is reviewed before it lands.
+  The countable rules are decided in code (a `## Why …` heading, a section past the length
+  bound, a CLAUDE.md reference) and deny with the offending text quoted. The prose rules go to
+  a local model, which denies with the rule number and the passage it objects to. Deletions and
+  one-line fixes are too small to carry prose and never reach the model; an unreachable model
+  allows the edit and says no judgement was made. Afterwards, a reminder to stop for review —
+  without asking for the section back, since the tool result already showed it.
 - **grep fold** — rewrites `grep`/`rg`/`git grep` commands to pipe through `gf`, so repeated
   file paths collapse instead of eating the model's context. Chains are handled per segment
   (`cd /x && grep …` folds the grep and leaves the `cd`), and a segment that cannot be

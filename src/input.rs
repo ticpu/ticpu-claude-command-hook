@@ -26,6 +26,20 @@ impl HookInput {
         self.tool_input_str("file_path")
     }
 
+    /// `Edit` replaces `old_string` with `new_string`; `Write` sends the whole
+    /// file as `content` and neither of the others.
+    pub fn old_string(&self) -> &str {
+        self.tool_input_str("old_string")
+    }
+
+    pub fn new_string(&self) -> &str {
+        self.tool_input_str("new_string")
+    }
+
+    pub fn content(&self) -> &str {
+        self.tool_input_str("content")
+    }
+
     fn tool_input_str(&self, key: &str) -> &str {
         self.tool_input
             .get(key)

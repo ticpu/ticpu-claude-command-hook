@@ -92,8 +92,21 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   (`| jq`) is fine, and chaining inside the quoted remote command or SQL body is the far
   end's. A heredoc is judged on the text before the marker — the body is data, so the usual
   `psql <<EOF` shape passes, at the cost of not seeing a chain past the terminator.
-- `design_rationale` — on any edit to a `design-rationale.md`, injects the stop-for-review
-  reminder.
+- `design_rationale` — an `Edit`/`Write` to a `design-rationale.md` is reviewed before it lands,
+  and the split is the point: `mechanical.rs` decides what can be counted (heading form, section
+  length, a CLAUDE.md reference), `judge.rs` asks a local model over ollama for the rest. The
+  model reads prose well and counts badly — it passes a forbidden heading form and a section at
+  twice the length bound while catching textbook knowledge beside them — so a countable rule
+  never moves into the prompt. `rules.md` is the judge's closed list, deliberately shorter than
+  CLAUDE.md's authoring rules: given every rule the same model rule-shops until something matches
+  and denies nearly everything, so a rule is added only against a labelled set. The whole document
+  plus the edit goes in the prompt with `num_ctx` stated explicitly — ollama's default truncates
+  it and the model then answers from the surviving fragment with no error. Text under the floor
+  (a deletion, a link fix, a heading rename) never reaches the model. Any failure — unreachable,
+  no verdict, a REVISE naming nothing — allows the edit and says so in a `systemMessage`, since a
+  deny nobody can act on costs a rewrite in the dark. `MultiEdit` is not matched: Claude Code no
+  longer emits it. On PostToolUse, the stop-for-review reminder, which forbids restating the
+  section — the tool result already rendered it.
 - `grep_fold` — rewrites searches to pipe through the sibling `gf`, per chain segment, so a
   chained or `cd`-prefixed grep still folds. `gf` lands after the *last* search stage, since a
   later `grep`/`rg` filters lines and its pattern can match the prefix gf strips; everything
