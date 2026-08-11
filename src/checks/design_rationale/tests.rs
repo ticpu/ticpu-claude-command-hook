@@ -5,7 +5,8 @@ use super::{FLOOR, framing, introduced, is_rationale, new_text};
 /// Every finding is checked against the text it quotes, so a probe reply needs one
 /// the text really contains.
 const JUDGED: &str = "The cost of a single parser is one evasion instead of five, and an \
-earlier version keyed the map on the identifier alone. The rule 3 steps are enumerated.";
+earlier version keyed the map on the identifier alone. The rule 3 steps are enumerated, and \
+the retry cap is 5.";
 
 fn objection(reply: &str) -> String {
     parse_for_test(reply, JUDGED).expect("findings")
@@ -116,8 +117,8 @@ fn a_cited_rule_is_named_beside_the_line_that_cited_it() {
     assert!(reason.contains("NO SPEC RESTATEMENT"), "{reason}");
 
     for line in [
-        "- **Rule 4**: \"one evasion instead of five\"",
-        "rule #4 — \"one evasion\"",
+        "- **Rule 4**: \"the retry cap is 5\"",
+        "rule #4 — \"retry cap is 5\"",
     ] {
         let reason = objection(&format!("REVISE\n{line}"));
         assert!(reason.contains("NO ENUMERATED VALUES"), "{line}: {reason}");
@@ -148,7 +149,7 @@ I will pass because I cannot find a clear violation of the rules provided.";
     assert_eq!(parse_for_test(deliberating, added), None);
 
     // A line that does cite one is still a finding.
-    assert!(parse_for_test("REVISE\nRule 4: \"one deprecated-key list\"", added).is_some());
+    assert!(parse_for_test("REVISE\nRule 1: \"one deprecated-key list\"", added).is_some());
 }
 
 /// The judged rules are the model's call; these two are refusals of a finding the
@@ -191,6 +192,37 @@ its error chain and still leave the next pass scheduled.";
     // The rule still fires where the passage really does narrate one.
     let narrated = "An earlier version keyed the map on the identifier alone.";
     assert!(parse_for_test(&format!("REVISE\nRule 3: \"{narrated}\""), narrated).is_some());
+}
+
+/// The enumeration rule shares its vocabulary with the prose that names categories
+/// instead of members — "key", "list", "check" — so a finding against it has to quote
+/// a value. Each of these passages was approved into a rationale after being flagged.
+#[test]
+fn an_enumeration_finding_has_to_quote_a_value() {
+    for quote in [
+        "one deprecated-key list",
+        "one unknown-key walk, one deprecated-key list and one permission check",
+        "one file tunes every instance on that box",
+        "The loop lives in the binary, which is the only place that can keep going",
+    ] {
+        assert_eq!(
+            parse_for_test(&format!("REVISE\nRule 4: \"{quote}\""), quote),
+            None,
+            "{quote}"
+        );
+    }
+
+    for quote in [
+        "The timeout is 900 seconds and the retry cap is 5",
+        "a row holds `bucket_id`, `dirty` and `last_error`",
+        // Backticks lost in the quoting, the spelling not.
+        "a row holds bucket_id, dirty and last_error",
+    ] {
+        assert!(
+            parse_for_test(&format!("REVISE\nRule 4: \"{quote}\""), quote).is_some(),
+            "{quote}"
+        );
+    }
 }
 
 /// An edit is judged on what it introduces: a removal re-emits the text around what

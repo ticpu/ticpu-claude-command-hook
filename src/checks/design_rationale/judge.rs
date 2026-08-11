@@ -53,8 +53,26 @@ const PAST_REFERENCE: &[&str] = &[
     "been ",
 ];
 
-/// The rule whose findings carry that precondition.
+/// A passage enumerating values has to name one. What the rule is for is a member
+/// that goes stale when it is renamed or another is added, so a passage naming only
+/// categories satisfies it — but it shares the rule's own vocabulary ("key", "list",
+/// "check"), and a lexical match on that is what the finding usually is.
+///
+/// Read off the quote, which the model returns verbatim; a value it paraphrased into
+/// prose is one the finding could not point at anyway. Underscores count beside code
+/// spans, since a field named in running text loses its backticks before it loses
+/// its own spelling.
+fn names_a_value(quote: &str) -> bool {
+    quote.contains('`')
+        || quote.contains('_')
+        || quote
+            .chars()
+            .any(|c| c.is_ascii_digit())
+}
+
+/// The rules whose findings carry a precondition.
 const PREVIOUS_STATE: u32 = 3;
+const ENUMERATED_VALUES: u32 = 4;
 
 fn prompt(document: &str, replaced: &str, added: &str) -> String {
     let replaced = if replaced
@@ -118,10 +136,13 @@ fn stands(line: &str, added: &str) -> bool {
     {
         return false;
     }
-    rule != PREVIOUS_STATE
-        || PAST_REFERENCE
+    match rule {
+        PREVIOUS_STATE => PAST_REFERENCE
             .iter()
-            .any(|marker| quote.contains(marker))
+            .any(|marker| quote.contains(marker)),
+        ENUMERATED_VALUES => names_a_value(&quote),
+        _ => true,
+    }
 }
 
 /// The passage a finding quotes, between the outermost quotation marks on its line.
