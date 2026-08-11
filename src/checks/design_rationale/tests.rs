@@ -1,6 +1,6 @@
 use super::judge::{headline, parse_for_test};
 use super::mechanical::check;
-use super::{FLOOR, is_rationale, new_text};
+use super::{FLOOR, framing, introduced, is_rationale, new_text};
 
 /// Every finding is checked against the text it quotes, so a probe reply needs one
 /// the text really contains.
@@ -183,6 +183,35 @@ away because it repeated the first at greater length and taught nobody anything.
             .trim()
             .len()
             < FLOOR
+    );
+}
+
+/// Re-wrapping a paragraph rewrites every line of it and says nothing new, so the
+/// rules must not be applied afresh to prose that has already been through them.
+#[test]
+fn a_reflow_introduces_nothing() {
+    let wrapped = "A section named as already owning the decision may not be one the edit is\n\
+rewriting or deleting, for the same reason.";
+    let reflowed = "A section named as already owning the decision may not be one\nthe edit is \
+rewriting or deleting, for the same reason.";
+    assert_eq!(introduced(wrapped, reflowed), "");
+
+    // A word added while re-wrapping is still an edit, and still judged.
+    let with_a_change = "A section named as already owning the decision may never be one\nthe \
+edit is rewriting or deleting, for the same reason.";
+    assert!(!introduced(wrapped, with_a_change).is_empty());
+}
+
+/// A first section is judged with no document behind it, so the rules asking what a
+/// reader of the repo would already know have nothing to read. Narrowing the passage
+/// is then the one repair that cannot work, and the objection has to say so.
+#[test]
+fn only_a_first_section_is_asked_for_its_frame() {
+    assert!(framing("").contains("does not exist yet"));
+    assert!(framing("\n\n").contains("does not exist yet"));
+    assert!(
+        framing("# Design rationale\n\n## A decision\n\nBody.\n").is_empty(),
+        "a document that exists reads against itself"
     );
 }
 

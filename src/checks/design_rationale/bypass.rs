@@ -89,11 +89,11 @@ pub(super) fn spend() -> bool {
 }
 
 /// The command to hand back, so the deny can name what to run rather than
-/// describe it.
+/// describe it. The directory is shared with every other marker this binary
+/// keeps and is made once per box, so creating it here would be noise on every
+/// objection but the first — and a `touch` that fails for want of it says so.
 pub(super) fn command() -> String {
-    format!(
-        "mkdir -p \"$XDG_RUNTIME_DIR/claude-hooks\" && touch \"$XDG_RUNTIME_DIR/claude-hooks/{MARKER}\""
-    )
+    format!("touch \"$XDG_RUNTIME_DIR/claude-hooks/{MARKER}\"")
 }
 
 #[cfg(test)]
