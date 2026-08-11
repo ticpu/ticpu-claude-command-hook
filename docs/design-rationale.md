@@ -86,11 +86,15 @@ thing twice, and the model is small enough to read domain behaviour a project de
 textbook knowledge — so the second ask is the common case, not the rare one. A countable rule
 refuses outright, having nothing to weigh.
 
-Approving is the review, so nothing asks for one after the write — the decision says so, or the
-writer asks for a second one nobody owes — and an edit too small to judge is prompted too rather
-than landing unseen. A file that does not exist yet is judged with nothing around it, and the
-rules asking what a reader holding this repo would already know have nothing to check against;
-the objection then asks for the frame the file is missing rather than for a narrower passage.
+Approving is the review, and the write says so afterwards, because otherwise the writer stops
+and asks for a second one nobody owes. It is said after rather than on the prompt: a prompt's
+reason is addressed to whoever answers the prompt, so a refusal reaches the writer only because
+refusing is itself the answer, and the same words beside a question the reader is answering
+reach nobody. An edit too small to judge is prompted too, rather than landing unseen.
+
+A file that does not exist yet is judged with nothing around it, and the rules asking what a
+reader holding this repo would already know have nothing to check against; the objection then
+asks for the frame the file is missing rather than for a narrower passage.
 
 What is measured is what the edit introduces, with the whole lines it copies out of the document
 stripped from both ends — never part of one, since an insert lands before a heading and shares
