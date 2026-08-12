@@ -85,17 +85,51 @@ fn length_counts_what_was_written_not_how_it_was_spaced() {
 
     let long = format!(
         "## A long section\n\n{}",
-        "A sentence of prose.\n".repeat(30)
+        "A sentence of prose. ".repeat(90)
     );
     assert!(denied(&long));
     assert!(reason(&long).contains("## A long section"));
+}
+
+/// The wrap width is the author's: a file reflowed narrower says the same thing,
+/// and a bound that moved with it would deny sections it had passed.
+#[test]
+fn a_reflow_does_not_change_the_verdict() {
+    for width in [40, 72, 100, 400] {
+        let wrapped = |text: &str| {
+            text.split_whitespace()
+                .fold(String::new(), |mut out, word| {
+                    let last = out
+                        .rsplit('\n')
+                        .next()
+                        .unwrap_or("")
+                        .len();
+                    if last + word.len() > width {
+                        out.push('\n');
+                    } else if !out.is_empty() {
+                        out.push(' ');
+                    }
+                    out.push_str(word);
+                    out
+                })
+        };
+
+        let short = format!("## A section\n\n{}", wrapped(&"Short prose. ".repeat(20)));
+        assert!(!denied(&short), "width {width} denied a short section");
+
+        let long = format!(
+            "## A section\n\n{}",
+            wrapped(&"A sentence of prose. ".repeat(90))
+        );
+        assert!(denied(&long), "width {width} passed a long section");
+    }
 }
 
 /// A body appended under a heading that already exists arrives with no heading of
 /// its own, and still has to be measured.
 #[test]
 fn a_headless_body_is_measured_too() {
-    let long = "A sentence of prose.\n".repeat(30);
+    let long = "A sentence of prose.\n".repeat(90);
     assert!(denied(&long));
 
     let short = "A sentence of prose.\n".repeat(3);
