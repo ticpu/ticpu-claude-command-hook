@@ -51,7 +51,29 @@ pub(super) fn decide(dir: &Path, introduced: &str) -> Option<HookOutput> {
             marker.display()
         );
     }
-    Some(HookOutput::deny("PreToolUse", ASK))
+    let mut refused = HookOutput::deny("PreToolUse", ASK);
+    // The deny is addressed to the writer, and a refused edit renders no diff, so this
+    // is the only place the draft is visible to the person the audit is done for.
+    refused.system_message = Some(format!(
+        "design-rationale.md — this draft goes back to its author to audit:\n\n{}",
+        excerpt(introduced)
+    ));
+    Some(refused)
+}
+
+/// Long enough for a padded section to be read as one, and bounded so an edit adding
+/// several does not take the terminal with it.
+const EXCERPT: usize = 1600;
+
+fn excerpt(introduced: &str) -> String {
+    let draft = introduced.trim();
+    match draft
+        .char_indices()
+        .nth(EXCERPT)
+    {
+        None => draft.to_string(),
+        Some((cut, _)) => format!("{}…", &draft[..cut]),
+    }
 }
 
 const ASK: &str = "design-rationale.md — audit this passage before it lands. Take it through the \
@@ -86,6 +108,30 @@ mod tests {
         // A different draft is its own question, however small the change.
         let revised = "## A decision\n\nThe reader takes the length prefix first.\n";
         assert!(decide(&dir, revised).is_some());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A refused edit renders no diff, so the draft has to reach the screen some other
+    /// way or the audit happens where its author cannot see it.
+    #[test]
+    fn the_refusal_shows_the_draft() {
+        let dir = scratch("audit-shows");
+        let draft = "## A decision\n\nThe sentence the author has to be able to read back.\n";
+
+        let shown = decide(&dir, draft)
+            .expect("asked")
+            .system_message
+            .expect("the draft is shown");
+        assert!(shown.contains("The sentence the author has to be able to read back."));
+
+        // Bounded, and never cut inside a character.
+        let long = "é".repeat(EXCERPT * 2);
+        let shown = decide(&dir, &long)
+            .expect("asked")
+            .system_message
+            .expect("the draft is shown");
+        assert!(shown.ends_with('…'), "{shown}");
 
         let _ = fs::remove_dir_all(&dir);
     }
