@@ -207,4 +207,10 @@ caught mangling exactly that shape, which no hand-written probe had. Verdicts va
 runs — the two judge calls race and ollama batches them — so read one replay as a lead and not
 as proof.
 
+`./probe-judge.sh <design-rationale.md> <passage.md>...` judges each passage as the added text
+of an Edit to that document, `RUNS=` times. Tuning the prompt or the rules is measured with it
+over a labelled corpus, never on one passage: every wording that caught a miss here also
+started denying passages that had been approved into a real file, and only a set that holds
+both kinds shows the trade. The corpus itself is uncommitted, under `probes/`.
+
 License GPL-3.0-only. Commits run `gitleaks git --staged` via `core.hooksPath=githooks`.
