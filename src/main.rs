@@ -2,11 +2,33 @@ use std::io::Read;
 
 mod checks;
 mod input;
+mod install;
 mod output;
 
 use input::HookInput;
 
 fn main() {
+    match std::env::args()
+        .nth(1)
+        .as_deref()
+    {
+        None => hook(),
+        Some("install") => {
+            if let Err(e) = install::run() {
+                eprintln!("install: {e:#}");
+                std::process::exit(1);
+            }
+        }
+        Some(other) => {
+            eprintln!(
+                "hook: unknown argument {other:?}; the hook JSON is read from stdin, and `install` is the only verb"
+            );
+            std::process::exit(2);
+        }
+    }
+}
+
+fn hook() {
     let mut buf = String::new();
     if let Err(e) = std::io::stdin().read_to_string(&mut buf) {
         eprintln!("hook: failed reading stdin: {e}");
