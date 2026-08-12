@@ -75,6 +75,12 @@ every request rather than left to server configuration, where a short default tr
 prompt and the model answers confidently from the fragment that survived; an unreachable or
 unparseable reply allows the write and says on screen that no judgement was made.
 
+## The writer audits its own draft before any reviewer reads it
+
+Every judged passage is refused once, unread, carrying the authoring rules and no finding: the
+writer applies them to its own text only when asked to. The refusal is keyed on that text, never
+on the session — a session that read the rules earlier is not one still applying them.
+
 ## A judged objection is overruled in one prompt
 
 An objection stops the edit, since an Edit's permission prompt renders the diff and nothing
