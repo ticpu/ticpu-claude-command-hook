@@ -76,12 +76,19 @@ fn excerpt(introduced: &str) -> String {
     }
 }
 
-const ASK: &str = "design-rationale.md — audit this passage before it lands. Take it through the \
-design-rationale clauses in CLAUDE.md one at a time, and answer for each sentence: would a \
-competent engineer holding this repo already know it, and what later change could violate it? A \
-correction the code already carries is not such a change — if nothing downstream has to keep \
-honouring it, its commit settled it and the sentence goes. Cut what fails either. A section that \
-survives is usually a third of what was drafted.
+const ASK: &str = "design-rationale.md — audit this passage before it lands, against the \
+design-rationale clauses in CLAUDE.md.
+
+Whole first: where is the person who needs this standing when they need it? Someone about to \
+write one of these opens an existing one and reads it, and never reaches this file on the way. \
+If what the passage says is stated at that site, or would be read there anyway, it is \
+restatement and the section goes entire — trimming cannot save a section that belongs somewhere \
+else.
+
+Then sentence by sentence: would a competent engineer holding this repo already know it, and \
+what later change could violate it? A correction the code already carries is not such a change — \
+if nothing downstream has to keep honouring it, its commit settled it and the sentence goes. Cut \
+what fails either. A section that survives is usually a third of what was drafted.
 
 Then re-issue the edit — unchanged if the audit changed nothing, and say what you cut if it did. \
 This is asked once per draft, so the re-issue goes through to the reviewers behind it. It is not \
