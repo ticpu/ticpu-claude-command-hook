@@ -1,6 +1,7 @@
 //! `design-rationale.md` gates. Countable rules are decided here; the rest go to a
 //! local model, which catches what it can quote and not what it has to count.
 
+mod audit;
 pub mod bypass;
 mod context;
 mod judge;
@@ -50,7 +51,13 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
         {
             false => Some(HookOutput::ask("PreToolUse", UNJUDGED)),
             true if bypass::spend() => Some(HookOutput::ask("PreToolUse", BYPASSED)),
-            true => reviewed(&document, replaced, added, introduced),
+            // Ahead of the reviewers, and unconditional: their findings are what a
+            // quoted sentence can carry, and the clauses that cut most of a padded
+            // section — what a future change would act on, what the reader already
+            // knows — are not among them. The writer applies those or nobody does.
+            true => {
+                audit::gate(introduced).or_else(|| reviewed(&document, replaced, added, introduced))
+            }
         }
     })
 }

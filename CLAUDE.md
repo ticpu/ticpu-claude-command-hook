@@ -92,7 +92,14 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   (`| jq`) is fine, and chaining inside the quoted remote command or SQL body is the far
   end's. A heredoc is judged on the text before the marker — the body is data, so the usual
   `psql <<EOF` shape passes, at the cost of not seeing a chain past the terminator.
-- `design_rationale` — an `Edit`/`Write` to a `design-rationale.md` is reviewed before it lands,
+- `design_rationale` — an `Edit`/`Write` to a `design-rationale.md` is refused once before any
+  reviewer reads it, carrying the authoring rules and no finding: the writer holds the draft and
+  the rules already and applies them only when asked, which is the half of this check that works
+  on the passages the model cannot quote a fault in — nine lines on how a timer re-arms, cut to
+  three by its own author, twice, where four judged drafts of the same section had produced one
+  deny and three passes on wording alone. Keyed on a hash of the text, so a re-issue goes through
+  and a redraft is asked once too; that ends when an audit stops changing anything, at one round
+  trip per draft and no model call. Behind it, the judged reviews: an edit is reviewed before it lands,
   and the split is the point: `mechanical.rs` decides what can be counted (heading form, section
   length, a CLAUDE.md reference), `judge.rs` asks a local model over ollama for the rest. The
   model reads prose well and counts badly — it passes a forbidden heading form and a section at
