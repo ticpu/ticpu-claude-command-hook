@@ -13,21 +13,50 @@ and the text replacing it. Judge ONLY the replacement text.
 
 MOST EDITS ARE FINE. The author knows these rules and follows them. Your job is not to find
 something wrong — it is to catch the occasional edit that clearly breaks a listed rule. Answer
-PASS unless you can point at a specific passage a careful editor would certainly cut. If you
-are weighing whether something counts, it does not: answer PASS.
+PASS unless you can point at a specific passage a careful editor would certainly cut.
 
-Your first line must be exactly PASS or exactly REVISE. Nothing else on that line.
-If REVISE, follow it with ONE line per violation, at most two, each naming a rule NUMBER and
-quoting the offending passage verbatim. Never quote the same passage twice, and never add a
-second line to pad — one real violation beats one real and one invented.
+Your first line must be exactly PASS, exactly REVISE, or exactly CONTEXT. Nothing else on that
+line.
+
+REVISE: a rule is broken and you can quote the passage that breaks it. Follow with ONE line per
+violation, at most two, each naming a rule NUMBER and quoting the offending passage verbatim.
+Never quote the same passage twice, and never add a second line to pad — one real violation
+beats one real and one invented.
+
+CONTEXT: a rule turns on something you were not told and cannot read off the text — whether a
+component is this project's or a dependency's, whether a name is a config key here or a field
+of some other program, what a reader holding this repository would already have, or whether the
+passage would still inform a change someone could make later. Follow with ONE line, at most
+two, each naming exactly what you would need to know. Ask for the missing fact, never for the
+passage to be longer, and never as a way of hedging a violation you could quote — that is
+REVISE.
+
+PASS: it respects the rules, or you are weighing whether something counts.
 
 Do not rewrite the text. Do not comment on style you merely dislike.";
 
-/// `Ok(None)` is a pass. A reply that is not a verdict is a failed review, never a
-/// deny: the model is not asked a question it could answer by blocking.
-pub(super) fn review(document: &str, replaced: &str, added: &str) -> Result<Option<String>> {
-    Ok(findings(
-        &super::ollama::ask(&prompt(document, replaced, added))?,
+/// What the review came back with. `Questions` is the verdict a small model can give
+/// honestly where it would otherwise have to guess: the rules it holds are the ones
+/// answerable by quoting the passage, and the ones that decide hardest — is this
+/// component ours, would anyone face this decision again — turn on what the model was
+/// never told. Both non-passing verdicts stop the edit, since both have something the
+/// writer must act on and only a deny reaches them.
+pub(super) enum Verdict {
+    Pass,
+    Findings(String),
+    Questions(String),
+}
+
+/// A reply that is not a verdict is a failed review, never a deny: the model is not
+/// asked a question it could answer by blocking.
+pub(super) fn review(
+    document: &str,
+    replaced: &str,
+    added: &str,
+    context: &str,
+) -> Result<Verdict> {
+    Ok(read(
+        &super::ollama::ask(&prompt(document, replaced, added, context))?,
         added,
     ))
 }
@@ -74,7 +103,7 @@ fn names_a_value(quote: &str) -> bool {
 const PREVIOUS_STATE: u32 = 3;
 const ENUMERATED_VALUES: u32 = 4;
 
-fn prompt(document: &str, replaced: &str, added: &str) -> String {
+fn prompt(document: &str, replaced: &str, added: &str, context: &str) -> String {
     let replaced = if replaced
         .trim()
         .is_empty()
@@ -83,34 +112,80 @@ fn prompt(document: &str, replaced: &str, added: &str) -> String {
     } else {
         replaced
     };
+    // Answers to a previous round's questions, from the author. Last, so the model
+    // reads them holding the passage they are about.
+    let context = match context.trim() {
+        "" => String::new(),
+        answers => format!("\n=== WHAT THE AUTHOR ANSWERED WHEN ASKED ===\n{answers}\n"),
+    };
     format!(
         "{PREAMBLE}\n\n=== RULES ===\n{RULES}\n\n=== DOCUMENT AS IT STANDS ===\n{document}\n\n\
-         === TEXT BEING REPLACED ===\n{replaced}\n\n=== REPLACEMENT TEXT ===\n{added}\n"
+         === TEXT BEING REPLACED ===\n{replaced}\n\n=== REPLACEMENT TEXT ===\n{added}\n{context}"
     )
 }
 
 /// The first line decides. Anything else is a model that did not answer the
 /// question asked, and a verdict with nothing to act on is worse than none: it
 /// would cost a rewrite with no idea what to change.
-fn findings(reply: &str, added: &str) -> Option<String> {
+///
+/// The word opens the line but need not be all of it: told to answer on one line
+/// and then to say what it needs, a model puts both there, and reading that as no
+/// verdict at all passes exactly the edits it meant to stop.
+fn read(reply: &str, added: &str) -> Verdict {
     let body = reply.trim();
     let (first, rest) = body
         .split_once('\n')
         .unwrap_or((body, ""));
-    if !first
-        .trim()
-        .trim_end_matches(['.', ':'])
-        .eq_ignore_ascii_case("REVISE")
-    {
-        return None;
+    let (verdict, trailing) = split_verdict(first);
+    if verdict.eq_ignore_ascii_case("CONTEXT") {
+        return questions(&[trailing, rest].join("\n"));
     }
+    if !verdict.eq_ignore_ascii_case("REVISE") {
+        return Verdict::Pass;
+    }
+    let rest = &[trailing, rest].join("\n");
     let kept: Vec<&str> = rest
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .filter(|line| stands(line, added))
         .collect();
-    (!kept.is_empty()).then(|| annotate(&kept.join("\n")))
+    match kept.is_empty() {
+        true => Verdict::Pass,
+        false => Verdict::Findings(annotate(&kept.join("\n"))),
+    }
+}
+
+/// The verdict word and whatever the model glued to it, which is a finding or a
+/// question often enough that dropping it loses the answer.
+fn split_verdict(line: &str) -> (&str, &str) {
+    let line = line.trim();
+    let end = line
+        .find(|c: char| !c.is_ascii_alphabetic())
+        .unwrap_or(line.len());
+    let (word, rest) = line.split_at(end);
+    (
+        word,
+        rest.trim_start_matches([':', '.', '-', '—', ' '])
+            .trim(),
+    )
+}
+
+/// The questions to put to the writer, at most the two the reply was allowed. A
+/// verdict of CONTEXT naming nothing asks for nothing, and passes: what makes this
+/// level worth having is the question, and a stop with no question attached is the
+/// bare refusal it exists to replace.
+fn questions(rest: &str) -> Verdict {
+    let asked: Vec<&str> = rest
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(2)
+        .collect();
+    match asked.is_empty() {
+        true => Verdict::Pass,
+        false => Verdict::Questions(asked.join("\n")),
+    }
 }
 
 /// Whether the quoted passage can carry the finding at all. A finding names a rule and
@@ -205,5 +280,16 @@ fn annotate(findings: &str) -> String {
 
 #[cfg(test)]
 pub(super) fn parse_for_test(reply: &str, added: &str) -> Option<String> {
-    findings(reply, added)
+    match read(reply, added) {
+        Verdict::Findings(objection) => Some(objection),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+pub(super) fn questions_for_test(reply: &str, added: &str) -> Option<String> {
+    match read(reply, added) {
+        Verdict::Questions(asked) => Some(asked),
+        _ => None,
+    }
 }

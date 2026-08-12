@@ -29,9 +29,16 @@ for passage in "$@"; do
 
 		printf '%-48s %s\n' "$(basename "$(dirname "$passage")")/$(basename "$passage")" \
 			"$(jq -r '.hookSpecificOutput.permissionDecision' <<<"$out")"
-		# The findings are the last paragraph of the objection; the rest is standing text.
-		jq -r '.hookSpecificOutput.permissionDecisionReason
-		       | select(startswith("The design-rationale judge objects"))
-		       | "     " + (split("\n\n") | last | gsub("\n"; "\n     "))' <<<"$out"
+		# Whatever the reviewers said, with the standing text around it dropped: the
+		# findings of an objection, the questions of a stop the writer has to answer.
+		jq -r '.hookSpecificOutput.permissionDecisionReason // empty
+		       | split("\n\n")
+		       | map(select(startswith("The design-rationale judge") or
+		                    startswith("Revise and re-issue") or
+		                    startswith("Before re-issuing") or
+		                    startswith("Answer them for yourself") or
+		                    startswith("This file does not exist yet") or
+		                    startswith("    touch") | not))
+		       | .[] | "     " + gsub("\n"; "\n     ")' <<<"$out"
 	done
 done
