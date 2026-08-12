@@ -195,6 +195,11 @@ on its own (`style:`) rather than folding it into a behaviour change.
 point at the absolute `target/release/ticpu-claude-command-hook` path, so rebuild after
 changing a check — and `gf` must stay beside it, which `cargo build` handles.
 
+`ticpu-claude-command-hook install` writes those entries itself, matching by binary name so
+a re-run after moving the checkout re-points the old entry instead of adding a second one.
+It is also the only place the matchers are stated, so a new event or tool in `dispatch`
+needs `ENTRIES` in `src/install.rs` widened to match.
+
 `tests/verdicts.rs` runs the real binary over a table of commands and asserts pass / deny /
 rewritten-command; add a row there for any new shape. `./probe.sh` prints the same verdicts
 for commands on stdin when you just want to try one.

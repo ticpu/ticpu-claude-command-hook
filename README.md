@@ -104,33 +104,16 @@ Builds both binaries; the hook finds `gf` as its own sibling in `target/release/
 
 ## Wire into Claude Code
 
-Point your hook entries at the built binary in `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          { "type": "command", "command": "/path/to/ticpu-claude-command-hook/target/release/ticpu-claude-command-hook" }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          { "type": "command", "command": "/path/to/ticpu-claude-command-hook/target/release/ticpu-claude-command-hook" }
-        ]
-      }
-    ]
-  }
-}
+```
+./target/release/ticpu-claude-command-hook install
 ```
 
-The binary self-dispatches on the hook event and tool name, so the same path serves every
-entry.
+Writes its own absolute path into `~/.claude/settings.json` (`CLAUDE_CONFIG_DIR` honoured)
+as a `PreToolUse` entry matching `Bash|Edit|Write` and a `PostToolUse` one matching
+`Edit|Write` — the tools it dispatches on. Everything else in the file is left alone,
+including hooks that run something else; an entry already running a binary of this name is
+replaced rather than duplicated, so re-running it after moving the checkout re-points the
+old one. A session started before the write picks it up after `/hooks` or a restart.
 
 ## Develop
 
