@@ -77,9 +77,11 @@ fn excerpt(introduced: &str) -> String {
 }
 
 const ASK: &str = "design-rationale.md — audit this passage before it lands. Take it through the \
-design-rationale clauses in CLAUDE.md one at a time, and answer for each sentence: what future \
-change does it inform, and would a competent engineer holding this repo already know it? Cut \
-what fails both. A section that survives is usually a third of what was drafted.
+design-rationale clauses in CLAUDE.md one at a time, and answer for each sentence: would a \
+competent engineer holding this repo already know it, and what later change could violate it? A \
+correction the code already carries is not such a change — if nothing downstream has to keep \
+honouring it, its commit settled it and the sentence goes. Cut what fails either. A section that \
+survives is usually a third of what was drafted.
 
 Then re-issue the edit — unchanged if the audit changed nothing, and say what you cut if it did. \
 This is asked once per draft, so the re-issue goes through to the reviewers behind it. It is not \
