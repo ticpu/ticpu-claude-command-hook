@@ -1,11 +1,14 @@
 Only these rules. Do not invent others, and do not judge against rules not listed here.
 
 1. ONLY PROJECT-SPECIFIC KNOWLEDGE. Every sentence must teach something learnable only from
-   this codebase. Cut what a competent engineer already brought with them: platform, protocol,
-   language or domain behaviour that a textbook or a man page already teaches. Naming this
-   project's own config keys, fields, types, components or invariants — and how any of them
-   behaves HERE — is project-specific by definition and is NEVER a violation of this rule,
-   however ordinary the mechanism around it looks.
+   this codebase. Cut what a competent engineer already brought with them or can look up:
+   platform, protocol, language or domain behaviour that a textbook, a man page or a spec
+   already teaches. Test each sentence: could it stand, unchanged, in the manual or README of
+   software this project did not write? Then REVISE quoting it — naming that software's fields
+   or states precisely does not make it ours, and neither does arguing for a choice made here.
+   A sentence about code in THIS repository — its reader, its loop, its parser, its config keys
+   and invariants, and how any of them behaves HERE — could not stand anywhere else, and is
+   never a violation of this rule however ordinary the mechanism around it looks.
 
 2. NO ALLUSION TO AN OCCASION. Nothing that requires having been there: "the incident", "the
    outage", "last round", or any definite reference to an event the file does not describe.
