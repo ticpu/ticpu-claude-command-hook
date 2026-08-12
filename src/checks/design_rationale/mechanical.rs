@@ -3,9 +3,12 @@
 
 use crate::output::HookOutput;
 
-/// Past this a section is padding rather than a decision. Blank lines are not
-/// counted, so the bound tracks what was written and not how it was spaced.
-const MAX_SECTION_LINES: usize = 20;
+/// Past this a section is padding rather than a decision — roughly twenty lines at
+/// eighty columns. Text is counted, never lines: hard-wrap width is the author's,
+/// so a file reflowed narrower would otherwise start failing sections it passed
+/// while saying the same thing, and a bound that moves with the wrap is not one a
+/// program can be trusted to decide. Blank lines are not counted either.
+const MAX_SECTION_CHARS: usize = 1600;
 
 const WHY_HEADING: &str = "A heading names the topic, not the question: `## Typed queries over \
 raw document construction`, never `## Why …`. Rewrite the heading as the decision it records.";
@@ -50,24 +53,26 @@ fn why_heading(added: &str) -> Option<String> {
 /// no heading of its own and must still be measured.
 fn overlong_section(added: &str) -> Option<(String, usize)> {
     let mut heading = String::from("(the text added, which names no heading)");
-    let mut lines = 0;
+    let mut chars = 0;
     for line in added.lines() {
         if is_heading(line) {
-            if lines > MAX_SECTION_LINES {
-                return Some((heading, lines));
+            if chars > MAX_SECTION_CHARS {
+                return Some((heading, chars));
             }
             heading = line.to_string();
-            lines = 0;
+            chars = 0;
             continue;
         }
-        if !line
-            .trim()
-            .is_empty()
-        {
-            lines += 1;
+        let body = line.trim();
+        if !body.is_empty() {
+            // The break each line stands for, so a rewrap does not change the count.
+            chars += body
+                .chars()
+                .count()
+                + 1;
         }
     }
-    (lines > MAX_SECTION_LINES).then_some((heading, lines))
+    (chars > MAX_SECTION_CHARS).then_some((heading, chars))
 }
 
 fn headings(added: &str) -> impl Iterator<Item = &str> {
