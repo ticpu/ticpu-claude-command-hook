@@ -130,7 +130,20 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   PostToolUse entry says so afterwards and does nothing else, since a writer that is not told
   presents the diff and waits for a second review; a prompt's `permissionDecisionReason` cannot
   carry it, being rendered for whoever answers the prompt — which is why a deny reaches the model
-  at all, refusing being the answer — so it travels as `additionalContext`. A wrong
+  at all, refusing being the answer — so it travels as `additionalContext`. The rules review
+  answers on three levels, since two collapsed "a rule is broken and here it is" together with
+  "a rule turns on something I was never told" and called the second a pass: `REVISE` names a
+  rule and quotes the passage, `CONTEXT` names what it would have needed to know — is this
+  component ours, would anyone face this decision again — and `PASS` is the rest. Both stopping
+  levels deny, and both carry the same line telling the writer to take its own passage through
+  the CLAUDE.md clauses first; that line is the part that works, the draft and the rules being
+  already in its context and unread until something asks for the pass. A `CONTEXT` naming
+  nothing passes, the question being the whole of what that level is for, and answers come back
+  through a file named in the deny, spent on read like the bypass marker — never through the
+  passage, since text added to get past the gate is the padding the gate exists for. The verdict
+  word may carry its finding on the same line: told to answer in one word and then to say what
+  it needs, the model does both at once, and reading that as no verdict at all passed exactly
+  the edits it was meant to stop. A wrong
   finding is overruled by `bypass`: a marker under `$XDG_RUNTIME_DIR/claude-hooks/`, named in the
   deny as the command that makes it, consumed by the next judged edit and deleted as it is read
   (before judging, so a failed delete cannot leave a standing waiver). Creating it is forced to a

@@ -2,6 +2,7 @@
 //! local model, which catches what it can quote and not what it has to count.
 
 pub mod bypass;
+mod context;
 mod judge;
 mod mechanical;
 mod ollama;
@@ -130,6 +131,35 @@ the passage stands, then run the command below yourself and re-issue the edit un
 permission prompt is where they decide, so putting the same question to them first only spends \
 a round trip — and never paste the command for them to run:";
 
+/// Carried by both stopping verdicts, because the finding is never the whole of what
+/// is wrong: the rules this judge holds are the ones a quoted passage can answer, and
+/// the clauses that cut hardest — does anything downstream act on this, could someone
+/// face the decision again — no quote reaches. A writer handed them re-reads its own
+/// draft against them and answers better than any verdict does, but only when told to:
+/// the draft and the rules sit in its context unread until something asks for the pass.
+const AUDIT: &str = "Before re-issuing, take the passage through the design-rationale clauses \
+in CLAUDE.md one at a time, including the ones no reviewer here checks: what future change each \
+sentence would inform, and what a reader holding this repo already knows. Cut what fails, and \
+say what you cut.";
+
+/// A stop the writer answers rather than rewrites. Naming the file keeps the answers
+/// out of the document: written into the passage to get past the gate, they would be
+/// the padding the gate exists to stop.
+const ASKED: &str = "The design-rationale judge could not decide, and says what it was missing. \
+These are questions about this project, not about the wording — a rule it holds turns on \
+something the passage cannot carry.";
+
+fn answering() -> String {
+    format!(
+        "Answer them for yourself first: the answer usually decides the passage, and a section \
+         that survives its own audit needs nothing from the judge. Re-issue the edit when it \
+         does. If the judge still has to know, write the answers — a few lines, no rewriting of \
+         the passage — to {} and re-issue; they are read into the next review of this file and \
+         deleted as they are read.",
+        context::location()
+    )
+}
+
 /// Approving the write was the review, said once the write has happened. A writer
 /// told this on the prompt is not told at all: that text is addressed to whoever
 /// answers the prompt, and the writer only ever reads a decision that refused it.
@@ -178,26 +208,28 @@ fn framing(document: &str) -> &'static str {
 /// Neither can block on the other's failure, and an objection stands whatever the
 /// other review did: a review that did not happen is reported, never assumed to pass.
 fn reviewed(document: &str, replaced: &str, added: &str, introduced: &str) -> Option<HookOutput> {
+    let answers = context::spend();
     let (rules, duplication) = std::thread::scope(|scope| {
-        let rules = scope.spawn(|| judge::review(document, replaced, introduced));
+        let rules = scope.spawn(|| judge::review(document, replaced, introduced, &answers));
         let duplication = overlap::review(document, replaced, added);
         (rules.join(), duplication)
     });
 
     let mut objections = Vec::new();
+    let mut questions = Vec::new();
     let mut failures = Vec::new();
-    let mut collect =
-        |what: &str, outcome: Result<anyhow::Result<Option<String>>, String>| match outcome {
-            Ok(Ok(Some(objection))) => objections.push(objection),
-            Ok(Ok(None)) => {}
-            Ok(Err(e)) => failures.push(format!("{what}: {e:#}")),
-            Err(e) => failures.push(format!("{what}: {e}")),
-        };
-    collect(
-        "rules",
-        rules.map_err(|_| "the review panicked".to_string()),
-    );
-    collect("duplication", Ok(duplication));
+    match rules {
+        Ok(Ok(judge::Verdict::Findings(objection))) => objections.push(objection),
+        Ok(Ok(judge::Verdict::Questions(asked))) => questions.push(asked),
+        Ok(Ok(judge::Verdict::Pass)) => {}
+        Ok(Err(e)) => failures.push(format!("rules: {e:#}")),
+        Err(_) => failures.push("rules: the review panicked".to_string()),
+    }
+    match duplication {
+        Ok(Some(objection)) => objections.push(objection),
+        Ok(None) => {}
+        Err(e) => failures.push(format!("duplication: {e:#}")),
+    }
 
     let unreviewed = (!failures.is_empty()).then(|| {
         format!(
@@ -206,16 +238,28 @@ fn reviewed(document: &str, replaced: &str, added: &str, introduced: &str) -> Op
         )
     });
     let framing = framing(document);
-    let mut decision = match objections.is_empty() {
-        false => HookOutput::deny(
+    // An objection outranks a question: the reviewer that could name a fault has more
+    // to act on than the one that could not decide.
+    let mut decision = if !objections.is_empty() {
+        HookOutput::deny(
             "PreToolUse",
             &format!(
-                "{OBJECTION}\n\n    {}\n\n{}{framing}",
+                "{OBJECTION}\n\n    {}\n\n{}\n\n{AUDIT}{framing}",
                 bypass::command(),
                 objections.join("\n")
             ),
-        ),
-        true => HookOutput::ask("PreToolUse", CLEAN),
+        )
+    } else if !questions.is_empty() {
+        HookOutput::deny(
+            "PreToolUse",
+            &format!(
+                "{ASKED}\n\n{}\n\n{AUDIT}\n\n{}{framing}",
+                questions.join("\n"),
+                answering()
+            ),
+        )
+    } else {
+        HookOutput::ask("PreToolUse", CLEAN)
     };
     // A review that did not happen is said out loud rather than assumed to pass,
     // and never blocks: the edit is decided on whatever the reviewers managed.

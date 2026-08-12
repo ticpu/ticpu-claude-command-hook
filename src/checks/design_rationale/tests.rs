@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use super::judge::{headline, parse_for_test};
+use super::judge::{headline, parse_for_test, questions_for_test};
 use super::mechanical::check;
 use super::{FLOOR, framing, introduced, is_rationale, new_text, post_tool_use};
 use crate::input::HookInput;
@@ -177,6 +177,41 @@ fn a_cited_rule_is_named_beside_the_line_that_cited_it() {
             "REVISE\nThis says the \"rule 3 steps\" are enumerated.",
             JUDGED
         ),
+        None
+    );
+}
+
+/// The verdict for a rule the model cannot decide from the passage. It carries the
+/// questions to the writer, so one naming nothing is not that verdict at all.
+#[test]
+fn a_question_stops_the_edit_only_when_it_asks_something() {
+    let asked = questions_for_test(
+        "CONTEXT\nIs `fsa-index@` a unit this project ships, or one it merely runs against?",
+        JUDGED,
+    )
+    .expect("a question");
+    assert!(asked.contains("fsa-index@"), "{asked}");
+
+    // At most the two the reply was allowed, whatever it sent.
+    let many = questions_for_test("CONTEXT\nFirst?\nSecond?\nThird?", JUDGED).expect("questions");
+    assert_eq!(
+        many.lines()
+            .count(),
+        2,
+        "{many}"
+    );
+
+    // A verdict with no question is a stop the writer cannot answer.
+    assert_eq!(questions_for_test("CONTEXT", JUDGED), None);
+    assert_eq!(questions_for_test("CONTEXT\n\n", JUDGED), None);
+
+    // The two stopping verdicts stay apart: findings are not questions.
+    assert_eq!(
+        questions_for_test("REVISE\nRule 4: \"the retry cap is 5\"", JUDGED),
+        None
+    );
+    assert_eq!(
+        parse_for_test("CONTEXT\nWhose component is this?", JUDGED),
         None
     );
 }
