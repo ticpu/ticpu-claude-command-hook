@@ -283,6 +283,11 @@ fn edit_verdicts_match() {
         edit_verdict("/x/README.md", "## Why not\n\nlong body here"),
         Pass
     );
+    // Nor does a rationale that does not exist yet, whatever it says.
+    assert_eq!(
+        edit_verdict("/x/docs/design-rationale.md", EDIT_CASES[0].0),
+        Pass
+    );
 }
 
 /// The judge itself, which needs ollama up with the model resident:
