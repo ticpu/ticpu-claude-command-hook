@@ -4,6 +4,7 @@
 //! heredoc or an unbalanced quote comes back as `None` so callers fail open
 //! instead of mis-splitting.
 
+use std::ops::Range;
 use std::str::SplitWhitespace;
 
 /// Commands that read files and print `path:line:` — the ones worth folding.
@@ -293,20 +294,52 @@ pub fn unquoted(command: &str) -> Option<String> {
 }
 
 /// Marks the bytes that are outside quotes and substitutions and are not escapes
-/// — the only ones that can be shell operators. Sole quote parser in this module.
-/// An unterminated quote or `$(` means the shape cannot be trusted, so `None`.
+/// — the only ones that can be shell operators.
 fn unquoted_mask(s: &str) -> Option<Vec<bool>> {
+    Some(scan(s)?.outside)
+}
+
+/// Every outermost `$( )` or backtick span, markers included, so a caller can lift
+/// one out of the text around it and read what is left.
+pub fn substitution_spans(s: &str) -> Option<Vec<Range<usize>>> {
+    Some(scan(s)?.substitutions)
+}
+
+struct Scan {
+    outside: Vec<bool>,
+    substitutions: Vec<Range<usize>>,
+}
+
+/// Sole quote parser in this module. An unterminated quote or `$(` means the shape
+/// cannot be trusted, so `None`.
+fn scan(s: &str) -> Option<Scan> {
     let b = s.as_bytes();
-    let mut mask = vec![false; b.len()];
+    let mut outside = vec![false; b.len()];
+    let mut substitutions = Vec::new();
+    let mut opened = 0usize;
     let mut i = 0;
     let mut quote: Option<u8> = None;
     let mut depth = 0usize;
     let mut backtick = false;
+    // The quote each substitution opened inside, restored when it closes: text
+    // within `$( )` is parsed as a command however the substitution was reached.
+    let mut enclosing: Vec<Option<u8>> = Vec::new();
     while i < b.len() {
         match quote {
             // Single quotes take everything literally, including backslashes.
             Some(q) => {
                 if b[i] == b'\\' && q == b'"' {
+                    i += 2;
+                    continue;
+                }
+                // A double quote does not stop a substitution — `"$(cmd)"` runs it.
+                if q == b'"' && b[i] == b'$' && b.get(i + 1) == Some(&b'(') {
+                    if depth == 0 && !backtick {
+                        opened = i;
+                    }
+                    depth += 1;
+                    enclosing.push(quote);
+                    quote = None;
                     i += 2;
                     continue;
                 }
@@ -323,24 +356,44 @@ fn unquoted_mask(s: &str) -> Option<Vec<bool>> {
                 }
                 b'`' => {
                     backtick = !backtick;
+                    if depth == 0 {
+                        if backtick {
+                            opened = i;
+                        } else {
+                            substitutions.push(opened..i + 1);
+                        }
+                    }
                     i += 1;
                 }
                 b'$' if b.get(i + 1) == Some(&b'(') => {
+                    if depth == 0 && !backtick {
+                        opened = i;
+                    }
                     depth += 1;
+                    enclosing.push(None);
                     i += 2;
                 }
                 b')' if depth > 0 => {
                     depth -= 1;
+                    if depth == 0 && !backtick {
+                        substitutions.push(opened..i + 1);
+                    }
+                    quote = enclosing
+                        .pop()
+                        .flatten();
                     i += 1;
                 }
                 _ => {
-                    mask[i] = depth == 0 && !backtick;
+                    outside[i] = depth == 0 && !backtick;
                     i += 1;
                 }
             },
         }
     }
-    (quote.is_none() && depth == 0 && !backtick).then_some(mask)
+    (quote.is_none() && depth == 0 && !backtick).then_some(Scan {
+        outside,
+        substitutions,
+    })
 }
 
 /// Splits on the operators `op` reports, pairing each part with the operator text
@@ -464,6 +517,26 @@ mod tests {
             unquoted("grep -rn foo $(pwd) 2>/dev/null").unwrap(),
             "grep -rn foo  2>/dev/null"
         );
+    }
+
+    #[test]
+    fn substitution_spans_cover_the_markers_and_survive_quoting() {
+        let cmd = "mongosh \"$(yq -r '.uri' f.yaml)\" --eval 'db.x.count()'";
+        let spans = substitution_spans(cmd).unwrap();
+        assert_eq!(spans.len(), 1);
+        assert_eq!(&cmd[spans[0].clone()], "$(yq -r '.uri' f.yaml)");
+
+        let cmd = "URI=`yq -r .uri f.yaml`";
+        let spans = substitution_spans(cmd).unwrap();
+        assert_eq!(&cmd[spans[0].clone()], "`yq -r .uri f.yaml`");
+
+        // Literal inside single quotes: nothing is substituted, nothing is a span.
+        assert!(
+            substitution_spans("rg '\\$\\(cat f\\)' notes.md")
+                .unwrap()
+                .is_empty()
+        );
+        assert!(substitution_spans("echo \"$(ls").is_none());
     }
 
     /// A newline separates two commands as surely as `;`, and a command may end
