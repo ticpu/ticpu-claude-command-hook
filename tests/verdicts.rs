@@ -43,6 +43,11 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Ask,
     ),
     ("touch \"$XDG_RUNTIME_DIR/claude-hooks/glab-skill-x\"", Pass),
+    // The same shape for a refused credential path.
+    (
+        "touch \"$XDG_RUNTIME_DIR/claude-hooks/transcript-read-waiver\"",
+        Ask,
+    ),
     (
         "grep -rn \"enum C911pVariable\" -A 60 /x/variables.rs | head -80; ls /x/",
         Fold("grep -rn \"enum C911pVariable\" -A 60 /x/variables.rs | {gf} | head -80 ; ls /x/"),
