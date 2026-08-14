@@ -121,7 +121,8 @@ outside this: the test is what the shell prints.
 
 Matching on wording alone is exempt where the file is source or prose — a module about
 credentials is not one — and that exemption never extends to a location or an extension that
-identifies a key.
+identifies a key. What is left is a name that reads like a credential and is not one, which no
+rule here can settle: the refusal names a one-shot waiver, spent as it is read.
 
 ## A bug here must not stop the tools
 

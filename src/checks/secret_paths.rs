@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use crate::checks::git_bypass::location::resolve;
-use crate::checks::shell;
+use crate::checks::{marker, shell};
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
@@ -82,10 +82,14 @@ const KEY_FLAGS: &[&str] = &[
     "--tlscertificatekeyfile",
     "--ssh-key",
 ];
+/// The waiver for a path this cannot tell from a credential: named in the deny,
+/// created by a command the user approves, spent by the next refusal. Its own name
+/// carries none of the words above, or the command creating it would be refused.
+const WAIVER: &str = "transcript-read-waiver";
 
 pub fn check(input: &HookInput) -> Option<HookOutput> {
     let printed = printed_path(input.command(), &input.cwd)?;
-    Some(HookOutput::deny("PreToolUse", &command_reason(&printed)))
+    refuse(&command_reason(&printed))
 }
 
 /// `Read` hands back the whole file and `Grep` the matching lines; both land in the
@@ -99,7 +103,38 @@ pub fn tool(input: &HookInput) -> Option<HookOutput> {
         _ => input.path(),
     };
     let path = secret_path(named, &input.cwd)?;
-    Some(HookOutput::deny("PreToolUse", &tool_reason(&path)))
+    refuse(&tool_reason(&path))
+}
+
+/// A file the name rules read as a credential and the user knows is not one still
+/// has to be readable, so the refusal names its own waiver. Spent only once
+/// something has been refused: a marker no refusal consumes is one the next
+/// refusal can still spend.
+fn refuse(reason: &str) -> Option<HookOutput> {
+    if marker::spend(WAIVER) {
+        return None;
+    }
+    Some(HookOutput::deny(
+        "PreToolUse",
+        &format!(
+            "{reason}\nIf this path is not a credential, run `{}` and repeat the call; that \
+             waiver is spent on the next refusal.",
+            marker::command(WAIVER)
+        ),
+    ))
+}
+
+/// Creating the waiver is prompted whatever the permission rules say, so an
+/// allowlisted `touch` cannot hand one out unseen.
+pub fn waiver_requested(command: &str) -> Option<HookOutput> {
+    marker::creation_requested(command, WAIVER).then(|| {
+        HookOutput::ask(
+            "PreToolUse",
+            "This creates a one-shot pass for the next command or read that names a credential \
+             file: it is deleted as it is used. Approve only if that path holds nothing secret \
+             on this box — the contents go into the session transcript.",
+        )
+    })
 }
 
 /// The first credential path this command would print, if any. A command that
@@ -432,6 +467,15 @@ mod tests {
         ] {
             assert!(!denies(command), "should pass: {command}");
         }
+    }
+
+    /// The waiver's own name must not read as a credential, or the command that
+    /// creates it is refused and the way past a wrong refusal is unreachable.
+    #[test]
+    fn the_waiver_can_be_asked_for() {
+        let touch = super::marker::command(super::WAIVER);
+        assert!(printed_path(&touch, "").is_none(), "{touch}");
+        assert!(super::waiver_requested(&touch).is_some());
     }
 
     #[test]

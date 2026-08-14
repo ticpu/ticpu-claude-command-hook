@@ -3,6 +3,7 @@ mod design_rationale;
 mod git_bypass;
 mod glab_skill;
 mod grep_fold;
+mod marker;
 mod remote_session;
 mod search_flags;
 mod search_stderr;
@@ -23,7 +24,8 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
             let cmd = input.command();
             // First: the checks below can allow a command outright, and one that
             // prints a credential must never reach an allow.
-            secret_paths::check(input)
+            secret_paths::waiver_requested(cmd)
+                .or_else(|| secret_paths::check(input))
                 .or_else(|| glab_skill::check(input))
                 .or_else(|| design_rationale::bypass::requested(cmd))
                 .or_else(|| git_bypass::check(input))

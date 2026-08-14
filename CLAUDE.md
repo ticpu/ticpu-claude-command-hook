@@ -44,7 +44,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   variable, having nothing to stat, is judged on its wording. `Read` and `Grep` are matched on
   the path they name by the same rules; `Edit`/`Write` are not, a write printing nothing. A
   command `shell` cannot split is judged whole rather than waved through: this is the one check
-  with no allow to withhold, so being wrong costs a prompt. Not caught, deliberately: a
+  with no allow to withhold, so being wrong costs a prompt. A name that reads like a credential
+  and is not one is answered by a waiver — `marker.rs`, the same shape the judge's bypass uses,
+  under a name carrying none of the words above so that creating it is not itself refused; it is
+  named in the deny, prompted on creation and spent by the next refusal. Not caught, deliberately: a
   recursive search rooted at a directory that merely contains one, a `Grep` `glob` (a repo-wide
   `*secret*` is ordinary), and a value captured and later echoed.
 - `glab_skill` — first `glab` per session is denied; a marker in
@@ -173,7 +176,8 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   word may carry its finding on the same line: told to answer in one word and then to say what
   it needs, the model does both at once, and reading that as no verdict at all passed exactly
   the edits it was meant to stop. A wrong
-  finding is overruled by `bypass`: a marker under `$XDG_RUNTIME_DIR/claude-hooks/`, named in the
+  finding is overruled by `bypass`, which words the prompt over the shared `marker.rs`: a marker
+  under `$XDG_RUNTIME_DIR/claude-hooks/`, named in the
   deny as the command that makes it, consumed by the next judged edit and deleted as it is read
   (before judging, so a failed delete cannot leave a standing waiver). Creating it is forced to a
   prompt so an allowlisted `touch` cannot grant one unseen — but only *creating* it: matching the
