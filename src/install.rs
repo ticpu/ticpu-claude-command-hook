@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 /// The events this binary answers, with the tools `checks::dispatch` routes for each.
 /// A matcher wider than dispatch spawns a process per unrelated tool call.
 const ENTRIES: &[(&str, &str)] = &[
-    ("PreToolUse", "Bash|Edit|Write"),
+    ("PreToolUse", "Bash|Edit|Write|Read|Grep"),
     ("PostToolUse", "Edit|Write"),
 ];
 

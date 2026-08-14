@@ -26,6 +26,11 @@ impl HookInput {
         self.tool_input_str("file_path")
     }
 
+    /// Where `Grep` searches. Absent means the working directory.
+    pub fn path(&self) -> &str {
+        self.tool_input_str("path")
+    }
+
     /// `Edit` replaces `old_string` with `new_string`; `Write` sends the whole
     /// file as `content` and neither of the others.
     pub fn old_string(&self) -> &str {

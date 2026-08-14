@@ -191,6 +191,24 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "cd /x && git grep -n foo",
         Fold("cd /x && { git grep -n foo | {gf}; (exit ${PIPESTATUS[0]}); }"),
     ),
+    // A credential file: refused where the shell prints it, prompted where the
+    // value is captured. Spelled with `$HOME`/`~` so no row turns on this box
+    // having the file.
+    ("cat ~/.ssh/id_ed25519", Deny),
+    ("rg -n uri -A2 $HOME/.config/fsa-secrets.yaml", Deny),
+    (
+        "yq '.eido.uri' $HOME/.config/fsa-secrets.yaml | head -1",
+        Deny,
+    ),
+    (
+        "URI=$(yq -r '.eido.uri' $HOME/.config/fsa-secrets.yaml)",
+        Pass,
+    ),
+    (
+        "mongosh --quiet \"$(yq -r '.uri' $HOME/.config/fsa-secrets.yaml)\" --eval 'db.x.count()'",
+        Pass,
+    ),
+    ("cat src/checks/secret_paths.rs", Pass),
 ];
 
 /// Judged from a subdirectory of this repo, which `CASES` cannot express: a
@@ -291,6 +309,50 @@ rather than growing to meet it: a body sized from the wire lets the peer name th
 Reserving first would need the same check one stage later, with the memory already \
 committed.\n";
     assert_eq!(edit_verdict(path, added), Ask);
+}
+
+/// `Read` and `Grep` name their path in a field of their own, so the same rules
+/// have to be reachable without a command line.
+#[test]
+fn file_tools_are_judged_on_the_path_they_name() {
+    let ours = concat!(env!("CARGO_MANIFEST_DIR"), "/src/checks/secret_paths.rs");
+    assert_eq!(tool_verdict("Read", "file_path", ours), Pass);
+    assert_eq!(
+        tool_verdict("Read", "file_path", "/home/x/.ssh/id_rsa"),
+        Deny
+    );
+    assert_eq!(
+        tool_verdict("Read", "file_path", "/srv/app/.env"),
+        // Nothing at that path on this box: a name that resolves has to exist.
+        Pass
+    );
+    assert_eq!(
+        tool_verdict("Grep", "path", concat!(env!("CARGO_MANIFEST_DIR"), "/src")),
+        Pass
+    );
+    assert_eq!(tool_verdict("Grep", "path", "/home/x/.gnupg"), Deny);
+}
+
+fn tool_verdict(tool_name: &str, field: &str, path: &str) -> Verdict<String> {
+    let stdout = feed(&serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool_name,
+        "cwd": env!("CARGO_MANIFEST_DIR"),
+        "tool_input": { field: path },
+    }));
+    if stdout
+        .trim()
+        .is_empty()
+    {
+        return Pass;
+    }
+    let json: Value = serde_json::from_str(&stdout).expect("hook JSON");
+    match json["hookSpecificOutput"]["permissionDecision"].as_str() {
+        Some("deny") => Deny,
+        Some("allow") => Allow,
+        Some("ask") => Ask,
+        _ => panic!("unexpected hook output: {stdout}"),
+    }
 }
 
 fn edit_reason(file_path: &str, new_string: &str) -> String {

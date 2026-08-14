@@ -1,5 +1,6 @@
 mod add;
-mod location;
+/// Path resolution every check needs, not git's alone.
+pub(super) mod location;
 mod parse;
 mod read_only;
 #[cfg(test)]
