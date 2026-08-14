@@ -3,6 +3,7 @@
 //! literal word `git`, so a path, a wrapper or a brace group is read the same way.
 
 use crate::checks::shell;
+use crate::checks::shell::unquote_token;
 
 /// Walk the global-option prefix once, capturing the `-C` argument (if any) and
 /// the subcommand token that terminates the prefix. Everything before the first
@@ -44,7 +45,7 @@ pub fn parse<'a>(cmd: &'a str) -> Parsed<'a> {
             } else {
                 tokens.next()
             };
-            c_path = raw.map(unquote);
+            c_path = raw.map(unquote_token);
             continue;
         }
         // `-c key=val`, `--git-dir=...` etc. consume their own value inline or as
@@ -72,12 +73,6 @@ pub fn parse<'a>(cmd: &'a str) -> Parsed<'a> {
 
 pub fn git_c_path(cmd: &str) -> Option<&str> {
     parse(cmd).c_path
-}
-
-pub fn unquote(tok: &str) -> &str {
-    tok.strip_prefix(['"', '\''])
-        .and_then(|s| s.strip_suffix(['"', '\'']))
-        .unwrap_or(tok)
 }
 
 pub fn has_token(segment: &str, flag: &str) -> bool {

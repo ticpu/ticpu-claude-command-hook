@@ -1,8 +1,9 @@
 //! Which git invocations provably only read. Fail-safe throughout: anything not
 //! recognized falls through to the normal permission prompt.
 
-use crate::checks::git_bypass::parse::{is_git, parse, unquote};
+use crate::checks::git_bypass::parse::{is_git, parse};
 use crate::checks::shell;
+use crate::checks::shell::unquote_token;
 
 /// Options that make an otherwise read-only subcommand write a file or run a
 /// program: `git diff --output=<path>` writes, `git grep -O<prog>` executes.
@@ -91,7 +92,7 @@ fn prints_line_ranges(stage: &str) -> bool {
         if matches!(arg, "-n" | "--quiet" | "--silent" | "-e") {
             continue;
         }
-        let script = unquote(arg);
+        let script = unquote_token(arg);
         if script.is_empty()
             || !script
                 .chars()

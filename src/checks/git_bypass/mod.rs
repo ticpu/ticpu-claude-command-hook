@@ -7,11 +7,10 @@ mod tests;
 
 use crate::checks::git_bypass::add::{is_blanket_add, is_explicit_add, misrooted_paths};
 use crate::checks::git_bypass::location::{hint, points_at_cwd, resolve};
-use crate::checks::git_bypass::parse::{
-    git_c_path, has_token, is_git, mentions_git, parse, unquote,
-};
+use crate::checks::git_bypass::parse::{git_c_path, has_token, is_git, mentions_git, parse};
 use crate::checks::git_bypass::read_only::is_read_only_segment;
 use crate::checks::shell;
+use crate::checks::shell::unquote_token;
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
@@ -78,7 +77,7 @@ fn walk<T>(
     for segment in segments {
         let segment = segment.trim_start();
         if let Some(target) = shell::bare_cd_target(segment) {
-            here = resolve(unquote(target), &here)
+            here = resolve(unquote_token(target), &here)
                 .display()
                 .to_string();
             continue;
@@ -142,7 +141,7 @@ pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
             return None;
         }
         if let Some(target) = shell::bare_cd_target(segment) {
-            here = resolve(unquote(target), &here)
+            here = resolve(unquote_token(target), &here)
                 .display()
                 .to_string();
             cd_seen = true;
@@ -243,7 +242,7 @@ fn quotes_an_option(cmd: &str, flag: &str) -> bool {
                         .first(),
                     Some(b'"') | Some(b'\'')
                 )
-                && unquote(word) == flag
+                && unquote_token(word) == flag
         })
 }
 
@@ -253,7 +252,7 @@ fn quotes_an_option(cmd: &str, flag: &str) -> bool {
 fn disables_signing(cmd: &str) -> bool {
     cmd.split_whitespace()
         .any(|word| {
-            let word = unquote(word).to_ascii_lowercase();
+            let word = unquote_token(word).to_ascii_lowercase();
             word.strip_prefix("commit.gpgsign=")
                 .is_some_and(|value| FALSY.contains(&value))
         })
