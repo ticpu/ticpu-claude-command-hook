@@ -160,6 +160,37 @@ mod tests {
     }
 
     #[test]
+    fn denies_rg_dash_h_used_as_no_filename() {
+        for cmd in [
+            "rg -ohN '\\-j \\+?\\w+' .",
+            "rg -h foo src",
+            "rg -oh foo .",
+            "rg --no-heading -h foo .",
+            "rg -n foo src | rg -h bar",
+        ] {
+            assert!(denied(cmd), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn leaves_a_real_help_request_and_grep_alone() {
+        for cmd in [
+            "rg -h",
+            "rg -h | head -40",
+            "rg --help",
+            // grep's -h really is --no-filename.
+            "grep -rh foo src",
+            // -t takes the rest of the cluster as its value.
+            "rg -th -n foo",
+            // -e with nothing glued on takes the next word as the pattern.
+            "rg -e -h foo",
+            "rg -n '\\-h' src",
+        ] {
+            assert!(!denied(cmd), "{cmd}");
+        }
+    }
+
+    #[test]
     fn denies_a_stream_prefix_on_a_filtering_search() {
         for cmd in [
             "rg -n foo src | rg -n bar",
