@@ -195,6 +195,20 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ),
     ("ssh host 'cd /x && make'", Pass),
     ("mongosh <<'EOF'\ndb.x.find() && db.y.find()\nEOF", Pass),
+    // The read-whole/substitute/write-back trio in one script body. An analysis
+    // script over the same heredoc keeps its prompt.
+    (
+        "python3 - <<'PY'\np='src/main.rs'\ns=open(p).read()\ns = s.replace('a','b')\nopen(p,'w').write(s)\nPY",
+        Deny,
+    ),
+    (
+        "python3 - <<'PY'\nc=0\nfor line in open('log'):\n    c+=1\nprint(c)\nPY",
+        Pass,
+    ),
+    (
+        "touch \"$XDG_RUNTIME_DIR/claude-hooks/script-edit-waiver\"",
+        Ask,
+    ),
     // A read-only git still reaches the fold, so the allow runs after grep_fold.
     (
         "cd /x && git grep -n foo",

@@ -186,6 +186,17 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   name alone made a `test -e` prompt with a confirmation claiming it granted a waiver, and a
   confirmation that misdescribes itself is worse than none. The countable rules are outside the
   waiver, having nothing to overrule. `MultiEdit` is not matched: Claude Code no longer emits it.
+- `blind_edit` — denies an interpreter heredoc whose body reads a file whole, substitutes into
+  the result, and writes it back: the substitution is unverified, so one that matches nothing
+  rewrites nothing and reports nothing, leaving a file that looks edited. The Edit tool is the
+  alternative named in the deny, its `old_string` mismatch being exactly the check the script
+  omits. All three signals or nothing — a script that slurps and substitutes but prints, or that
+  iterates a file line by line however much it rewrites, is analysis and passes. That narrowness
+  is the point: this is aimed at one habit, not at scripting. Only the heredoc shape is judged;
+  `sed -i` and `perl -i` are deliberately out, being deliberate Unix idiom rather than the habit.
+  Perl is absent from the interpreter list for the same reason. An intended substitution is
+  answered by a waiver over the shared `marker.rs`, spent only against a command this would
+  otherwise refuse so an unrelated call cannot consume one.
 - `grep_fold` — rewrites searches to pipe through the sibling `gf`, per chain segment, so a
   chained or `cd`-prefixed grep still folds. `gf` lands after the *last* search stage, since a
   later `grep`/`rg` filters lines and its pattern can match the prefix gf strips; everything
