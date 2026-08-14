@@ -416,8 +416,8 @@ several more words after it so nothing is skipped for being short.\n";
 /// is then the one repair that cannot work, and the objection has to say so.
 #[test]
 fn only_a_first_section_is_asked_for_its_frame() {
-    assert!(framing("").contains("does not exist yet"));
-    assert!(framing("\n\n").contains("does not exist yet"));
+    assert!(framing("").contains("is empty"));
+    assert!(framing("\n\n").contains("is empty"));
     assert!(
         framing("# Design rationale\n\n## A decision\n\nBody.\n").is_empty(),
         "a document that exists reads against itself"

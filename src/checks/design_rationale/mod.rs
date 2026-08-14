@@ -28,7 +28,9 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
     if !is_rationale(path) {
         return None;
     }
-    let document = read_document(path);
+    // A file that does not exist yet reaches no gate here: every rule asking what a
+    // reader of this repo already knows has nothing to check against.
+    let document = read_document(path)?;
     // A `Write` replaces the whole file, so what it takes out is what is on disk.
     let (replaced, added) = match input
         .tool_name
@@ -185,11 +187,11 @@ reject to say what should change.";
 const BYPASSED: &str = "design-rationale.md — judged review waived for this edit, and the \
 waiver is now spent.";
 
-/// A file that does not exist yet is judged with nothing around it, so the rules
-/// that ask what a reader of this repo would already know have nothing to read. The
-/// objection asks for the frame rather than a narrower passage: cutting the passage
-/// is the one repair that cannot work, since the context it is missing is the point.
-const NO_DOCUMENT: &str = "\n\nThis file does not exist yet, so the passage was judged with no \
+/// An empty file is judged with nothing around it, so the rules that ask what a
+/// reader of this repo would already know have nothing to read. The objection asks
+/// for the frame rather than a narrower passage: cutting the passage is the one
+/// repair that cannot work, since the context it is missing is the point.
+const NO_DOCUMENT: &str = "\n\nThis file is empty, so the passage was judged with no \
 document around it — every rule asking what a reader holding this repo would already know had \
 nothing to check against. Before narrowing anything, open the file with the frame it lacks: \
 what this component is, what it sits inside, and the boundary the decisions below turn on. Then \
@@ -278,16 +280,17 @@ fn is_rationale(file_path: &str) -> bool {
     file_path.ends_with("design-rationale.md")
 }
 
-/// The file the edit lands in. Absent is normal — a `Write` creating it — but any
-/// other read failure is reported rather than passed off as an empty document,
-/// since the judge would then miss every duplicate.
-fn read_document(path: &str) -> String {
+/// The file the edit lands in, or `None` when it does not exist yet. Any other read
+/// failure is reported and answered with an empty document rather than the skip an
+/// absent file gets: the judge then misses every duplicate, which is worth saying
+/// out loud but not worth standing down the whole gate for.
+fn read_document(path: &str) -> Option<String> {
     match fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == ErrorKind::NotFound => String::new(),
+        Ok(text) => Some(text),
+        Err(e) if e.kind() == ErrorKind::NotFound => None,
         Err(e) => {
             eprintln!("design_rationale: read {path} failed: {e}");
-            String::new()
+            Some(String::new())
         }
     }
 }
