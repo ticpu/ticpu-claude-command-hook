@@ -117,7 +117,9 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   (`| jq`) is fine, and chaining inside the quoted remote command or SQL body is the far
   end's. A heredoc is judged on the text before the marker — the body is data, so the usual
   `psql <<EOF` shape passes, at the cost of not seeing a chain past the terminator.
-- `design_rationale` — an `Edit`/`Write` to a `design-rationale.md` is refused once before any
+- `design_rationale` — a `design-rationale.md` that does not exist yet skips every gate below and
+  goes straight to the permission prompt, an absent file being the one read failure that stands the
+  check down rather than being reported. Otherwise: an `Edit`/`Write` is refused once before any
   reviewer reads it, carrying the authoring rules and no finding: the writer holds the draft and
   the rules already and applies them only when asked, which is the half of this check that works
   on the passages the model cannot quote a fault in — nine lines on how a timer re-arms, cut to
