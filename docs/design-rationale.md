@@ -98,9 +98,10 @@ reason is addressed to whoever answers the prompt, so a refusal reaches the writ
 refusing is itself the answer, and the same words beside a question the reader is answering
 reach nobody. An edit too small to judge is prompted too, rather than landing unseen.
 
-A file that does not exist yet is judged with nothing around it, and the rules asking what a
-reader holding this repo would already know have nothing to check against; the objection then
-asks for the frame the file is missing rather than for a narrower passage.
+A file that does not exist yet skips every gate and goes straight to the permission prompt:
+every rule asking what a reader holding this repo would already know has nothing to check
+against. An empty document that does exist is still judged, and the objection then asks for the
+frame the file is missing rather than for a narrower passage.
 
 What is measured is what the edit introduces, with the whole lines it copies out of the document
 stripped from both ends — never part of one, since an insert lands before a heading and shares
