@@ -97,7 +97,7 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // rg's -h is --help: it prints usage and exits 0, so the search never happens.
     ("rg -ohN '\\-j \\+?\\w+' .", Deny),
     ("cd /x/firewall.d && rg -oh 'foo' . | sort | uniq -c", Deny),
-    ("rg -h", Pass),
+    ("rg -h", Fold("rg -h | {gf}; (exit ${PIPESTATUS[0]})")),
     // A filtering search numbering the piped stream, which is not any file's lines.
     ("rg -n foo src | rg -n bar | head -30", Deny),
     (

@@ -8,6 +8,10 @@ every match rewritten to `n`, and the rewritten text still looks like a normal h
 by default and `-n` alone numbers the lines. Pass `--replace=` if substitution really is what you \
 want.";
 
+const RG_HELP: &str = "`rg -h` is `--help`, not grep's `--no-filename`: it prints usage, exits 0 \
+and never searches, so the help text arrives where the matches should be and nothing fails. rg \
+spells `--no-filename` `-I`, and drops the path itself once the search names a single file.";
+
 const STREAM_PREFIX: &str = "A search filtering another search's output must not add its own \
 `-n`/`-b`/`-H`/`--vimgrep` prefix: it counts the piped stream, so the numbers name no line in any \
 file, and the extra prefix hides the path from the fold. Drop the flag — the upstream search \
@@ -37,6 +41,9 @@ pub fn check(command: &str) -> Option<HookOutput> {
             if rg && flags.any_short(b"r") {
                 return Some(HookOutput::deny("PreToolUse", RG_REPLACE));
             }
+            if rg && flags.any_short(b"h") && !asks_only_for_help(stage) {
+                return Some(HookOutput::deny("PreToolUse", RG_HELP));
+            }
             if upstream_search && (flags.any_short(PREFIX_SHORTS) || flags.any_long(&PREFIX_LONGS))
             {
                 return Some(HookOutput::deny("PreToolUse", STREAM_PREFIX));
@@ -45,6 +52,12 @@ pub fn check(command: &str) -> Option<HookOutput> {
         }
     }
     None
+}
+
+/// `rg -h` on its own is someone reading the usage. Anything else on the line was
+/// meant to search, and the help output replaced it.
+fn asks_only_for_help(stage: &str) -> bool {
+    shell::program_args(stage).is_some_and(|args| args == ["-h"])
 }
 
 struct Flags {

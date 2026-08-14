@@ -200,9 +200,13 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   fold, rather than having the fold grant it permission.
 - `search_stderr` — denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped
   alternative.
-- `search_flags` — two denies for flags a grep habit reads wrong. `rg -r` in any form is
+- `search_flags` — three denies for flags a grep habit reads wrong. `rg -r` in any form is
   `--replace`, so `rg -rn PAT dir` prints every hit rewritten to `n` and the damage reads as
-  ordinary output; `--replace=` is the unambiguous spelling. And a search filtering another
+  ordinary output; `--replace=` is the unambiguous spelling. `rg -h` is `--help`, which prints
+  usage and exits 0, so `rg -ohN PAT .` never searches and the usage text lands where the matches
+  should be — `-h` alone is exempt, being someone reading the usage, and anything else on the line
+  means the search was the point. A pattern beginning with an unescaped `-` is not caught and does
+  not need to be: rg rejects it by name and exits 2. And a search filtering another
   search's output may not carry `-n`/`-b`/`-H`/`--vimgrep`: that prefix counts the piped stream,
   so the numbers belong to no file. Flag scanning is cluster-aware per tool — a short flag that
   takes a value swallows the rest of its cluster (`rg -trust` is `--type rust`, not `-r ust`),
