@@ -132,6 +132,13 @@ pub fn command_word(stage: &str) -> Option<&str> {
     Some(program)
 }
 
+/// The tokens after a stage's program word, wrappers and their options already
+/// stepped over. Whitespace-split, so a quoted argument holding a space arrives
+/// as several tokens.
+pub fn program_args(stage: &str) -> Option<Vec<&str>> {
+    program_and_args(stage).map(|(_, args)| args.collect())
+}
+
 fn program_and_args(stage: &str) -> Option<(&str, SplitWhitespace<'_>)> {
     let mut words = stage.split_whitespace();
     let mut in_wrapper_options = false;
