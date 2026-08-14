@@ -259,6 +259,15 @@ pub fn starts_a_command(tokens: &[&str], i: usize) -> bool {
     i == 0 || tokens[i - 1].ends_with(['&', ';', '|'])
 }
 
+/// One token with its surrounding quotes dropped — `"."` reaches a program as the
+/// same argument the bare form does. Not `unquoted`, which deletes the quoted span
+/// content and all: a token that *is* a quoted path has to survive whole.
+pub fn unquote_token(tok: &str) -> &str {
+    tok.strip_prefix(['"', '\''])
+        .and_then(|s| s.strip_suffix(['"', '\'']))
+        .unwrap_or(tok)
+}
+
 fn basename(word: &str) -> &str {
     word.rsplit('/')
         .next()

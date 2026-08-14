@@ -3,8 +3,9 @@
 use std::path::Path;
 
 use crate::checks::git_bypass::location::{names_a_file, rebase_on_cwd, repo_root, resolve};
-use crate::checks::git_bypass::parse::{parse, unquote};
+use crate::checks::git_bypass::parse::parse;
 use crate::checks::git_bypass::read_only::git_producer;
+use crate::checks::shell::unquote_token;
 
 /// `git add` flags that do not widen the set of files staged. Interactive modes
 /// (`-p`, `-i`) would hang the tool, `--pathspec-from-file` takes the paths from a
@@ -55,7 +56,7 @@ fn adds_explicit_paths(cmd: &str, cwd: &str) -> bool {
             }
             continue;
         }
-        let path = unquote(arg);
+        let path = unquote_token(arg);
         if BLANKET_PATHS.contains(&path) || !names_a_file(path, cwd) {
             return false;
         }
@@ -78,7 +79,7 @@ pub fn misrooted_paths(cmd: &str, cwd: &str) -> Vec<(String, String)> {
     };
     p.args
         .iter()
-        .map(|arg| unquote(arg))
+        .map(|arg| unquote_token(arg))
         .filter(|arg| {
             !arg.starts_with('-')
                 && !arg.contains(['*', '?', '[', '$', '~'])
@@ -102,7 +103,7 @@ pub fn is_blanket_add(cmd: &str) -> bool {
     }
     p.args
         .iter()
-        .map(|arg| unquote(arg))
+        .map(|arg| unquote_token(arg))
         .any(|arg| {
             BLANKET_PATHS.contains(&arg)
                 || matches!(arg, "--all" | "--update")
