@@ -2,7 +2,7 @@ use serde_json::json;
 
 use super::judge::{headline, parse_for_test, questions_for_test};
 use super::mechanical::check;
-use super::{FLOOR, framing, introduced, is_rationale, new_text, post_tool_use};
+use super::{FLOOR, framing, introduced, is_rationale, new_text, post_tool_use, pre_tool_use};
 use crate::input::HookInput;
 
 fn edit(file_path: &str) -> HookInput {
@@ -10,6 +10,15 @@ fn edit(file_path: &str) -> HookInput {
         hook_event_name: "PostToolUse".to_string(),
         tool_name: "Edit".to_string(),
         tool_input: json!({ "file_path": file_path }),
+        ..HookInput::default()
+    }
+}
+
+fn written(file_path: &str, content: &str) -> HookInput {
+    HookInput {
+        hook_event_name: "PreToolUse".to_string(),
+        tool_name: "Write".to_string(),
+        tool_input: json!({ "file_path": file_path, "content": content }),
         ..HookInput::default()
     }
 }
@@ -388,6 +397,18 @@ fn the_write_says_it_was_already_reviewed() {
 
     // Every other Edit and Write goes through this same entry point.
     assert!(post_tool_use(&edit("src/main.rs")).is_none());
+}
+
+/// A rationale that does not exist yet is the reader's alone: the whole file is in
+/// front of them at the prompt, and no gate here has anything to read it against.
+#[test]
+fn a_document_that_does_not_exist_reaches_no_gate() {
+    let added = "## Why we split the parser\n\nA body long enough to clear the floor, with \
+several more words after it so nothing is skipped for being short.\n";
+    assert!(pre_tool_use(&written("/x/docs/design-rationale.md", added)).is_none());
+    // The same text against a file that exists is the countable rules' business.
+    let here = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    assert!(pre_tool_use(&written(here, added)).is_some());
 }
 
 /// A first section is judged with no document behind it, so the rules asking what a
