@@ -38,7 +38,9 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   change, a `stat`, a `test`, a `git log` carrying no patch flag). A search's pattern is exempt
   wherever it sits — `search_flags::pattern_words` tells it from the paths, since a pattern is the
   one argument a command names and does not open, and `rg 'password|secret' src/` was refused for
-  quoting the word it looks for. A name matches on the basename (a word saying what it holds, a known
+  quoting the word it looks for. A printer's own words go the same way — it opens nothing, so a
+  credential name among them is text on its way to the screen and only a substitution inside it
+  can have read a file. A name matches on the basename (a word saying what it holds, a known
   credential dotfile, an `id_` key without `.pub`, a key or keystore extension) or on a directory
   component whose contents are credentials whatever the file inside is called; a source or prose
   extension exempts the *wording* rule alone, so `read_secret_management.rs` reads normally, and
@@ -55,7 +57,9 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   under a name carrying none of the words above so that creating it is not itself refused; it is
   named in the deny, prompted on creation and spent by the next refusal. Not caught, deliberately: a
   recursive search rooted at a directory that merely contains one, a `Grep` `glob` (a repo-wide
-  `*secret*` is ordinary), and a value captured and later echoed.
+  `*secret*` is ordinary), a value captured and later echoed, a path printed into a consumer that
+  then reads it, and a quoted argument holding a space, which splits into words the pattern and
+  path rules then judge one by one.
 - `glab_skill` — first `glab` per session is denied; a marker in
   `$XDG_RUNTIME_DIR/claude-hooks/` lets later calls through. Any pipeline stage of any segment
   counts, so a `cd`, a wrapper or an absolute path does not skip the gate. The denial *carries*

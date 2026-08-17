@@ -179,6 +179,10 @@ fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
         .then(|| search_flags::pattern_words(stage))
         .flatten()
         .unwrap_or_default();
+    let outer = outside_substitutions(stage, &spans);
+    // A printer opens nothing: an argument of its own is text on its way to the
+    // screen, and only a substitution inside it can have read a file.
+    let prints = shell::program(&outer).is_some_and(|program| PRINTERS.contains(&program));
     let mut captured = None;
     let all = tokens(stage);
     for (i, (at, token)) in all
@@ -195,12 +199,15 @@ fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
             .iter()
             .any(|span| span.contains(at))
         {
+            if prints {
+                continue;
+            }
             return Some(path);
         }
         captured.get_or_insert(path);
     }
     let captured = captured?;
-    prints_its_arguments(stage, &spans).then_some(captured)
+    prints_its_arguments(&outer).then_some(captured)
 }
 
 /// The stage names a path without opening it. `git log` reports commits rather
@@ -246,22 +253,26 @@ fn handed_over(tokens: &[(usize, &str)], i: usize) -> bool {
     i > 0 && flag(tokens[i - 1].1)
 }
 
-/// What the segment runs once the substitutions are lifted out of it: an
-/// assignment holds the value, a program is handed it, and a printer puts it on
-/// screen. A substitution standing on its own as the command runs the file's
-/// contents, which prints whatever fails.
-fn prints_its_arguments(segment: &str, spans: &[std::ops::Range<usize>]) -> bool {
-    let mut outer = String::with_capacity(segment.len());
+/// The stage with its substitutions lifted out, which is what the shell runs with
+/// their output in hand.
+fn outside_substitutions(stage: &str, spans: &[std::ops::Range<usize>]) -> String {
+    let mut outer = String::with_capacity(stage.len());
     let mut at = 0;
     for span in spans {
-        outer.push_str(&segment[at..span.start]);
+        outer.push_str(&stage[at..span.start]);
         at = span.end;
     }
-    outer.push_str(&segment[at..]);
+    outer.push_str(&stage[at..]);
+    outer
+}
 
-    match shell::program(&outer) {
+/// What becomes of a value a substitution read: an assignment holds it, a program
+/// is handed it, and a printer puts it on screen. A substitution standing on its
+/// own as the command runs the file's contents, which prints whatever fails.
+fn prints_its_arguments(outer: &str) -> bool {
+    match shell::program(outer) {
         Some(program) => PRINTERS.contains(&program),
-        None => !is_assignment(&outer),
+        None => !is_assignment(outer),
     }
 }
 
@@ -536,6 +547,9 @@ mod tests {
             "rg -n \"\\$SECRET_TOKEN\" .",
             "grep -rn 'id_[a-z]*' notes.md",
             "rg -e 'password|*' -n src",
+            // A printer opens nothing, so its own words are text, not files.
+            "printf '%s\\n' 'rg -n password|secret|\\*\\*\\* src/'",
+            "echo ~/.ssh/id_rsa",
             "rg --regexp='secrets/*' src",
             "git log --format=%s -- config/id_rsa*",
             "cat notes.md",
