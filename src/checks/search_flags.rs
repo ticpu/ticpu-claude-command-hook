@@ -27,6 +27,131 @@ const GREP_VALUE_FLAGS: &[u8] = b"ABCDdefm";
 const PREFIX_SHORTS: &[u8] = b"nbH";
 const PREFIX_LONGS: [&str; 4] = ["line-number", "byte-offset", "with-filename", "vimgrep"];
 
+/// Long flags taking the next word as their value, so that word is not the
+/// pattern. `--regexp` and `--file` are apart: they say where the pattern is.
+const LONG_VALUE_FLAGS: &[&str] = &[
+    "type",
+    "type-not",
+    "type-add",
+    "glob",
+    "iglob",
+    "max-count",
+    "max-depth",
+    "context",
+    "after-context",
+    "before-context",
+    "threads",
+    "sort",
+    "sortr",
+    "replace",
+    "color",
+    "colors",
+    "encoding",
+    "engine",
+    "binary-files",
+    "devices",
+    "directories",
+    "label",
+    "include",
+    "exclude",
+    "exclude-dir",
+];
+
+/// Which of a stage's whitespace-separated words hold the pattern rather than a
+/// path: an `-e`/`--regexp` value, or the first positional when no flag claimed
+/// it. A search is the one command naming a pattern where the others name a file,
+/// so a caller reading paths has to step over these — `rg 'password|secret' src/`
+/// names one path, not two. Only the words before the first positional are read,
+/// everything past it being a path.
+pub fn pattern_words(stage: &str) -> Option<Vec<usize>> {
+    let searcher = shell::command_word(stage)?;
+    let value_flags = match searcher {
+        "rg" => RG_VALUE_FLAGS,
+        _ => GREP_VALUE_FLAGS,
+    };
+    let mut args = shell::program_args(stage)?;
+    // `git grep` puts git's own options and the subcommand before the search's.
+    if shell::program(stage) != Some(searcher) {
+        let at = args
+            .iter()
+            .position(|word| *word == searcher)?;
+        args.drain(..=at);
+    }
+    let base = stage
+        .split_whitespace()
+        .count()
+        - args.len();
+    let mut patterns = Vec::new();
+    let mut claimed = false;
+    let mut flags_done = false;
+    let mut i = 0;
+    while let Some(word) = args
+        .get(i)
+        .copied()
+    {
+        i += 1;
+        if word == "--" {
+            flags_done = true;
+            continue;
+        }
+        if let Some(long) = word
+            .strip_prefix("--")
+            .filter(|_| !flags_done)
+        {
+            let glued = long.contains('=');
+            let name = long
+                .split('=')
+                .next()
+                .unwrap_or(long);
+            match name {
+                "regexp" | "file" => {
+                    claimed = true;
+                    if name == "regexp" {
+                        patterns.push(base + if glued { i - 1 } else { i });
+                    }
+                }
+                _ if LONG_VALUE_FLAGS.contains(&name) => {}
+                _ => continue,
+            }
+            if !glued {
+                i += 1;
+            }
+            continue;
+        }
+        let Some(cluster) = word
+            .strip_prefix('-')
+            .filter(|c| !c.is_empty() && !flags_done)
+        else {
+            if !claimed {
+                patterns.push(base + i - 1);
+            }
+            break;
+        };
+        for (n, c) in cluster
+            .bytes()
+            .enumerate()
+        {
+            if !c.is_ascii_alphabetic() {
+                break;
+            }
+            if value_flags.contains(&c) {
+                let glued = n + 1 < cluster.len();
+                if matches!(c, b'e' | b'f') {
+                    claimed = true;
+                    if c == b'e' {
+                        patterns.push(base + if glued { i - 1 } else { i });
+                    }
+                }
+                if !glued {
+                    i += 1;
+                }
+                break;
+            }
+        }
+    }
+    Some(patterns)
+}
+
 pub fn check(command: &str) -> Option<HookOutput> {
     for segment in shell::chain_segments(command)? {
         let stages = shell::pipeline_stages(segment)?;
@@ -135,7 +260,30 @@ impl Flags {
 
 #[cfg(test)]
 mod tests {
-    use super::check;
+    use super::{check, pattern_words};
+
+    #[test]
+    fn the_pattern_is_told_from_the_paths() {
+        for (cmd, want) in [
+            ("rg foo src", vec![1]),
+            ("rg -n foo src", vec![2]),
+            ("rg -tyaml -n foo src", vec![3]),
+            ("rg --type yaml foo src", vec![3]),
+            ("rg -- -foo src", vec![2]),
+            ("git grep -n foo -- src", vec![3]),
+            ("sudo rg -n foo src", vec![3]),
+            // The flag says where the pattern is, so no positional is one.
+            ("rg -e foo src", vec![2]),
+            ("rg -efoo src", vec![1]),
+            ("rg --regexp=foo src", vec![1]),
+            ("rg --regexp foo src", vec![2]),
+            // A pattern file is a path, and it leaves no positional pattern.
+            ("rg -f pats.txt src", vec![]),
+            ("rg --file pats.txt src", vec![]),
+        ] {
+            assert_eq!(pattern_words(cmd), Some(want), "{cmd}");
+        }
+    }
 
     fn denied(command: &str) -> bool {
         check(command).is_some()

@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use crate::checks::git_bypass::location::resolve;
-use crate::checks::{marker, shell};
+use crate::checks::{marker, search_flags, shell};
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
@@ -71,6 +71,17 @@ const PRINTERS: &[&str] = &["echo", "printf", "print"];
 const OPENS_NOTHING: &[&str] = &[
     "ls", "stat", "test", "[", "chmod", "chown", "chgrp", "touch", "rm", "mkdir", "realpath",
     "dirname", "basename",
+];
+
+/// What turns `git log` into a printer of the file it names.
+const PATCH_FLAGS: &[&str] = &[
+    "-p",
+    "-u",
+    "--patch",
+    "-c",
+    "--cc",
+    "--patch-with-stat",
+    "--patch-with-raw",
 ];
 
 /// Flags whose value is a key the program opens for itself.
@@ -153,12 +164,23 @@ fn printed_path(command: &str, cwd: &str) -> Option<String> {
 }
 
 fn leaked_by(segment: &str, cwd: &str) -> Option<String> {
-    let spans = shell::substitution_spans(segment).unwrap_or_default();
-    if shell::program(segment).is_some_and(|program| OPENS_NOTHING.contains(&program)) {
+    shell::pipeline_stages(segment)
+        .unwrap_or_else(|| vec![segment])
+        .iter()
+        .find_map(|stage| leaked_by_stage(stage, cwd))
+}
+
+fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
+    let spans = shell::substitution_spans(stage).unwrap_or_default();
+    if opens_nothing(stage) {
         return None;
     }
+    let patterns = shell::is_searcher(stage)
+        .then(|| search_flags::pattern_words(stage))
+        .flatten()
+        .unwrap_or_default();
     let mut captured = None;
-    let all = tokens(segment);
+    let all = tokens(stage);
     for (i, (at, token)) in all
         .iter()
         .enumerate()
@@ -166,7 +188,7 @@ fn leaked_by(segment: &str, cwd: &str) -> Option<String> {
         let Some(path) = secret_path(token, cwd) else {
             continue;
         };
-        if handed_over(&all, i) {
+        if handed_over(&all, i) || patterns.contains(&i) {
             continue;
         }
         if !spans
@@ -178,7 +200,31 @@ fn leaked_by(segment: &str, cwd: &str) -> Option<String> {
         captured.get_or_insert(path);
     }
     let captured = captured?;
-    prints_its_arguments(segment, &spans).then_some(captured)
+    prints_its_arguments(stage, &spans).then_some(captured)
+}
+
+/// The stage names a path without opening it. `git log` reports commits rather
+/// than contents, so it belongs here until a flag asks for the patch.
+fn opens_nothing(stage: &str) -> bool {
+    match shell::program(stage) {
+        Some("git") => {
+            shell::command_word(stage) == Some("log")
+                && shell::program_args(stage).is_some_and(|args| {
+                    !args
+                        .iter()
+                        .any(|arg| prints_a_patch(arg))
+                })
+        }
+        Some(program) => OPENS_NOTHING.contains(&program),
+        None => false,
+    }
+}
+
+fn prints_a_patch(arg: &str) -> bool {
+    PATCH_FLAGS.contains(&arg)
+        || arg.starts_with("-U")
+        || arg.starts_with("-L")
+        || arg.starts_with("--unified")
 }
 
 /// The path is the value of a flag naming a key for the program to open itself —
@@ -444,6 +490,12 @@ mod tests {
             "sed -n 's/.*uri: //p' fsa-secrets.yaml | head -1",
             "echo \"$(cat fsa-secrets.yaml)\"",
             "cat fsa-secrets.yaml > /dev/shm/x",
+            // Only the pattern is exempt; the paths after it are still read.
+            "rg -n 'uri' ~/.ssh/id_rsa",
+            "rg -e 'uri' -n ~/.ssh/id_rsa",
+            "rg -f patterns.txt ~/.ssh/id_rsa",
+            "git log -p -- ~/.ssh/id_rsa",
+            "git log -L 1,5:$HOME/.ssh/id_rsa",
             "psql <<EOF\nselect 1;\nEOF\ncat fsa-secrets.yaml",
         ] {
             assert!(denies(command), "should deny: {command}");
@@ -479,6 +531,13 @@ mod tests {
             "cat .env.example",
             "cat pkg/fsa/etc/fsa/secrets.yaml.sample",
             "git log --oneline -8 -- data/secrets.eyaml",
+            // The pattern is the one argument a search does not open.
+            "rg -n 'password|secret|\\*\\*\\*' src/display.rs",
+            "rg -n \"\\$SECRET_TOKEN\" .",
+            "grep -rn 'id_[a-z]*' notes.md",
+            "rg -e 'password|*' -n src",
+            "rg --regexp='secrets/*' src",
+            "git log --format=%s -- config/id_rsa*",
             "cat notes.md",
             "git commit -m 'fix: read the secret from the env'",
         ] {

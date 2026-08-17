@@ -234,6 +234,9 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("cat src/checks/secret_paths.rs", Pass),
     ("cat $HOME/.config/fsa-secrets.yaml.sample", Pass),
     ("cat $HOME/puppet/data/secrets.eyaml", Pass),
+    // A search's pattern is not a path, and `git log` prints commits.
+    ("git log --oneline -8 -- $HOME/.ssh/id_rsa", Allow),
+    ("git log -p -- $HOME/.ssh/id_rsa", Deny),
 ];
 
 /// Judged from a subdirectory of this repo, which `CASES` cannot express: a
