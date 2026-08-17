@@ -83,12 +83,22 @@ Whole first: where is the person who needs this standing when they need it? Some
 write one of these opens an existing one and reads it, and never reaches this file on the way. \
 If what the passage says is stated at that site, or would be read there anyway, it is \
 restatement and the section goes entire — trimming cannot save a section that belongs somewhere \
-else.
+else. Then name what here already owns the decision: a section that holds it, or a shared way of \
+doing this the rest of the code follows. Where a section does, the passage is at most a clause \
+inside it; where the draft describes its own way of doing what a convention here already does, \
+the decision is to use the convention, and using it records nothing.
+
+Then paragraph by paragraph, where the count is the tell: a section is the size of its decision, \
+not of the change that carried it. A paragraph stating what the one before it already entails, \
+or walking through how the thing works, is filler however true it is — fold whatever it decides \
+into the paragraph that owns it, and cut the rest.
 
 Then sentence by sentence: would a competent engineer holding this repo already know it, and \
-what later change could violate it? A correction the code already carries is not such a change — \
-if nothing downstream has to keep honouring it, its commit settled it and the sentence goes. Cut \
-what fails either. A section that survives is usually a third of what was drafted.
+what later change could violate it? Take this project's nouns out of the sentence; if what is \
+left is a true statement about a language, a tool or a platform, it belongs to that manual. A \
+correction the code already carries is not such a change — if nothing downstream has to keep \
+honouring it, its commit settled it and the sentence goes. Cut what fails any of these. A \
+section that survives is usually a third of what was drafted.
 
 Then re-issue the edit — unchanged if the audit changed nothing, and say what you cut if it did. \
 This is asked once per draft, so the re-issue goes through to the reviewers behind it. It is not \
@@ -143,6 +153,88 @@ mod tests {
         assert!(shown.ends_with('…'), "{shown}");
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The ask reaches its writer only by refusing: an edit prompted rather than
+    /// refused renders its diff to the user, and the pass nobody was asked for is the
+    /// one that would have cut the passage. The instruction travels on the decision,
+    /// where the writer reads it; the draft travels beside it, the writer holding its
+    /// own already.
+    #[test]
+    fn the_ask_refuses_and_carries_the_passes_to_make() {
+        let dir = scratch("audit-decision");
+        let draft = "## A decision\n\nOne sentence, and the audit it has not had yet.\n";
+
+        let decision = decide(&dir, draft)
+            .expect("asked")
+            .hook_specific_output
+            .expect("a decision");
+        assert_eq!(
+            decision
+                .permission_decision
+                .as_deref(),
+            Some("deny")
+        );
+        let reason = decision
+            .permission_decision_reason
+            .expect("a deny carries a reason");
+        assert!(!reason.contains(draft), "{reason}");
+        assert!(reason.contains("re-issue"), "{reason}");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Each pass is here because a draft cleared the ones before it: a passage that
+    /// belonged at the call site it described, a decision a convention in the repo
+    /// already settled, and a consequence that took a paragraph of its own.
+    #[test]
+    fn the_ask_makes_every_pass() {
+        for pass in [
+            "Whole first",
+            "already owns the decision",
+            "paragraph by paragraph",
+            "sentence by sentence",
+        ] {
+            assert!(ASK.contains(pass), "{pass}");
+        }
+    }
+
+    /// One marker per draft, so a draft written while another is in flight neither
+    /// spends its audit nor is spent by it.
+    #[test]
+    fn two_drafts_in_flight_keep_their_own_audits() {
+        let dir = scratch("audit-interleaved");
+        let first = "## A decision\n\nThe reader takes the length prefix before it reserves.\n";
+        let second = "## Another\n\nThe writer holds the lock across the flush, never past it.\n";
+
+        assert!(decide(&dir, first).is_some());
+        assert!(decide(&dir, second).is_some());
+        assert!(decide(&dir, first).is_none(), "the first was audited");
+        assert!(decide(&dir, second).is_none(), "so was the second");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A marker that cannot be written leaves the draft unrecorded, and the next issue
+    /// of it is asked again rather than waved through: a repeated ask costs a round
+    /// trip, a skipped one costs the pass this gate exists to force.
+    #[test]
+    fn a_marker_that_cannot_be_written_asks_again() {
+        let dir = scratch("audit-unwritable");
+        fs::create_dir_all(
+            dir.parent()
+                .expect("under the scratch root"),
+        )
+        .expect("scratch root");
+        // A file where the marker directory would go: neither the stat nor the write
+        // beneath it can succeed.
+        fs::write(&dir, "").expect("the blocking file");
+
+        let draft = "## A decision\n\nAsked once, and once more for want of a marker.\n";
+        assert!(decide(&dir, draft).is_some());
+        assert!(decide(&dir, draft).is_some(), "asked again");
+
+        let _ = fs::remove_file(&dir);
     }
 
     /// The document is hard-wrapped, so a re-issue that only rewrapped the passage is
