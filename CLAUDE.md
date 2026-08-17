@@ -35,7 +35,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   program passes and a printer among the outer tokens does not. What that program then does with
   the value is beyond this — which is also why a path given as the value of a key flag (`ssh -i`,
   a client's `--sslkey`) is not a print, nor is one named by a command that opens nothing (a mode
-  change, a `stat`, a `test`). A name matches on the basename (a word saying what it holds, a known
+  change, a `stat`, a `test`, a `git log` carrying no patch flag). A search's pattern is exempt
+  wherever it sits — `search_flags::pattern_words` tells it from the paths, since a pattern is the
+  one argument a command names and does not open, and `rg 'password|secret' src/` was refused for
+  quoting the word it looks for. A name matches on the basename (a word saying what it holds, a known
   credential dotfile, an `id_` key without `.pub`, a key or keystore extension) or on a directory
   component whose contents are credentials whatever the file inside is called; a source or prose
   extension exempts the *wording* rule alone, so `read_secret_management.rs` reads normally, and
@@ -43,9 +46,8 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   a ciphertext extension (`.eyaml`, `.gpg`) exempt the name rules whole rather than the wording
   alone, the values being removed or encrypted before either file is committed — the directory
   rule still standing over both, so a `.gpg` under `.password-store` is refused. A name that
-  resolves has to exist before it counts — otherwise
-  `rg 'aws/credentials' .` refuses the search that quotes its own pattern — while a glob or a
-  variable, having nothing to stat, is judged on its wording. `Read` and `Grep` are matched on
+  resolves has to exist before it counts — a bare word naming no file here is a word, not a path —
+  while a glob or a variable, having nothing to stat, is judged on its wording. `Read` and `Grep` are matched on
   the path they name by the same rules; `Edit`/`Write` are not, a write printing nothing. A
   command `shell` cannot split is judged whole rather than waved through: this is the one check
   with no allow to withhold, so being wrong costs a prompt. A name that reads like a credential
