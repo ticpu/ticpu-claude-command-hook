@@ -51,7 +51,7 @@ const SECRET_DIRS: &[&str] = &[
 /// credentials is not one.
 const PROSE_EXTENSIONS: &[&str] = &[
     ".rs", ".py", ".go", ".ts", ".tsx", ".js", ".jsx", ".c", ".h", ".cc", ".cpp", ".hpp", ".java",
-    ".rb", ".php", ".pl", ".sh", ".nix", ".md", ".rst", ".adoc",
+    ".rb", ".php", ".pl", ".sh", ".nix", ".md", ".rst", ".adoc", ".txt",
 ];
 
 /// A dot-separated word marking the file as a stand-in shipped with the values
@@ -530,6 +530,7 @@ mod tests {
             "server.sample.pem",
             "secrets.eyaml",
             "credentials.gpg",
+            "secrets.txt",
             "secret_paths.rs",
             "secrets.md",
             "keyring.go",
