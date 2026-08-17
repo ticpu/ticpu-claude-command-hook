@@ -39,7 +39,11 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   credential dotfile, an `id_` key without `.pub`, a key or keystore extension) or on a directory
   component whose contents are credentials whatever the file inside is called; a source or prose
   extension exempts the *wording* rule alone, so `read_secret_management.rs` reads normally, and
-  a directory keeps its meaning. A name that resolves has to exist before it counts — otherwise
+  a directory keeps its meaning. A template word anywhere in the name (`secrets.yaml.sample`) and
+  a ciphertext extension (`.eyaml`, `.gpg`) exempt the name rules whole rather than the wording
+  alone, the values being removed or encrypted before either file is committed — the directory
+  rule still standing over both, so a `.gpg` under `.password-store` is refused. A name that
+  resolves has to exist before it counts — otherwise
   `rg 'aws/credentials' .` refuses the search that quotes its own pattern — while a glob or a
   variable, having nothing to stat, is judged on its wording. `Read` and `Grep` are matched on
   the path they name by the same rules; `Edit`/`Write` are not, a write printing nothing. A

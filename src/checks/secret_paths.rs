@@ -54,8 +54,13 @@ const PROSE_EXTENSIONS: &[&str] = &[
     ".rb", ".php", ".pl", ".sh", ".nix", ".md", ".rst", ".adoc",
 ];
 
-/// `.env.example` and its siblings ship in the repo with the values removed.
-const ENV_TEMPLATES: &[&str] = &["example", "sample", "template", "dist"];
+/// A dot-separated word marking the file as a stand-in shipped with the values
+/// taken out, wherever it sits in the name: `secrets.yaml.sample`, `.env.example`.
+const TEMPLATE_WORDS: &[&str] = &["example", "sample", "template", "dist"];
+
+/// Extensions saying the values inside are ciphertext, so reading one spends
+/// nothing.
+const CIPHERTEXT_EXTENSIONS: &[&str] = &[".eyaml", ".gpg", ".age", ".enc"];
 
 /// Programs that put an argument on screen. Everything else is assumed to use the
 /// value it was handed — what it then does with it is beyond this check.
@@ -331,6 +336,9 @@ fn in_secret_dir(path: &str) -> bool {
 }
 
 fn is_secret_name(name: &str) -> bool {
+    if is_template(name) || is_ciphertext(name) {
+        return false;
+    }
     if KEY_EXTENSIONS
         .iter()
         .any(|ext| name.ends_with(ext))
@@ -355,14 +363,21 @@ fn is_prose(name: &str) -> bool {
         || name.ends_with(".pub")
 }
 
+fn is_template(name: &str) -> bool {
+    name.split('.')
+        .any(|part| TEMPLATE_WORDS.contains(&part))
+}
+
+fn is_ciphertext(name: &str) -> bool {
+    CIPHERTEXT_EXTENSIONS
+        .iter()
+        .any(|ext| name.ends_with(ext))
+}
+
+/// `.envrc` is direnv's script, not an environment file.
 fn is_env_file(name: &str) -> bool {
-    let Some(rest) = name.strip_prefix(".env") else {
-        return false;
-    };
-    match rest.strip_prefix('.') {
-        None => rest.is_empty(),
-        Some(suffix) => !ENV_TEMPLATES.contains(&suffix),
-    }
+    name.strip_prefix(".env")
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('.'))
 }
 
 fn command_reason(path: &str) -> String {
@@ -462,6 +477,8 @@ mod tests {
             "rg -n secrets src/",
             "rg -rn 'aws/credentials' notes.md",
             "cat .env.example",
+            "cat pkg/fsa/etc/fsa/secrets.yaml.sample",
+            "git log --oneline -8 -- data/secrets.eyaml",
             "cat notes.md",
             "git commit -m 'fix: read the secret from the env'",
         ] {
@@ -507,6 +524,12 @@ mod tests {
         for name in [
             "id_ed25519.pub",
             ".env.example",
+            ".envrc",
+            "secrets.yaml.sample",
+            "secrets.sample.yaml",
+            "server.sample.pem",
+            "secrets.eyaml",
+            "credentials.gpg",
             "secret_paths.rs",
             "secrets.md",
             "keyring.go",

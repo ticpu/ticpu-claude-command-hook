@@ -232,6 +232,8 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Pass,
     ),
     ("cat src/checks/secret_paths.rs", Pass),
+    ("cat $HOME/.config/fsa-secrets.yaml.sample", Pass),
+    ("cat $HOME/puppet/data/secrets.eyaml", Pass),
 ];
 
 /// Judged from a subdirectory of this repo, which `CASES` cannot express: a
