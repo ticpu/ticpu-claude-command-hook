@@ -8,6 +8,7 @@ mod judge;
 mod mechanical;
 mod ollama;
 mod overlap;
+pub mod shell_write;
 #[cfg(test)]
 mod tests;
 
