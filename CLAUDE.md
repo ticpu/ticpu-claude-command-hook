@@ -266,6 +266,15 @@ user's tools. Checks never silence their own IO errors — they log and allow.
 `command grep` is the documented opt-out from both: `shell::WRAPPERS` deliberately omits
 `command`, so it never classifies as a search.
 
+Every check that can *allow* is gathered behind one gate in `dispatch`: a command carrying a
+`$( )` or a backtick gets no allow from any of them, and neither does one `shell` cannot scan.
+The substitution runs before the program the check classified, so `git log`, `cargo test` or
+`glab mr view` in front of it vouches for nothing — each of those checks read the verb and
+allowed the call while `$(curl … | sh)` sat in its arguments. Telling an inert `$(pwd)` from a
+live one is the classification these checks exist to avoid needing, so the whole shape is
+refused and the fold is forfeited with it. Only checks that emit a *deny* look inside a
+substitution, `secret_paths` by lifting it out.
+
 `src/checks/shell.rs` is the only shell parser — one mask feeds chain splitting, pipeline
 splitting, redirect detection and unquoting. It marks the bytes outside quotes *and* outside
 command substitutions, so `grep -rn foo $(pwd) 2>/dev/null` still reads as a search with a

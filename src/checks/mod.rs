@@ -41,11 +41,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| search_flags::check(cmd))
                 // Last, in order: an allow ends the chain, so every objection gets
                 // first say — and a `git grep` still reaches the fold.
-                .or_else(|| grep_fold::check(input))
-                .or_else(|| git_bypass::allow_safe(input))
-                .or_else(|| glab_read_only::allow(cmd))
-                .or_else(|| cargo_tools::allow(cmd))
-                .or_else(|| lone_echo::allow(cmd))
+                .or_else(|| allows(input))
         }
         // Both hand file contents back as a tool result. Edit and Write do not, so
         // they are not asked here.
@@ -63,4 +59,21 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
         }
         _ => None,
     }
+}
+
+/// The checks that can end the permission decision outright. A command substitution
+/// bars all of them: it runs before the program the check classified, so a `git log`
+/// or a `cargo test` vouches for nothing once `$( )` is in its arguments. The
+/// substitution is refused as a whole — telling an inert `$(pwd)` from a `$(curl | sh)`
+/// is the classification the check itself was written to avoid needing.
+fn allows(input: &HookInput) -> Option<HookOutput> {
+    let cmd = input.command();
+    if shell::has_substitution(cmd) {
+        return None;
+    }
+    grep_fold::check(input)
+        .or_else(|| git_bypass::allow_safe(input))
+        .or_else(|| glab_read_only::allow(cmd))
+        .or_else(|| cargo_tools::allow(cmd))
+        .or_else(|| lone_echo::allow(cmd))
 }
