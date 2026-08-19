@@ -224,6 +224,17 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   name alone made a `test -e` prompt with a confirmation claiming it granted a waiver, and a
   confirmation that misdescribes itself is worse than none. The countable rules are outside the
   waiver, having nothing to overrule. `MultiEdit` is not matched: Claude Code no longer emits it.
+  `shell_write` closes the route around all of it: every gate above hangs off the tool, so a
+  `Bash` command rewriting the same document was judged by nobody, and an `awk`/`mv` round trip
+  landed three sections unread. It denies the document as a redirect target, or named by a
+  program that rewrites what it names — the mutator list is a blacklist, unlike the allows'
+  fail-safe whitelists, because the cost of the two errors is reversed here: a miss is an unread
+  section and a false positive refuses a read of a file that has to stay readable. So a searcher,
+  a pager and a checksum are absent, `sed`/`awk` count only in place, `cp` counts on its
+  destination alone, and of git's verbs only those that replace a working-tree file — a commit
+  message naming the document is not a write of it, which is most of what the shell says about
+  this file. A heredoc leaves no stages, so the text is judged whole rather than waved through:
+  its marker line carries the redirect and an interpreter's body is a program that can write.
 - `blind_edit` — denies an interpreter heredoc whose body reads a file whole, substitutes into
   the result, and writes it back: the substitution is unverified, so one that matches nothing
   rewrites nothing and reports nothing, leaving a file that looks edited. The Edit tool is the
@@ -265,6 +276,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
 
 `command grep` is the documented opt-out from both: `shell::WRAPPERS` deliberately omits
 `command`, so it never classifies as a search.
+
+Four of the denies above are overruled by a one-shot waiver, all over `marker.rs`.
+`docs/waivers.md` lists them with the command that creates each — it is written for the user
+running one by hand, so a new waiver goes in it as well as in its check.
 
 Every check that can *allow* is gathered behind one gate in `dispatch`: a command carrying a
 `$( )` or a backtick gets no allow from any of them, and neither does one `shell` cannot scan.
