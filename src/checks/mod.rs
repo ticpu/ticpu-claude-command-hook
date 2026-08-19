@@ -4,6 +4,7 @@ mod design_rationale;
 mod git_bypass;
 mod glab_skill;
 mod grep_fold;
+mod lone_echo;
 mod marker;
 mod remote_session;
 mod search_flags;
@@ -40,6 +41,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 // first say — and a `git grep` still reaches the fold.
                 .or_else(|| grep_fold::check(input))
                 .or_else(|| git_bypass::allow_safe(input))
+                .or_else(|| lone_echo::allow(cmd))
         }
         // Both hand file contents back as a tool result. Edit and Write do not, so
         // they are not asked here.

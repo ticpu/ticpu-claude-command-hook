@@ -136,9 +136,7 @@ pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
         .cwd
         .clone();
     for segment in segments {
-        // A `2>` is not a stdout redirect, but it still truncates whatever path it
-        // names — an allow must not cover that.
-        if redirects_anything(segment) {
+        if shell::redirects_anything(segment) {
             return None;
         }
         if let Some(target) = shell::bare_cd_target(segment) {
@@ -159,14 +157,6 @@ pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
     // A `cd` earns the allow on its own: the working directory persists between Bash
     // calls, so moving it is the work, and nothing else is left behind.
     (git_seen || cd_seen).then(|| HookOutput::allow("PreToolUse", ALLOW_SAFE))
-}
-
-/// Any redirect at all. `redirects_stdout` deliberately lets `2>` through — for
-/// the fold that is right, since gf still sees stdout — but here the question is
-/// whether the command can touch a file, and `2>file` truncates it.
-fn redirects_anything(segment: &str) -> bool {
-    shell::redirects_stdout(segment)
-        || shell::unquoted(segment).is_none_or(|bare| bare.contains('>'))
 }
 
 /// `flags` is the part of the command git reads options from; `full` carries the

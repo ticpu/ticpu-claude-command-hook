@@ -180,6 +180,11 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // The working directory persists between calls, so moving it is the work.
     ("cd /x", Allow),
     ("cd /x && cargo test", Pass),
+    // An `echo` prints its own words and nothing else — unless a substitution runs
+    // a command first, which the allow must not cover here or as company.
+    ("echo \"EXIT=$?\"", Allow),
+    ("echo \"$(cargo --version)\"", Pass),
+    ("git status; echo \"$(id)\"", Pass),
     // The allow must not cover a second command riding on the same decision.
     ("git -C /x status; rm -rf /y", Pass),
     // A remote/database client shares its approval with whatever it is chained to.
