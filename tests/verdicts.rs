@@ -110,7 +110,9 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // `command grep` is the opt-out, even chained or with stderr dropped.
     ("ls -ld /x; command grep -c foo /y", Pass),
     ("command grep -rn foo src 2>/dev/null", Pass),
-    ("cargo test 2>&1 | grep -E '^test result'", Pass),
+    // Not a search: the grep filters cargo's output, so no fold — and the build is
+    // one the hook vouches for, so the whole pipeline carries an allow.
+    ("cargo test 2>&1 | grep -E '^test result'", Allow),
     ("for f in *.rs; do grep -n foo \"$f\"; done", Pass),
     ("grep -rl foo . | xargs sed -i s/a/b/", Pass),
     ("git commit -m 'fix the grep call'", Pass),
@@ -179,12 +181,23 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("git show HEAD:a.c | sed -i '1d'", Pass),
     // The working directory persists between calls, so moving it is the work.
     ("cd /x", Allow),
-    ("cd /x && cargo test", Pass),
+    ("cd /x && ./deploy.sh", Pass),
     // An `echo` prints its own words and nothing else — unless a substitution runs
     // a command first, which the allow must not cover here or as company.
     ("echo \"EXIT=$?\"", Allow),
     ("echo \"$(cargo --version)\"", Pass),
     ("git status; echo \"$(id)\"", Pass),
+    // A status label carrying `${PIPESTATUS[0]}` is a variable with an array
+    // subscript, which no prefix rule can match; the allow answers the whole call.
+    (
+        "cd /x && cargo test --no-run --offline --message-format=short 2>&1 | \
+         grep -E 'error' | head -5; echo \"=== exit ${PIPESTATUS[0]} ===\"",
+        Allow,
+    ),
+    ("cargo run --example x | head", Pass),
+    // No glab row belongs here: the session gate answers the first call of the run,
+    // so a verdict would depend on whether the marker exists. `glab_read_only`'s own
+    // tests call it directly, past the gate.
     // The allow must not cover a second command riding on the same decision.
     ("git -C /x status; rm -rf /y", Pass),
     // A remote/database client shares its approval with whatever it is chained to.

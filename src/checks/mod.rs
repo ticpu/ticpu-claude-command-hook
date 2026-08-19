@@ -1,7 +1,9 @@
 mod blind_edit;
 mod broad_find;
+mod cargo_tools;
 mod design_rationale;
 mod git_bypass;
+mod glab_read_only;
 mod glab_skill;
 mod grep_fold;
 mod lone_echo;
@@ -41,6 +43,8 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 // first say — and a `git grep` still reaches the fold.
                 .or_else(|| grep_fold::check(input))
                 .or_else(|| git_bypass::allow_safe(input))
+                .or_else(|| glab_read_only::allow(cmd))
+                .or_else(|| cargo_tools::allow(cmd))
                 .or_else(|| lone_echo::allow(cmd))
         }
         // Both hand file contents back as a tool result. Edit and Write do not, so
