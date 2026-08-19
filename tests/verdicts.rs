@@ -49,6 +49,26 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Ask,
     ),
     (
+        "touch \"$XDG_RUNTIME_DIR/claude-hooks/design-rationale-shell-write\"",
+        Ask,
+    ),
+    // The reviews hang off Edit and Write, so a shell write of the same document
+    // reaches no reviewer at all.
+    (
+        "awk 'NR==FNR{next}1' new.md docs/design-rationale.md > dr.md && mv dr.md docs/design-rationale.md",
+        Deny,
+    ),
+    (
+        "cat >> docs/design-rationale.md <<'EOF'\n## A section\nEOF",
+        Deny,
+    ),
+    ("sed -i '1d' docs/design-rationale.md", Deny),
+    ("cat docs/design-rationale.md", Pass),
+    (
+        "git commit -m \"docs: fold the retry note into design-rationale.md\"",
+        Pass,
+    ),
+    (
         "grep -rn \"enum C911pVariable\" -A 60 /x/variables.rs | head -80; ls /x/",
         Fold("grep -rn \"enum C911pVariable\" -A 60 /x/variables.rs | {gf} | head -80 ; ls /x/"),
     ),
