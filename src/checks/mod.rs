@@ -32,6 +32,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| secret_paths::check(input))
                 .or_else(|| glab_skill::check(input))
                 .or_else(|| design_rationale::bypass::requested(cmd))
+                .or_else(|| design_rationale::disabled::requested(cmd))
                 .or_else(|| design_rationale::shell_write::waiver_requested(cmd))
                 .or_else(|| design_rationale::shell_write::check(cmd))
                 .or_else(|| blind_edit::waiver_requested(cmd))

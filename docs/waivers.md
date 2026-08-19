@@ -1,7 +1,7 @@
 # Waivers
 
 Four checks refuse rather than prompt, and each names a one-shot waiver that overrules
-it. A waiver is a file you approve into existence; the binary deletes it as it reads it,
+it. One further marker, at the end, is a standing switch rather than a waiver. A waiver is a file you approve into existence; the binary deletes it as it reads it,
 before the decision it overrules, so a failed delete cannot leave a standing pass behind.
 
 They all live in one directory, made once per boot:
@@ -67,6 +67,25 @@ touch "$XDG_RUNTIME_DIR/claude-hooks/transcript-read-waiver"
 
 Spent by the next refusal. Approve only if that path holds nothing secret on this box —
 the contents go into the transcript either way.
+
+## `design-rationale-gate-off` — a switch, not a waiver
+
+Turns the whole `Edit`/`Write` gate on `design-rationale.md` off: the countable rules and
+both judged reviews. For rewriting the file section by section, where a round trip per
+draft is the cost and not the point.
+
+```sh
+touch "$XDG_RUNTIME_DIR/claude-hooks/design-rationale-gate-off"
+rm "$XDG_RUNTIME_DIR/claude-hooks/design-rationale-gate-off"
+```
+
+Not spent on use — it stands until you remove it, or until logout empties the directory.
+Every edit made under it still prompts, saying the gate is off and how to restore it, and
+the model is told afterwards that nothing read what it wrote. Creating it is prompted;
+removing it is not.
+
+A shell write of the document is still refused while this is on: `Edit` remains the route,
+it is just unreviewed.
 
 ## Other files in that directory
 
