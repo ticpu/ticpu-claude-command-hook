@@ -315,6 +315,14 @@ fn unquoted_mask(s: &str) -> Option<Vec<bool>> {
     Some(scan(s)?.outside)
 }
 
+/// Whether a command runs anything through `$( )` or backticks — including a command
+/// that cannot be scanned at all, which has to count as one. What a substitution runs
+/// is decided before the surrounding program is reached and is not judged by anything
+/// that reads the surrounding program, so no allow may cover a command carrying one.
+pub fn has_substitution(command: &str) -> bool {
+    substitution_spans(command).is_none_or(|spans| !spans.is_empty())
+}
+
 /// Every outermost `$( )` or backtick span, markers included, so a caller can lift
 /// one out of the text around it and read what is left.
 pub fn substitution_spans(s: &str) -> Option<Vec<Range<usize>>> {
