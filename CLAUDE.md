@@ -117,6 +117,28 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or
   verb prompts, as does an option that writes a file or runs a program (`--output=`, `-O`) and
   any `-c`, which can point config at a program under a read-only verb.
+- `glab_read_only` — allows a glab invocation that only reads, with the usual do-nothing
+  segments around it and display-only consumers. glab is judged here rather than by a
+  `settings.json` prefix rule because `api` is one prefix covering both directions: the method
+  lives in the flags (`-X`, `--method`, a body flag), so only argument inspection separates
+  `glab api projects/:id` from the same path with `-X DELETE`. Everything else is a verb *pair*,
+  since glab's writes sit at the same depth as its reads (`mr merge` beside `mr view`) and a
+  bare `glab mr` would carry both — which is also why gh, whose read verbs share no prefix with
+  a write, is left to the allowlist. A separated flag is assumed to take a value, so
+  `--repo x/y mr list` reads as `mr list`; a boolean one swallows the verb instead and the pair
+  stops matching, which costs a prompt rather than an allow. `glab_skill` still gates the first
+  call of the session — it runs earlier in `dispatch`, so its deny wins and this allow only
+  applies once the marker exists.
+- `cargo_tools` — allows a cargo build/report verb piped into display-only stages. The
+  allowlist grants those verbs too, but a prefix rule can only match text, and Claude Code
+  refuses to evaluate a command holding `${PIPESTATUS[0]}`: a subscript is arith-evaluated, so
+  `${a[$(cmd)]}` would run something. The status label after a chained build is therefore a
+  confirmation per call, and only a hook allow — which answers the whole command instead of
+  matching it — removes it. The verb list is deliberately shorter than the allowlist's: `run`
+  executes what the crate names, `add`/`update` rewrite the manifest, `clean` deletes, and none
+  of them is what a label is chained to. Widening it is a permission decision, not a parsing
+  one. A search qualifies as a consumer here and not in `grep_fold`, nothing having folded the
+  pipeline; `2>&1` is the point of the shape, so only a redirect naming a path disqualifies.
 - `lone_echo` — allows a command whose every segment is a lone `echo`. `echo "rc=$?"` after a
   chained command is the whole use of one, and an allowlist entry can only name the wording it
   was written for, so every new label cost a prompt and left an entry behind. What counts as
