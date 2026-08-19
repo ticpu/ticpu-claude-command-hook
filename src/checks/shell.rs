@@ -99,6 +99,13 @@ pub fn redirects_stdout(command: &str) -> bool {
     .is_none_or(|parts| parts.len() > 1)
 }
 
+/// Any redirect at all. `redirects_stdout` deliberately lets `2>` through — for the
+/// fold that is right, since gf still sees stdout — but an allow turns on whether the
+/// command can touch a file, and `2>file` truncates it.
+pub fn redirects_anything(segment: &str) -> bool {
+    redirects_stdout(segment) || unquoted(segment).is_none_or(|bare| bare.contains('>'))
+}
+
 /// `>>` is one operator; its second byte must not count as another redirect.
 fn preceded_by(b: &[u8], i: usize, c: u8) -> bool {
     i > 0 && b[i - 1] == c
@@ -203,9 +210,11 @@ pub fn is_searcher(stage: &str) -> bool {
 
 /// An `echo` labelling the output of the commands around it: it runs nothing and
 /// writes nothing, so it does not count as company in a chain. Only as a lone
-/// stage with no redirect — `echo x > f` writes a file and `echo x | sh` runs one.
+/// stage with no redirect — `echo x > f` writes a file and `echo x | sh` runs one —
+/// and only without a substitution, which runs whatever it names before echo sees it.
 pub fn is_lone_echo(segment: &str) -> bool {
     !redirects_stdout(segment)
+        && substitution_spans(segment).is_some_and(|spans| spans.is_empty())
         && pipeline_stages(segment)
             .is_some_and(|stages| stages.len() == 1 && command_word(segment) == Some("echo"))
 }

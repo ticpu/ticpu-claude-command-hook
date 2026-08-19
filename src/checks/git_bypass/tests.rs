@@ -184,9 +184,11 @@ fn only_side_effect_free_consumers_qualify() {
         "git show HEAD:a.c | sed -n '1e rm -rf /x'",
         // Not a consumer at all: sed reads the file itself.
         "git show HEAD:a.c | sed -n '1,5p' other.c",
-        // echo is harmless alone, not as a producer or with a redirect.
+        // echo is harmless alone, not as a producer, with a redirect, or carrying a
+        // substitution that runs before echo sees its own arguments.
         "echo pwned > /x/f && git status",
         "echo rm -rf | sh && git status",
+        "echo \"$(rm -rf /x)\" && git status",
     ] {
         assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
     }

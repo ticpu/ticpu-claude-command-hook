@@ -117,6 +117,12 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or
   verb prompts, as does an option that writes a file or runs a program (`--output=`, `-O`) and
   any `-c`, which can point config at a program under a read-only verb.
+- `lone_echo` — allows a command whose every segment is a lone `echo`. `echo "rc=$?"` after a
+  chained command is the whole use of one, and an allowlist entry can only name the wording it
+  was written for, so every new label cost a prompt and left an entry behind. What counts as
+  lone is `shell::is_lone_echo`, shared with `git_bypass` (where an echo is a neutral segment)
+  and `remote_session` (where it is not company): one stage, no redirect of any fd, and no
+  substitution — that runs before echo sees its own arguments, so `echo "$(id)"` prompts.
 - `broad_find` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
   repo parent; a find scoped to one repo under GIT is allowed.
 - `remote_session` — denies an `ssh`/`sshfs`/`psql`/`mysql`/`mariadb`/`mongosh` bundled with
