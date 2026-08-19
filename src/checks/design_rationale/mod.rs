@@ -4,6 +4,7 @@
 mod audit;
 pub mod bypass;
 mod context;
+pub mod disabled;
 mod judge;
 mod mechanical;
 mod ollama;
@@ -28,6 +29,11 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
     let path = input.file_path();
     if !is_rationale(path) {
         return None;
+    }
+    // Ahead of every gate below, including the countable rules: the switch is off or
+    // it is not, and a rule still firing under it is one the user did not turn off.
+    if disabled::active() {
+        return Some(disabled::notice());
     }
     // A file that does not exist yet reaches no gate here: every rule asking what a
     // reader of this repo already knows has nothing to check against.
@@ -177,9 +183,19 @@ const REVIEWED: &str = "The design-rationale edit you just made was reviewed at 
 prompt you were shown was the review, and approving it was the verdict. Do not present the diff \
 and ask for another review of it. Commit it and carry on.";
 
-/// The write happened; the only thing left to say is that it was already reviewed.
+/// The write happened; the only thing left to say is who read it — which under the
+/// standing switch is nobody, and saying nothing there would leave the writer with
+/// the one meaning an approved prompt on this file otherwise carries.
 pub fn post_tool_use(input: &HookInput) -> Option<HookOutput> {
-    is_rationale(input.file_path()).then(|| HookOutput::advise("PostToolUse", REVIEWED))
+    is_rationale(input.file_path()).then(|| {
+        HookOutput::advise(
+            "PostToolUse",
+            match disabled::active() {
+                true => disabled::UNREVIEWED,
+                false => REVIEWED,
+            },
+        )
+    })
 }
 
 const CLEAN: &str = "design-rationale.md — the judge raised nothing. Approve to write it, \

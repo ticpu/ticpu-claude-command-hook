@@ -224,6 +224,13 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   name alone made a `test -e` prompt with a confirmation claiming it granted a waiver, and a
   confirmation that misdescribes itself is worse than none. The countable rules are outside the
   waiver, having nothing to overrule. `MultiEdit` is not matched: Claude Code no longer emits it.
+  `disabled` is the other kind of override: a marker read rather than spent, taking the whole
+  gate off ahead of the countable rules for as long as it exists, since a session rewriting the
+  file section by section pays the round trip per draft and gets nothing for it. Not spent, so
+  its creation is prompted for a stronger reason than a waiver's — an allowlisted `touch` would
+  leave the gate off with nobody told — and every edit under it prompts saying so and names the
+  `rm`. The PostToolUse line inverts with it: the writer is otherwise told the approval was a
+  verdict, which under the switch it never was.
   `shell_write` closes the route around all of it: every gate above hangs off the tool, so a
   `Bash` command rewriting the same document was judged by nobody, and an `awk`/`mv` round trip
   landed three sections unread. It denies the document as a redirect target, or named by a
@@ -277,9 +284,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
 `command grep` is the documented opt-out from both: `shell::WRAPPERS` deliberately omits
 `command`, so it never classifies as a search.
 
-Four of the denies above are overruled by a one-shot waiver, all over `marker.rs`.
-`docs/waivers.md` lists them with the command that creates each — it is written for the user
-running one by hand, so a new waiver goes in it as well as in its check.
+Four of the denies above are overruled by a one-shot waiver, and `disabled` is a standing
+switch over the same `marker.rs`. `docs/waivers.md` lists them with the command that creates
+each — it is written for the user running one by hand, so a new marker goes in it as well as
+in its check.
 
 Every check that can *allow* is gathered behind one gate in `dispatch`: a command carrying a
 `$( )` or a backtick gets no allow from any of them, and neither does one `shell` cannot scan.

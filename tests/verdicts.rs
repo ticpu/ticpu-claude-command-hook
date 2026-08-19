@@ -52,6 +52,16 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "touch \"$XDG_RUNTIME_DIR/claude-hooks/design-rationale-shell-write\"",
         Ask,
     ),
+    // Not a waiver — it stands until removed — so its creation is prompted for the
+    // same reason and its removal is not.
+    (
+        "touch \"$XDG_RUNTIME_DIR/claude-hooks/design-rationale-gate-off\"",
+        Ask,
+    ),
+    (
+        "rm \"$XDG_RUNTIME_DIR/claude-hooks/design-rationale-gate-off\"",
+        Pass,
+    ),
     // The reviews hang off Edit and Write, so a shell write of the same document
     // reaches no reviewer at all.
     (

@@ -56,6 +56,12 @@ fn path(name: &str) -> Option<PathBuf> {
     )
 }
 
+/// True while the marker exists, leaving it there. The other half of `spend`: a
+/// standing switch is read on every decision it governs, a waiver on one.
+pub fn present(name: &str) -> bool {
+    path(name).is_some_and(|marker| marker.exists())
+}
+
 /// True once per file created. Spending it before the decision it overrules means
 /// a failure to delete cannot leave a standing waiver behind.
 pub fn spend(name: &str) -> bool {
@@ -76,10 +82,16 @@ pub fn spend(name: &str) -> bool {
     }
 }
 
+/// The marker as the user would type it, for a message that has to name the file
+/// rather than describe where it lives.
+pub fn location(name: &str) -> String {
+    format!("\"$XDG_RUNTIME_DIR/claude-hooks/{name}\"")
+}
+
 /// The command to hand back, so a refusal can name what to run rather than
 /// describe it. The directory is shared with every other marker this binary keeps
 /// and is made once per box, so creating it here would be noise on every objection
 /// but the first — and a `touch` that fails for want of it says so.
 pub fn command(name: &str) -> String {
-    format!("touch \"$XDG_RUNTIME_DIR/claude-hooks/{name}\"")
+    format!("touch {}", location(name))
 }
