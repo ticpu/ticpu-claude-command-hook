@@ -69,7 +69,7 @@ pub fn git_producer(segment: &str) -> Option<&str> {
 /// display-only test, which additionally has to survive gf's folding — here the
 /// only question is whether the stage adds a side effect to the git command's.
 fn is_harmless_consumer(stage: &str) -> bool {
-    if shell::is_display_only(stage) {
+    if shell::is_display_only(stage) || shell::is_plain_search(stage) {
         return true;
     }
     match shell::command_word(stage) {

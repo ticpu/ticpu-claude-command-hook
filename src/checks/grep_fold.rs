@@ -110,7 +110,7 @@ fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
         }
         if stage
             .split_whitespace()
-            .any(|word| changes_output_shape(word) || runs_a_program(word))
+            .any(|word| changes_output_shape(word) || shell::search_runs_a_program(word))
         {
             return None;
         }
@@ -136,25 +136,6 @@ fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
     } else {
         piped + &status
     })
-}
-
-/// Search options that run a program of their own — a preprocessor, a pager, an
-/// external command. The rewrite carries an `allow`, so folding one of these
-/// would put that allow in front of arbitrary execution.
-const RUNS_A_PROGRAM: [&str; 5] = [
-    "--pre",
-    "--hostname-bin",
-    "--filter",
-    "--open-files-in-pager",
-    "--ext-cmd",
-];
-
-fn runs_a_program(word: &str) -> bool {
-    let name = word
-        .split('=')
-        .next()
-        .unwrap_or(word);
-    RUNS_A_PROGRAM.contains(&name) || word.starts_with("-O")
 }
 
 /// `-q` prints nothing and `-Z`/`-z` swap the line and field separators gf keys

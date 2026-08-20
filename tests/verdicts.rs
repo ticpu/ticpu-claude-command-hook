@@ -153,6 +153,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "cd /x && git status --short && git branch --show-current",
         Allow,
     ),
+    // A search reading a read-only git's output folds nowhere — gf strips path
+    // prefixes and a stdin search prints none — so the allow has to cover it here.
+    ("cd /x && git show abc:src/f.c | grep -n foo -A 12", Allow),
+    ("git log -p | rg --pre ./decode foo", Pass),
     ("cd /x && git stash pop", Pass),
     ("cd /x && git commit --no-verify -m 'feat: x'", Deny),
     // Staging named paths runs no hook either; the blanket forms are denied.

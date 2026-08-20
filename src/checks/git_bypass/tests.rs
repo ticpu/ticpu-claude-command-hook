@@ -431,8 +431,23 @@ fn a_consumer_of_the_output_is_not_covered() {
         "git -C /x log | sh",
         "git -C /x log > ~/.bashrc",
         "git -C /x log | xargs rm",
+        // A search handed a program of its own is not a plain consumer.
+        "git -C /x log -p | rg --pre ./decode foo",
+        "git -C /x log -p | grep -O less foo",
     ] {
         assert_eq!(decision(cmd, "/here"), "prompt", "{cmd}");
+    }
+}
+
+/// A search filtering read-only git output adds nothing of its own, and nothing
+/// else covers it: gf folds path prefixes, and a search reading stdin prints none.
+#[test]
+fn a_search_over_git_output_is_covered() {
+    for cmd in [
+        "git show abc:src/f.c | grep -n foo -A 12",
+        "cd /x && git log -p | rg fixup | head -20",
+    ] {
+        assert_eq!(decision(cmd, "/here"), "allow", "{cmd}");
     }
 }
 

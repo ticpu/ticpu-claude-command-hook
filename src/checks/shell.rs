@@ -208,6 +208,34 @@ pub fn is_searcher(stage: &str) -> bool {
     command_word(stage).is_some_and(|w| SEARCHERS.contains(&w))
 }
 
+/// Search options that hand the searcher a program of its own — a preprocessor, a
+/// pager, an external command. An allow in front of one is an allow in front of
+/// whatever it names.
+const SEARCH_RUNS_A_PROGRAM: [&str; 5] = [
+    "--pre",
+    "--hostname-bin",
+    "--filter",
+    "--open-files-in-pager",
+    "--ext-cmd",
+];
+
+pub fn search_runs_a_program(word: &str) -> bool {
+    let name = word
+        .split('=')
+        .next()
+        .unwrap_or(word);
+    SEARCH_RUNS_A_PROGRAM.contains(&name) || word.starts_with("-O")
+}
+
+/// A search that prints its matches and does nothing else, so it adds no side
+/// effect to whatever feeds it.
+pub fn is_plain_search(stage: &str) -> bool {
+    is_searcher(stage)
+        && !stage
+            .split_whitespace()
+            .any(search_runs_a_program)
+}
+
 /// An `echo` labelling the output of the commands around it: it runs nothing and
 /// writes nothing, so it does not count as company in a chain. Only as a lone
 /// stage with no redirect — `echo x > f` writes a file and `echo x | sh` runs one —
