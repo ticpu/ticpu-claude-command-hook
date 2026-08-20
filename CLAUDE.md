@@ -273,7 +273,12 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   `cd`, a read-only utility). A chain carrying anything else keeps its prompt and forfeits the
   fold, rather than having the fold grant it permission.
 - `search_stderr` — denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped
-  alternative.
+  alternative. A body handed to a shell — `ssh host '…'`, `sh -c '…'`, nested a couple deep —
+  is read as a command line and judged by the same rule. `remote_session` leaves what the far
+  end *chains* to the far end, and that stays right for an approval, but an error hidden there
+  is hidden from this transcript exactly as one hidden here is. Only a stage that runs a shell
+  is descended into, so a quoted pattern and a document naming the redirect stay text; the
+  quoted spans come from `shell::quoted_spans`, `program_args` being whitespace-split.
 - `search_flags` — three denies for flags a grep habit reads wrong. `rg -r` in any form is
   `--replace`, so `rg -rn PAT dir` prints every hit rewritten to `n` and the damage reads as
   ordinary output; `--replace=` is the unambiguous spelling. `rg -h` is `--help`, which prints

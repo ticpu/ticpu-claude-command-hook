@@ -252,6 +252,11 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Pass,
     ),
     ("ssh host 'cd /x && make'", Pass),
+    // What the far end chains is its own; what it hides from the transcript is not.
+    (
+        "ssh host 'grep -h ID /var/log/x/*.log 2>/dev/null | head -5'",
+        Deny,
+    ),
     ("mongosh <<'EOF'\ndb.x.find() && db.y.find()\nEOF", Pass),
     // The read-whole/substitute/write-back trio in one script body. An analysis
     // script over the same heredoc keeps its prompt.
