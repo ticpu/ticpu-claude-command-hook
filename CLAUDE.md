@@ -78,7 +78,9 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   commit message starts with `test`) in every spelling git accepts it — the long flag, a
   wholly-quoted `"--no-verify"`, and the `-n` that means it on `commit` alone — plus
   `--no-gpg-sign` and `commit.gpgsign=` set to any of git's four off values, case-insensitively,
-  plus a non-read-only `git -C` pointing at the current workdir ("drop the -C"), plus
+  plus a `git -C` pointing at the current workdir ("drop the -C") whatever the verb — the allow
+  below covers a read-only one only while every other segment qualifies too, so a chain leaves the
+  no-op at a bare prompt with nothing said — plus
   `git add -A`/`.`/`-u`/`*` quoted or not (CLAUDE.md: stage explicit paths — a plain
   `Bash(git add:*)` allowlist entry does not stop those), plus a `cd` before a `git commit` (a commit is
   repo-wide, so the `cd` buys nothing and runs the *target* repo's hooks — the one case Claude

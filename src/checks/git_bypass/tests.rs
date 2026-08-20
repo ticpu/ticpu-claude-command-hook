@@ -510,7 +510,6 @@ fn write_dash_c_not_auto_allowed() {
 
 #[test]
 fn redundant_dash_c_at_cwd_denied() {
-    // Non-read-only -C pointing at the current dir is the redundant case.
     let cwd = std::env::current_dir().unwrap();
     let cwd = cwd
         .to_str()
@@ -519,4 +518,8 @@ fn redundant_dash_c_at_cwd_denied() {
     assert_eq!(decision(&cmd, cwd), "deny");
     // "." resolves to cwd too.
     assert_eq!(decision("git -C . push", cwd), "deny");
+    // Read-only too: the allow only covers it while the whole command qualifies,
+    // so anything else in the chain leaves the no-op `-C` at a bare prompt.
+    assert_eq!(decision("git -C . log --oneline -3", cwd), "deny");
+    assert_eq!(decision("git -C . status; ls src", cwd), "deny");
 }
