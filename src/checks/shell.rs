@@ -357,9 +357,17 @@ pub fn substitution_spans(s: &str) -> Option<Vec<Range<usize>>> {
     Some(scan(s)?.substitutions)
 }
 
+/// Every outermost quoted span, markers included. A body handed to a shell arrives
+/// as one of these, so a caller judging what the far end runs reads it from here
+/// rather than from `program_args`, which splits it on whitespace.
+pub fn quoted_spans(s: &str) -> Option<Vec<Range<usize>>> {
+    Some(scan(s)?.quoted)
+}
+
 struct Scan {
     outside: Vec<bool>,
     substitutions: Vec<Range<usize>>,
+    quoted: Vec<Range<usize>>,
 }
 
 /// Sole quote parser in this module. An unterminated quote or `$(` means the shape
@@ -368,7 +376,9 @@ fn scan(s: &str) -> Option<Scan> {
     let b = s.as_bytes();
     let mut outside = vec![false; b.len()];
     let mut substitutions = Vec::new();
+    let mut quoted = Vec::new();
     let mut opened = 0usize;
+    let mut quote_opened = 0usize;
     let mut i = 0;
     let mut quote: Option<u8> = None;
     let mut depth = 0usize;
@@ -397,6 +407,9 @@ fn scan(s: &str) -> Option<Scan> {
                 }
                 if b[i] == q {
                     quote = None;
+                    if depth == 0 && !backtick {
+                        quoted.push(quote_opened..i + 1);
+                    }
                 }
                 i += 1;
             }
@@ -404,6 +417,9 @@ fn scan(s: &str) -> Option<Scan> {
                 b'\\' => i += 2,
                 b'\'' | b'"' => {
                     quote = Some(b[i]);
+                    if depth == 0 && !backtick {
+                        quote_opened = i;
+                    }
                     i += 1;
                 }
                 b'`' => {
@@ -445,6 +461,7 @@ fn scan(s: &str) -> Option<Scan> {
     (quote.is_none() && depth == 0 && !backtick).then_some(Scan {
         outside,
         substitutions,
+        quoted,
     })
 }
 

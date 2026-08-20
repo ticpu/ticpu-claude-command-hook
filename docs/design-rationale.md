@@ -9,7 +9,9 @@ name. Such a call is denied rather than split: it has to be readable as the one 
 The pipeline is asymmetric on purpose. A stage after the client only reads what it printed and
 is approved on its own terms; a stage before it produces what the client then acts on, and
 rides along. Operators inside the quoted remote command or SQL body belong to the far end and
-must not count — the rule is about what this shell runs.
+must not count — the rule is about what this shell runs. Only that rule stops there: what a
+command may hide from the transcript binds wherever it runs, so a search silencing stderr is
+refused inside the body too.
 
 ## A location-dependent deny states the location
 
