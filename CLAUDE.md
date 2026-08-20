@@ -113,7 +113,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   run something (`| sh`, `| sed -i`, `; rm -rf`), keeps the prompt. A consumer here only has to
   add no side effect of its own, which is weaker than grep_fold's display-only test — that one
   also has to survive gf's folding — so `wc` and a line-selecting `sed` qualify here and not
-  there. It runs last in `dispatch` so every
+  there. A search does too, and nothing else was going to cover it: the fold keys on the stage
+  that *produces*, and a search reading a pipe prints no path prefixes for gf to strip, so
+  `git show <sha>:<file> | grep …` reached neither check. One that runs a program of its own
+  (`shell::search_runs_a_program`, shared with the fold) is not a plain consumer. It runs last in `dispatch` so every
   objection gets first say and a `git grep` still reaches the fold. Read-only classification
   is fail-safe — a whitelist of always-safe subcommands plus explicit read-only modes for the
   mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or
