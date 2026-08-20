@@ -162,7 +162,7 @@ pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
 /// `flags` is the part of the command git reads options from; `full` carries the
 /// message too, which is where the TDD exemption looks.
 fn deny(flags: &str, full: &str, cwd: &str) -> Option<HookOutput> {
-    if git_c_path(flags).is_some() && !is_read_only_segment(flags) && points_at_cwd(flags, cwd) {
+    if git_c_path(flags).is_some() && points_at_cwd(flags, cwd) {
         return Some(located(REDUNDANT_C, cwd));
     }
     // Quoted spans are message text, not options: `-m "no --no-verify here"` is a
