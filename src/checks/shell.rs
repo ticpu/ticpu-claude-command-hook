@@ -268,6 +268,32 @@ pub fn is_bare_cd(segment: &str) -> bool {
     bare_cd_target(segment).is_some()
 }
 
+/// A segment that only names a variable: one stage, every word a `NAME=value`,
+/// no redirect. It runs nothing, so it rides along on an auto-allow — a value
+/// that *would* run something is a substitution, refused ahead of every allow.
+pub fn is_bare_assignment(segment: &str) -> bool {
+    !redirects_anything(segment)
+        && pipeline_stages(segment).is_some_and(|stages| stages.len() == 1)
+        && !segment
+            .trim()
+            .is_empty()
+        && segment
+            .split_whitespace()
+            .all(is_assignment_word)
+}
+
+/// Stricter than the prefix `program_and_args` steps over: that one only has to
+/// skip a word, this one grants an allow, so the name has to be one.
+fn is_assignment_word(word: &str) -> bool {
+    let Some((name, _)) = word.split_once('=') else {
+        return false;
+    };
+    name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 /// A segment that only reads and prints: every stage is a utility that cannot
 /// write a file or run a program, and stdout goes nowhere but the terminal.
 pub fn is_read_only_util(segment: &str) -> bool {

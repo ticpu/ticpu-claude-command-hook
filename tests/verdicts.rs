@@ -104,6 +104,16 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "ls -l /x; grep -rn bar src",
         Fold("ls -l /x ; { grep -rn bar src | {gf}; (exit ${PIPESTATUS[0]}); }"),
     ),
+    // Naming a long path once and reusing it is the shape a chained search arrives in.
+    (
+        "C=/x/crate-1.2.3; ls $C/src; grep -rn \"pub fn api\" -A 22 $C/src/ | head -35",
+        Fold(
+            "C=/x/crate-1.2.3 ; ls $C/src ; \
+             grep -rn \"pub fn api\" -A 22 $C/src/ | {gf} | head -35",
+        ),
+    ),
+    ("C=$(mktemp -d); grep -rn foo $C", Pass),
+    ("C=/x > out; grep -rn foo /x", Pass),
     // The filtering search keeps whole paths to match on; gf runs after it.
     (
         "rg -n --no-heading 'a|b' /x/ | rg -v 'public.xml|internal.xml' | head",

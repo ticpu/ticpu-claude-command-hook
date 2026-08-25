@@ -270,8 +270,12 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   back, brace-grouped so it stays attached to that segment.
   A rewrite is only honoured next to an `allow`, and that allow covers the *whole* call — so
   the fold is emitted only when every segment is one it can vouch for (a folded search, a bare
-  `cd`, a read-only utility). A chain carrying anything else keeps its prompt and forfeits the
-  fold, rather than having the fold grant it permission.
+  `cd`, a bare `NAME=value` assignment, a read-only utility). A chain carrying anything else
+  keeps its prompt and forfeits the fold, rather than having the fold grant it permission. The
+  assignment is there because naming a long path once and reusing it is how a chained search
+  arrives; it runs nothing, and a value that would is a substitution, refused ahead of every
+  allow. Its name is matched strictly rather than by the loose `contains('=')` a command word's
+  env prefix is skipped by — that one only has to step over a word, this one grants the allow.
 - `search_stderr` — denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped
   alternative. A body handed to a shell — `ssh host '…'`, `sh -c '…'`, nested a couple deep —
   is read as a command line and judged by the same rule. `remote_session` leaves what the far

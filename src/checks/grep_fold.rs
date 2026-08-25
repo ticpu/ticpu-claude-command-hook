@@ -49,9 +49,9 @@ fn gf_path() -> Option<PathBuf> {
 ///
 /// Claude Code only honours a rewrite next to an `allow`, and that allow covers
 /// the *whole* call — so every segment has to be one this can vouch for: a
-/// segment it folded, a bare `cd`, or a read-only utility. A chain carrying
-/// anything else forfeits the fold and keeps its prompt, rather than having the
-/// fold grant it permission.
+/// segment it folded, a bare `cd`, a bare assignment, or a read-only utility. A
+/// chain carrying anything else forfeits the fold and keeps its prompt, rather
+/// than having the fold grant it permission.
 fn rewrite(command: &str, gf: &str) -> Option<String> {
     let parts = shell::chain_parts(command)?;
     let chained = parts.len() > 1;
@@ -64,7 +64,10 @@ fn rewrite(command: &str, gf: &str) -> Option<String> {
         .iter()
         .zip(&folds)
         .all(|((segment, _), fold)| {
-            fold.is_some() || shell::is_bare_cd(segment) || shell::is_read_only_util(segment)
+            fold.is_some()
+                || shell::is_bare_cd(segment)
+                || shell::is_bare_assignment(segment)
+                || shell::is_read_only_util(segment)
         })
     {
         return None;
@@ -251,6 +254,28 @@ mod tests {
             "ls -l /x ; { grep -rn b y | /opt/hook/gf; (exit ${PIPESTATUS[0]}); }"
         );
         assert_eq!(rewrite("grep -rn a x > out; grep -rn b y", GF), None);
+    }
+
+    /// Naming a path once and reusing it runs nothing, so the chain still folds —
+    /// unless the value can run something or the assignment truncates a file.
+    #[test]
+    fn a_bare_assignment_is_vouched_for() {
+        assert_eq!(
+            rewrite("C=/x; ls $C/src; grep -rn foo $C/src | head", GF).unwrap(),
+            "C=/x ; ls $C/src ; grep -rn foo $C/src | /opt/hook/gf | head"
+        );
+        assert_eq!(
+            rewrite("A=1 B=2; grep -rn foo src", GF).unwrap(),
+            "A=1 B=2 ; { grep -rn foo src | /opt/hook/gf; (exit ${PIPESTATUS[0]}); }"
+        );
+        for cmd in [
+            "C=/x > out; grep -rn foo /x",
+            "C=/x|tee f; grep -rn foo /x",
+            "-C=/x; grep -rn foo /x",
+            "1C=/x; grep -rn foo /x",
+        ] {
+            assert_eq!(rewrite(cmd, GF), None, "{cmd}");
+        }
     }
 
     /// The rewrite carries an `allow` for the whole call, so a chain holding
