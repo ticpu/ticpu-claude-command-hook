@@ -1,19 +1,21 @@
 mod add;
-/// Path resolution every check needs, not git's alone.
-pub(super) mod location;
 mod parse;
 mod read_only;
 #[cfg(test)]
 mod tests;
 
-use crate::checks::git_bypass::add::{is_blanket_add, is_explicit_add, misrooted_paths};
-use crate::checks::git_bypass::location::{hint, points_at_cwd, resolve};
+use std::path::Path;
+
+use crate::checks::git_bypass::add::{is_blanket_add, misrooted_paths};
 use crate::checks::git_bypass::parse::{git_c_path, has_token, is_git, mentions_git, parse};
-use crate::checks::git_bypass::read_only::is_read_only_segment;
+use crate::checks::location::{dirs, hint, resolve, same_dir, same_repo};
 use crate::checks::shell;
 use crate::checks::shell::unquote_token;
 use crate::input::HookInput;
 use crate::output::HookOutput;
+
+pub use crate::checks::git_bypass::add::is_explicit_add;
+pub use crate::checks::git_bypass::read_only::is_read_only_segment;
 
 const NO_VERIFY: &str = "`--no-verify` is only allowed for TDD (commit message starts with \"test\"). \
 CLAUDE.md forbids skipping git hooks otherwise.";
@@ -31,14 +33,16 @@ const CD_COMMIT: &str = "Don't `cd` to commit: a commit covers the whole repo, s
 per-command approval. If the target really is a different repo, work from there or say so and \
 let me run it.";
 
+const CD_SAME_REPO: &str = "The `cd` stays inside this repo, so it reaches no hook this command \
+could not already run and the prompt it costs warns about nothing. Run the git command from \
+here with the paths spelled from here, or move first with a `cd` of its own — a bare `cd` is \
+auto-allowed and the working directory persists between calls.";
+
 const BLANKET_ADD: &str = "`git add -A` / `.` / `-u` / `*` sweeps untracked scratch into the \
 index — CLAUDE.md forbids it (it once staged real PII). Stage explicit paths; `git status` \
 first if unsure what is untracked.";
 
 const MISROOTED_ADD: &str = "Pathspec spelled from the repo root, not from here: ";
-
-const ALLOW_SAFE: &str =
-    "a bare `cd`, read-only git, or `git add` on explicit paths (auto-allowed by the hook)";
 
 /// Config values git reads as "off". Keys are case-insensitive, so the whole
 /// token is lowercased before comparison.
@@ -62,8 +66,28 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
             .then(|| deny(shell::before_heredoc(cmd), cmd, &input.cwd))
             .flatten(),
     };
-    // Last, so a bypass flag in the same command is reported before the cd.
-    flagged.or_else(|| cd_before_commit(cmd).then(|| located(CD_COMMIT, &input.cwd)))
+    // Last, so a bypass flag in the same command is reported before the cd. The
+    // commit case first: it names the one reason a `cd` before a commit is always
+    // pointless, whichever repo it lands in.
+    flagged
+        .or_else(|| cd_before_commit(cmd).then(|| located(CD_COMMIT, &input.cwd)))
+        .or_else(|| cd_within_repo(cmd, &input.cwd))
+}
+
+/// A `cd` that stays inside the repo the shell is already in, followed by a git
+/// command no allow covers. The move reaches no hook this command could not
+/// already run, so the prompt Claude Code shows for it warns about nothing — and
+/// the same command spelled from here takes the plain per-command approval.
+fn cd_within_repo(cmd: &str, cwd: &str) -> Option<HookOutput> {
+    let segments = shell::chain_segments(cmd)?;
+    walk(segments, cwd, |segment, here| {
+        (is_git(segment)
+            && !same_dir(Path::new(here), cwd)
+            && same_repo(cwd, here)
+            && !is_read_only_segment(segment)
+            && !is_explicit_add(segment, here))
+        .then(|| located(CD_SAME_REPO, cwd))
+    })
 }
 
 /// Segments in order, each judged against the directory it will actually run in:
@@ -74,20 +98,17 @@ fn walk<T>(
     cwd: &str,
     mut judge: impl FnMut(&str, &str) -> Option<T>,
 ) -> Option<T> {
-    let mut here = cwd.to_string();
-    for segment in segments {
-        let segment = segment.trim_start();
-        if let Some(target) = shell::bare_cd_target(segment) {
-            here = resolve(unquote_token(target), &here)
-                .display()
-                .to_string();
-            continue;
-        }
-        if let Some(found) = judge(segment, &here) {
-            return Some(found);
-        }
-    }
-    None
+    let here = dirs(&segments, cwd);
+    segments
+        .iter()
+        .zip(&here)
+        .find_map(|(segment, here)| {
+            let segment = segment.trim_start();
+            if shell::is_bare_cd(segment) {
+                return None;
+            }
+            judge(segment, here)
+        })
 }
 
 /// A `cd` preceding a `git commit` in the same command. Deliberately not routed
@@ -122,41 +143,13 @@ fn cd_before_commit(cmd: &str) -> bool {
     false
 }
 
-/// Auto-allows the git commands that run no hook of their own, so the `cd` Claude
-/// Code warns about — hooks from the target directory — has nothing to warn about.
-/// Unlike the denies this cannot be decided per segment: an allow ends the
-/// permission decision for the *whole* command, so every segment has to be one of
-/// those commands or a segment that does nothing at all (a bare `cd`, an `echo`),
-/// or it all goes back to the normal prompt.
-pub fn allow_safe(input: &HookInput) -> Option<HookOutput> {
-    let segments = shell::chain_segments(input.command())?;
-    let mut git_seen = false;
-    let mut cd_seen = false;
-    let mut here = input
-        .cwd
-        .clone();
-    for segment in segments {
-        if shell::redirects_anything(segment) {
-            return None;
-        }
-        if let Some(target) = shell::bare_cd_target(segment) {
-            here = resolve(unquote_token(target), &here)
-                .display()
-                .to_string();
-            cd_seen = true;
-            continue;
-        }
-        if shell::is_lone_echo(segment) {
-            continue;
-        }
-        if !is_read_only_segment(segment) && !is_explicit_add(segment, &here) {
-            return None;
-        }
-        git_seen = true;
-    }
-    // A `cd` earns the allow on its own: the working directory persists between Bash
-    // calls, so moving it is the work, and nothing else is left behind.
-    (git_seen || cd_seen).then(|| HookOutput::allow("PreToolUse", ALLOW_SAFE))
+/// True when `git -C <path>` targets the same directory the tool already runs in,
+/// making the `-C` redundant.
+fn points_at_cwd(cmd: &str, cwd: &str) -> bool {
+    let Some(target) = git_c_path(cmd) else {
+        return false;
+    };
+    !cwd.is_empty() && same_dir(&resolve(target, cwd), cwd)
 }
 
 /// `flags` is the part of the command git reads options from; `full` carries the

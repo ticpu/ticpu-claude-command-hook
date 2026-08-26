@@ -74,12 +74,12 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   (`repo archive` downloads). Refresh them when glab grows a subcommand for something the list
   still sends to `api`. A missing skill file degrades to the traps plus an install hint, since
   the traps are the half that cannot be recovered by loading anything.
-- `git_bypass` — two decisions, both per chain segment. **Denies** `--no-verify` (unless the
+- `git_bypass` — denies, per chain segment. `--no-verify` (unless the
   commit message starts with `test`) in every spelling git accepts it — the long flag, a
   wholly-quoted `"--no-verify"`, and the `-n` that means it on `commit` alone — plus
   `--no-gpg-sign` and `commit.gpgsign=` set to any of git's four off values, case-insensitively,
-  plus a `git -C` pointing at the current workdir ("drop the -C") whatever the verb — the allow
-  below covers a read-only one only while every other segment qualifies too, so a chain leaves the
+  plus a `git -C` pointing at the current workdir ("drop the -C") whatever the verb — `vouch`
+  covers a read-only one only while every other segment qualifies too, so a chain leaves the
   no-op at a bare prompt with nothing said — plus
   `git add -A`/`.`/`-u`/`*` quoted or not (CLAUDE.md: stage explicit paths — a plain
   `Bash(git add:*)` allowlist entry does not stop those), plus a `cd` before a `git commit` (a commit is
@@ -91,37 +91,54 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   resolves under the repo root but not under the working directory: it is spelled from the wrong
   root, so the deny names the spelling that works. A bare `cd` earlier in the chain moves that
   working directory first, so every segment is judged where the shell will actually run it —
-  otherwise `cd <root> && git add <path-from-root>` reads as misrooted precisely when it is right. These four denies carry a `cwd: … — git repo
-  root: …` line, since none of it is answerable from a tool result.
+  otherwise `cd <root> && git add <path-from-root>` reads as misrooted precisely when it is right.
+  Last of all, that same `cd` in front of a git command `vouch` does not carry — a `git mv`, a
+  checkout, a push — when it lands in the repo the shell is already in: the move reaches no hook
+  that command could not already run, so the prompt Claude Code shows for it warns about nothing,
+  and the same command spelled from here takes the plain per-command approval. It fires only
+  where no allow would: a `cd` to a *different* repo does change which hooks run and keeps its
+  prompt, and one in front of readers is allowed rather than refused. These five denies carry a
+  `cwd: … — git repo root: …` line, since none of it is answerable from a tool result.
   Bypass flags count only where git reads options: whole
   tokens, outside quotes, before a heredoc marker — so a commit message may name a flag it
   isn't using. `git` is recognized by `shell::program`, so a path, a wrapper or a brace group
-  carries the same denies a bare `git` does. **Allows** a command whose every segment is a bare
-  `cd`, a lone `echo`, a
-  provably read-only git pipeline, or a `git add` naming at least one path that exists as a
-  file — a directory, glob or variable stages whatever is under it, which is the sweep the
-  blanket forms are denied for. A `cd` carries the allow on its own, with no git segment
-  behind it: the working directory persists between Bash calls, so moving it is the work.
-  The allowlist
-  can't express that, and it covers `git -C <anypath> status` as well as
-  `cd <path> && git diff|add …`, which Claude Code otherwise prompts about however the
+  carries the same denies a bare `git` does. It allows nothing itself: read-only classification
+  lives here, in `read_only.rs`, and `vouch` is what spends it. That classification
+  is fail-safe — a whitelist of always-safe subcommands plus explicit read-only modes for the
+  mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or
+  verb prompts, as does an option that writes a file or runs a program (`--output=`, `-O`) and
+  any `-c`, which can point config at a program under a read-only verb. The plumbing readers
+  (`check-ignore`, `diff-tree`, `cherry`, …) are on the list because a script reaches for them
+  where a porcelain verb would do, not because anything about them is special.
+- `vouch` — one notion of a segment an allow can carry, and the chain allow built on it: a bare
+  `cd`, a bare `NAME=value`, a utility that only reads and prints, a provably read-only git
+  pipeline, or a `git add` naming at least one path that exists as a file — a directory, glob or
+  variable stages whatever is under it, which is the sweep the blanket forms are denied for. One
+  list because every check that allows a chain needs the same one, and the two keeping their own
+  disagreed on the segment the other was written for: `cd <repo> && git status && ls .git/hooks`
+  was refused for the `ls`, and `cd <repo> && grep -n x Cargo.toml && git check-ignore …` for the
+  git, each prompting with Claude Code's warning about hooks that no segment in it runs. A `cd`
+  carries the allow on its own, with no git segment behind it: the working directory persists
+  between Bash calls, so moving it is the work. A pure reader does not — `ls` is allowlisted
+  already, and granting on one would widen this into the general utility allow it has never been
+  measured as. The allowlist can't express any of it, and this covers `git -C <anypath> status`
+  as well as `cd <path> && git diff|add …`, which Claude Code otherwise prompts about however the
   allowlist reads (hooks from the target directory — neither a read-only subcommand nor
   `git add` runs one, and staging is undone by `git restore --staged`). The allow is
   whole-command, not per segment,
   because one allow decides the whole call: any redirect at all — `2>file` truncates what it
   names even though it is not a stdout redirect — or a consumer that can write or
-  run something (`| sh`, `| sed -i`, `; rm -rf`), keeps the prompt. A consumer here only has to
+  run something (`| sh`, `| sed -i`, `; rm -rf`), keeps the prompt. A substitution is refused
+  per segment here rather than left to the gate in `dispatch`: it runs before the program the
+  segment was classified by, so `echo "$(rm -rf /x)"` is no more a print than `$(…)` in a git
+  argument is a read. A consumer here only has to
   add no side effect of its own, which is weaker than grep_fold's display-only test — that one
   also has to survive gf's folding — so `wc` and a line-selecting `sed` qualify here and not
   there. A search does too, and nothing else was going to cover it: the fold keys on the stage
   that *produces*, and a search reading a pipe prints no path prefixes for gf to strip, so
   `git show <sha>:<file> | grep …` reached neither check. One that runs a program of its own
-  (`shell::search_runs_a_program`, shared with the fold) is not a plain consumer. It runs last in `dispatch` so every
-  objection gets first say and a `git grep` still reaches the fold. Read-only classification
-  is fail-safe — a whitelist of always-safe subcommands plus explicit read-only modes for the
-  mode-dependent ones (branch/tag/config/remote/reflog/symbolic-ref); any unrecognized flag or
-  verb prompts, as does an option that writes a file or runs a program (`--output=`, `-O`) and
-  any `-c`, which can point config at a program under a read-only verb.
+  (`shell::search_runs_a_program`, shared with the fold) is not a plain consumer. It runs last in
+  `dispatch` so every objection gets first say and a `git grep` still reaches the fold.
 - `glab_read_only` — allows a glab invocation that only reads, with the usual do-nothing
   segments around it and display-only consumers. glab is judged here rather than by a
   `settings.json` prefix rule because `api` is one prefix covering both directions: the method
@@ -285,13 +302,14 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   When gf ends the pipeline it would swallow the search's exit status, so `PIPESTATUS` puts it
   back, brace-grouped so it stays attached to that segment.
   A rewrite is only honoured next to an `allow`, and that allow covers the *whole* call — so
-  the fold is emitted only when every segment is one it can vouch for (a folded search, a bare
-  `cd`, a bare `NAME=value` assignment, a read-only utility). A chain carrying anything else
+  the fold is emitted only when every segment is one it can vouch for: a segment it folded, or
+  one `vouch` carries. A chain holding anything else
   keeps its prompt and forfeits the fold, rather than having the fold grant it permission. The
-  assignment is there because naming a long path once and reusing it is how a chained search
-  arrives; it runs nothing, and a value that would is a substitution, refused ahead of every
-  allow. Its name is matched strictly rather than by the loose `contains('=')` a command word's
-  env prefix is skipped by — that one only has to step over a word, this one grants the allow.
+  assignment on that list is there because naming a long path once and reusing it is how a
+  chained search arrives; it runs nothing, and a value that would is a substitution, refused
+  ahead of every allow. Its name is matched strictly rather than by the loose `contains('=')` a
+  command word's env prefix is skipped by — that one only has to step over a word, this one
+  grants the allow.
 - `search_stderr` — denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped
   alternative. A body handed to a shell — `ssh host '…'`, `sh -c '…'`, nested a couple deep —
   is read as a command line and judged by the same rule. `remote_session` leaves what the far
@@ -335,6 +353,12 @@ silenced stderr; only a heredoc or an unbalanced quote makes a command unanalyza
 separates commands like `;` does. A second ad-hoc matcher already caused one bug (a
 `2>/dev/null` inside a search *pattern* read as a real redirect), and every check that grew its
 own notion of "is this git / glab / a search" grew an evasion with it — ask `shell::program`.
+
+`src/checks/location.rs` answers the other half: where a command runs and where its path
+arguments resolve from there. A bare `cd` moves that for every segment behind it, so `dirs`
+hands each segment the directory the shell will really be in and every path check reads it from
+there — a deny keying on the tool's own cwd reports a correctly-spelled path as wrong the moment
+a chain starts with a `cd`.
 
 ## Adding a check
 

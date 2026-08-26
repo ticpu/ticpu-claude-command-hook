@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
+use crate::checks::location::dirs;
 use crate::checks::shell;
+use crate::checks::vouch::is_harmless_segment;
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
@@ -14,7 +16,7 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
         .tool_input
         .as_object()?;
     let gf = gf_path()?;
-    let command = rewrite(input.command(), gf.to_str()?)?;
+    let command = rewrite(input.command(), gf.to_str()?, &input.cwd)?;
 
     let mut updated = tool_input.clone();
     updated.insert("command".to_string(), Value::String(command));
@@ -49,26 +51,27 @@ fn gf_path() -> Option<PathBuf> {
 ///
 /// Claude Code only honours a rewrite next to an `allow`, and that allow covers
 /// the *whole* call — so every segment has to be one this can vouch for: a
-/// segment it folded, a bare `cd`, a bare assignment, or a read-only utility. A
-/// chain carrying anything else forfeits the fold and keeps its prompt, rather
-/// than having the fold grant it permission.
-fn rewrite(command: &str, gf: &str) -> Option<String> {
+/// segment it folded, or one `vouch` carries. A chain holding anything else
+/// forfeits the fold and keeps its prompt, rather than having the fold grant it
+/// permission.
+fn rewrite(command: &str, gf: &str, cwd: &str) -> Option<String> {
     let parts = shell::chain_parts(command)?;
     let chained = parts.len() > 1;
-    let folds: Vec<Option<String>> = parts
+    let segments: Vec<&str> = parts
         .iter()
-        .map(|(segment, _)| fold_segment(segment, gf, chained))
+        .map(|(segment, _)| *segment)
+        .collect();
+    let here = dirs(&segments, cwd);
+    let folds: Vec<Option<String>> = segments
+        .iter()
+        .map(|segment| fold_segment(segment, gf, chained))
         .collect();
 
-    if !parts
+    if !segments
         .iter()
+        .zip(&here)
         .zip(&folds)
-        .all(|((segment, _), fold)| {
-            fold.is_some()
-                || shell::is_bare_cd(segment)
-                || shell::is_bare_assignment(segment)
-                || shell::is_read_only_util(segment)
-        })
+        .all(|((segment, here), fold)| fold.is_some() || is_harmless_segment(segment, here))
     {
         return None;
     }
@@ -156,9 +159,12 @@ fn changes_output_shape(word: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::rewrite;
-
     const GF: &str = "/opt/hook/gf";
+
+    /// The directory only decides a `git add`, and no fold covers one.
+    fn rewrite(command: &str, gf: &str) -> Option<String> {
+        super::rewrite(command, gf, "/")
+    }
 
     #[test]
     fn sole_grep_keeps_its_exit_status() {

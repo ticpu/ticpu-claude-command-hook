@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use crate::checks::git_bypass::location::resolve;
+use crate::checks::location::resolve;
 use crate::checks::{marker, search_flags, shell};
 use crate::input::HookInput;
 use crate::output::HookOutput;

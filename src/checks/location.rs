@@ -2,20 +2,43 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::checks::git_bypass::parse::git_c_path;
+use crate::checks::shell;
+use crate::checks::shell::unquote_token;
 
-/// True when `git -C <path>` targets the same directory the tool already runs in,
-/// making the `-C` redundant. Both sides are canonicalized so symlinked mount
-/// paths and `.`/trailing-slash forms compare equal; if either fails to resolve
-/// we fall back to a literal compare rather than guessing.
-pub fn points_at_cwd(cmd: &str, cwd: &str) -> bool {
-    let Some(target) = git_c_path(cmd) else {
-        return false;
-    };
-    if cwd.is_empty() {
-        return false;
+/// The directory each segment runs in, in order: a bare `cd` moves it for
+/// everything after it, so a path argument later in the chain resolves from
+/// there and not from where the tool started. The entry for a `cd` is the
+/// directory it runs *in*, the move landing on the segments behind it.
+pub fn dirs(segments: &[&str], cwd: &str) -> Vec<String> {
+    let mut here = cwd.to_string();
+    segments
+        .iter()
+        .map(|segment| {
+            let running_in = here.clone();
+            if let Some(target) = shell::bare_cd_target(segment.trim_start()) {
+                here = resolve(unquote_token(target), &here)
+                    .display()
+                    .to_string();
+            }
+            running_in
+        })
+        .collect()
+}
+
+/// Whether two directories sit in the same repo — a `cd` between them reaches no
+/// hook the command could not already run. Neither being in a repo is not the
+/// same repo: there is nothing to compare.
+pub fn same_repo(a: &str, b: &str) -> bool {
+    match (repo_root(a), repo_root(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => false,
     }
-    let target = resolve(target, cwd);
+}
+
+/// Whether two paths name the same directory. Both sides are canonicalized so
+/// symlinked mount paths and `.`/trailing-slash forms compare equal; if either
+/// fails to resolve we fall back to a literal compare rather than guessing.
+pub fn same_dir(target: &Path, cwd: &str) -> bool {
     let cwd = Path::new(cwd);
     match (target.canonicalize(), cwd.canonicalize()) {
         (Ok(t), Ok(c)) => t == c,

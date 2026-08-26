@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
-use crate::checks::git_bypass::location::{names_a_file, rebase_on_cwd, repo_root, resolve};
 use crate::checks::git_bypass::parse::parse;
 use crate::checks::git_bypass::read_only::git_producer;
+use crate::checks::location::{names_a_file, rebase_on_cwd, repo_root, resolve};
 use crate::checks::shell::unquote_token;
 
 /// `git add` flags that do not widen the set of files staged. Interactive modes

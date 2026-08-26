@@ -1,7 +1,8 @@
 //! Decision-level tests: what the check answers for a whole tool input. The
 //! per-function tests live beside the functions they cover.
 
-use super::{allow_safe, check};
+use super::check;
+use crate::checks::vouch::allow_chain;
 use crate::input::HookInput;
 
 fn input(cmd: &str, cwd: &str) -> HookInput {
@@ -18,7 +19,7 @@ fn input(cmd: &str, cwd: &str) -> HookInput {
 /// order `dispatch` runs them — a deny has to beat the allow.
 fn decision(cmd: &str, cwd: &str) -> &'static str {
     let input = input(cmd, cwd);
-    match check(&input).or_else(|| allow_safe(&input)) {
+    match check(&input).or_else(|| allow_chain(&input)) {
         None => "prompt",
         Some(out) => match out
             .hook_specific_output
@@ -259,14 +260,34 @@ fn a_leading_cd_rebases_the_pathspecs_after_it() {
         ),
         "allow"
     );
-    // Spelled from where it started, which the `cd` has left behind.
+    // Spelled from where it started, which the `cd` has left behind: no allow
+    // covers it, and the `cd` it needed stayed in this repo.
     assert_eq!(
         decision(
             concat!("cd ", env!("CARGO_MANIFEST_DIR"), " && git add mod.rs"),
             sub
         ),
-        "prompt"
+        "deny"
     );
+}
+
+/// A `cd` inside the repo reaches no hook the command could not already run, so
+/// it is refused wherever no allow covers what follows it.
+#[test]
+fn a_cd_within_the_repo_is_denied_before_a_write() {
+    let root = env!("CARGO_MANIFEST_DIR");
+    let sub = concat!(env!("CARGO_MANIFEST_DIR"), "/src/checks");
+    for cmd in [
+        concat!("cd ", env!("CARGO_MANIFEST_DIR"), " && git mv a.rs b.rs"),
+        concat!("cd ", env!("CARGO_MANIFEST_DIR"), " && git checkout -- ."),
+        concat!("cd ", env!("CARGO_MANIFEST_DIR"), "/src && git push"),
+    ] {
+        assert_eq!(decision(cmd, sub), "deny", "{cmd}");
+    }
+    // Another repo is another set of hooks: the warning is true there.
+    assert_eq!(decision("cd /x/other && git mv a.rs b.rs", root), "prompt");
+    // Nothing to move to, so nothing to refuse.
+    assert_eq!(decision("git mv a.rs b.rs", root), "prompt");
 }
 
 /// A pathspec that is not one named file sweeps whatever is under it — the

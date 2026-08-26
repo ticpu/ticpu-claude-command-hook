@@ -6,6 +6,8 @@ mod git_bypass;
 mod glab_read_only;
 mod glab_skill;
 mod grep_fold;
+/// Path resolution every check needs, not git's alone.
+mod location;
 mod lone_echo;
 mod marker;
 mod remote_session;
@@ -14,6 +16,7 @@ mod search_stderr;
 mod secret_paths;
 mod shell;
 mod systemd_read;
+mod vouch;
 
 use crate::input::HookInput;
 use crate::output::HookOutput;
@@ -76,7 +79,7 @@ fn allows(input: &HookInput) -> Option<HookOutput> {
         return None;
     }
     grep_fold::check(input)
-        .or_else(|| git_bypass::allow_safe(input))
+        .or_else(|| vouch::allow_chain(input))
         .or_else(|| glab_read_only::allow(cmd))
         .or_else(|| systemd_read::allow(cmd))
         .or_else(|| cargo_tools::allow(cmd))

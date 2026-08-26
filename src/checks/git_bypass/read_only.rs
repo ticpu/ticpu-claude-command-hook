@@ -41,6 +41,14 @@ const ALWAYS_READ_ONLY: &[&str] = &[
     "var",
     "help",
     "version",
+    "check-ignore",
+    "check-attr",
+    "check-ref-format",
+    "diff-tree",
+    "diff-index",
+    "diff-files",
+    "range-diff",
+    "cherry",
 ];
 
 pub fn is_read_only_segment(segment: &str) -> bool {

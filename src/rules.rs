@@ -35,10 +35,14 @@ that can run or write something (`| sh`, `| xargs rm`, `| tee`).
 ## git
 
 - Read-only verbs — `status`, `log`, `show`, `diff`, `blame`, `rev-parse`, `grep`,
-  `ls-files`, `for-each-ref`, `rev-list`, … — including under `-C <path>`, and the
-  read-only modes of `branch`, `tag`, `config`, `remote`, `reflog`, `symbolic-ref`.
+  `ls-files`, `for-each-ref`, `rev-list`, `check-ignore`, `diff-tree`, … — including under
+  `-C <path>`, and the read-only modes of `branch`, `tag`, `config`, `remote`, `reflog`,
+  `symbolic-ref`.
 - `git add <path>` naming at least one path that exists as a file. `-A`, `.`, `-u` and `*`
   are refused; so is a pathspec spelled from the repo root while you are below it.
+- `cd <path> && git …` where the path is in the repo you are already in is refused for any
+  other verb: run it from here, or `cd` on its own first — the directory persists between
+  calls. A `cd` to a different repo keeps its prompt.
 
 ## glab
 
@@ -62,8 +66,11 @@ that can run or write something (`| sh`, `| xargs rm`, `| tee`).
 
 ## Anywhere in the chain
 
-- A bare `cd <path>`, a lone `echo`, and a bare `NAME=value` assignment may sit beside any of
-  the above without costing the allow. Any other command in the chain forfeits it.
+- A bare `cd <path>`, an `echo`, a bare `NAME=value` assignment, and a utility that only reads
+  and prints — `ls`, `stat`, `wc`, `head`, `tail`, `cat`, `nl`, `file`, `basename`, `dirname`,
+  `realpath`, `readlink`, `date`, `uname`, `id`, `printf` — may sit beside any of the above
+  without costing the allow. Any other command in the chain forfeits it, and a segment carrying
+  a `$(…)` forfeits it whatever it is.
 "#;
 
 pub fn print() {

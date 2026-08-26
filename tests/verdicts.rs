@@ -274,7 +274,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("systemctl status sshd | tail -20", Allow),
     ("journalctl --vacuum-size=1G", Pass),
     ("ssh srv journalctl -u sshd -n 200", Allow),
-    ("ssh -o BatchMode=yes srv 'journalctl -u sshd | grep -i fail'", Allow),
+    (
+        "ssh -o BatchMode=yes srv 'journalctl -u sshd | grep -i fail'",
+        Allow,
+    ),
     // Chained here the deny still wins; chained inside the body it is the far
     // end's, so nothing objects and nothing vouches for it either.
     ("ssh srv journalctl -u sshd && ls /x", Deny),
@@ -331,6 +334,34 @@ const SUBDIR_CASES: &[(&str, Verdict<&str>)] = &[
     ("git add main.rs", Allow),
     // Resolves from neither the subdirectory nor the root: a deletion, or a typo.
     ("git add src/gone.rs", Pass),
+    // A `cd` that stays in this repo, in front of a git command nothing covers.
+    (
+        concat!("cd ", env!("CARGO_MANIFEST_DIR"), " && git mv a.rs b.rs"),
+        Deny,
+    ),
+    // The same `cd` in front of readers: one allow for the whole chain, whichever
+    // check vouches for each segment.
+    (
+        concat!(
+            "cd ",
+            env!("CARGO_MANIFEST_DIR"),
+            " && git status --short && ls Cargo.toml"
+        ),
+        Allow,
+    ),
+    (
+        concat!(
+            "cd ",
+            env!("CARGO_MANIFEST_DIR"),
+            " && grep -n name Cargo.toml && git check-ignore -v Cargo.lock || echo missing"
+        ),
+        Fold(concat!(
+            "cd ",
+            env!("CARGO_MANIFEST_DIR"),
+            " && { grep -n name Cargo.toml | {gf}; (exit ${PIPESTATUS[0]}); }",
+            " && git check-ignore -v Cargo.lock || echo missing"
+        )),
+    ),
 ];
 
 #[test]
