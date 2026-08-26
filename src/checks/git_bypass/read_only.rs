@@ -3,7 +3,6 @@
 
 use crate::checks::git_bypass::parse::{is_git, parse};
 use crate::checks::shell;
-use crate::checks::shell::unquote_token;
 
 /// Options that make an otherwise read-only subcommand write a file or run a
 /// program: `git diff --output=<path>` writes, `git grep -O<prog>` executes.
@@ -61,48 +60,8 @@ pub fn git_producer(segment: &str) -> Option<&str> {
     (is_git(producer)
         && rest
             .iter()
-            .all(|stage| is_harmless_consumer(stage)))
+            .all(|stage| shell::is_harmless_consumer(stage)))
     .then_some(*producer)
-}
-
-/// A later stage that writes nothing and runs nothing. Weaker than `grep_fold`'s
-/// display-only test, which additionally has to survive gf's folding — here the
-/// only question is whether the stage adds a side effect to the git command's.
-fn is_harmless_consumer(stage: &str) -> bool {
-    if shell::is_display_only(stage) || shell::is_plain_search(stage) {
-        return true;
-    }
-    match shell::command_word(stage) {
-        Some("wc") => true,
-        Some("sed") => prints_line_ranges(stage),
-        _ => false,
-    }
-}
-
-/// `sed` restricted to selecting lines: every argument is the quiet flag, a bare
-/// `-e`, or a script built only from line numbers and `p`/`q`/`d`. That leaves out
-/// `-i`, an `s///w` or `w` command and GNU's `e`, so nothing is written or run. A
-/// glued `-e<script>`/`--expression=` is not accepted, since the script would ride
-/// along unchecked.
-fn prints_line_ranges(stage: &str) -> bool {
-    let mut args = stage.split_whitespace();
-    let _ = args.next(); // "sed"
-    let mut scripts = 0;
-    for arg in args {
-        if matches!(arg, "-n" | "--quiet" | "--silent" | "-e") {
-            continue;
-        }
-        let script = unquote_token(arg);
-        if script.is_empty()
-            || !script
-                .chars()
-                .all(|c| c.is_ascii_digit() || ",;p$qd".contains(c))
-        {
-            return false;
-        }
-        scripts += 1;
-    }
-    scripts > 0
 }
 
 /// Fail-safe classifier: returns true only when the command is *provably*

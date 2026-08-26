@@ -81,7 +81,9 @@ fn is_reporting_segment(segment: &str) -> bool {
 }
 
 /// A search qualifies here and not in `grep_fold`: nothing folds a cargo pipeline,
-/// so there is no stripped prefix a later pattern could match against.
+/// so there is no stripped prefix a later pattern could match against. Wider than
+/// `shell::is_harmless_consumer` for the same reason — it admits a search carrying
+/// a program of its own, which that one refuses.
 fn is_reporting_consumer(stage: &str) -> bool {
     shell::is_display_only(stage) || shell::is_searcher(stage) || shell::is_read_only_util(stage)
 }

@@ -316,6 +316,46 @@ pub fn is_display_only(stage: &str) -> bool {
     command_word(stage).is_some_and(|w| DISPLAY_ONLY.contains(&w))
 }
 
+/// A later stage that writes nothing and runs nothing. Weaker than `grep_fold`'s
+/// display-only test, which additionally has to survive gf's folding — here the
+/// only question is whether the stage adds a side effect to the producer's.
+pub fn is_harmless_consumer(stage: &str) -> bool {
+    if is_display_only(stage) || is_plain_search(stage) {
+        return true;
+    }
+    match command_word(stage) {
+        Some("wc") => true,
+        Some("sed") => prints_line_ranges(stage),
+        _ => false,
+    }
+}
+
+/// `sed` restricted to selecting lines: every argument is the quiet flag, a bare
+/// `-e`, or a script built only from line numbers and `p`/`q`/`d`. That leaves out
+/// `-i`, an `s///w` or `w` command and GNU's `e`, so nothing is written or run. A
+/// glued `-e<script>`/`--expression=` is not accepted, since the script would ride
+/// along unchecked.
+fn prints_line_ranges(stage: &str) -> bool {
+    let mut args = stage.split_whitespace();
+    let _ = args.next(); // "sed"
+    let mut scripts = 0;
+    for arg in args {
+        if matches!(arg, "-n" | "--quiet" | "--silent" | "-e") {
+            continue;
+        }
+        let script = unquote_token(arg);
+        if script.is_empty()
+            || !script
+                .chars()
+                .all(|c| c.is_ascii_digit() || ",;p$qd".contains(c))
+        {
+            return false;
+        }
+        scripts += 1;
+    }
+    scripts > 0
+}
+
 /// Everything before a heredoc marker. Past it is data — a commit message, a SQL
 /// body — not options, so a check reading flags must stop here.
 pub fn before_heredoc(cmd: &str) -> &str {
