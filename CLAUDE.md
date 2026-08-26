@@ -134,6 +134,22 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   stops matching, which costs a prompt rather than an allow. `glab_skill` still gates the first
   call of the session — it runs earlier in `dispatch`, so its deny wins and this allow only
   applies once the marker exists.
+- `systemd_read` — allows a `journalctl` or a reporting `systemctl` verb, run here or handed
+  to an `ssh` as the command the far end runs. A prefix rule cannot: the writes share their
+  program with the reads (`journalctl --rotate`, `systemctl restart`), and `ssh` shares its
+  with every remote command there is. Both flag lists are closed and fail-safe — an
+  unrecognized one prompts, which is what keeps `--vacuum-*`, `--flush`, `--root=` and the
+  two options reading a journal this shell cannot see out without naming them. `-f` is off
+  the list deliberately: it never returns, and a hang is the worst way for an auto-allow to
+  be wrong. Over ssh the remote body is read as the command line it is — the deny in
+  `remote_session` leaves what the far end *chains* to the far end, which answers what to
+  approve and not what to grant, so a `&&` or a `;` in the body forfeits the allow and a
+  pipe into a harmless consumer does not. A substitution is re-checked there: quoted locally
+  it never reached the gate in `dispatch`, and it is the remote shell that runs it. The
+  client's own options are held to a list that cannot name a program or a config file, since
+  one `-o` is enough to hand the connection either. Neither end takes a wrapper —
+  `shell::leading_word`, not `shell::program`, because an allow covering `sudo` covers what
+  sudo does with it.
 - `cargo_tools` — allows a cargo build/report verb piped into display-only stages. The
   allowlist grants those verbs too, but a prefix rule can only match text, and Claude Code
   refuses to evaluate a command holding `${PIPESTATUS[0]}`: a subscript is arith-evaluated, so
@@ -324,6 +340,8 @@ own notion of "is this git / glab / a search" grew an evasion with it — ask `s
 
 Add a module under `src/checks/`, wire it into `dispatch`, and unit-test the pure decision
 function. Keep IO (filesystem, env) thin and behind a testable core (see `glab_skill::decide`).
+A check that can *allow* also states its shape in `src/rules.rs`: a caller cannot infer an
+allow from a refusal it never sees, and one it cannot predict it does not use.
 
 ## Working here
 
@@ -345,7 +363,9 @@ changing a check — and `gf` must stay beside it, which `cargo build` handles.
 `ticpu-claude-command-hook install` writes those entries itself, matching by binary name so
 a re-run after moving the checkout re-points the old entry instead of adding a second one.
 It is also the only place the matchers are stated, so a new event or tool in `dispatch`
-needs `ENTRIES` in `src/install.rs` widened to match.
+needs `ENTRIES` in `src/install.rs` widened to match. It prints the `@` line importing
+`docs/allowed-commands.md`, which `make release` regenerates from `src/rules.rs` — a
+`CLAUDE.md` importing that file must never lag the binary deciding the allows.
 
 `tests/verdicts.rs` runs the real binary over a table of commands and asserts pass / deny /
 rewritten-command; add a row there for any new shape. `./probe.sh` prints the same verdicts
