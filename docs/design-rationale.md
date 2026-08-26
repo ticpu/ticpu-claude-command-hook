@@ -11,7 +11,7 @@ is approved on its own terms; a stage before it produces what the client then ac
 rides along. Operators inside the quoted remote command or SQL body belong to the far end and
 must not count — the rule is about what this shell runs. Only that rule stops there: what a
 command may hide from the transcript binds wherever it runs, so a search silencing stderr is
-refused inside the body too.
+refused inside the body too, and an auto-allow reads the body as the command line it is.
 
 ## A location-dependent deny states the location
 
