@@ -311,6 +311,17 @@ pub fn is_read_only_util(segment: &str) -> bool {
         })
 }
 
+/// The stage's own first word, by basename, with only a `VAR=v` prefix stepped
+/// over. Deliberately not `program`, which reads through a wrapper: a wrapper is
+/// something to see through when deciding what to refuse and something to refuse
+/// when deciding what to grant, since the allow would cover it too.
+pub fn leading_word(stage: &str) -> Option<&str> {
+    stage
+        .split_whitespace()
+        .find(|word| word.starts_with('-') || !word.contains('='))
+        .map(basename)
+}
+
 /// True when a pipeline stage only displays what it is handed.
 pub fn is_display_only(stage: &str) -> bool {
     command_word(stage).is_some_and(|w| DISPLAY_ONLY.contains(&w))

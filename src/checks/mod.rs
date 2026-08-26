@@ -13,6 +13,7 @@ mod search_flags;
 mod search_stderr;
 mod secret_paths;
 mod shell;
+mod systemd_read;
 
 use crate::input::HookInput;
 use crate::output::HookOutput;
@@ -77,6 +78,7 @@ fn allows(input: &HookInput) -> Option<HookOutput> {
     grep_fold::check(input)
         .or_else(|| git_bypass::allow_safe(input))
         .or_else(|| glab_read_only::allow(cmd))
+        .or_else(|| systemd_read::allow(cmd))
         .or_else(|| cargo_tools::allow(cmd))
         .or_else(|| lone_echo::allow(cmd))
 }

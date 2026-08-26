@@ -268,6 +268,18 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Deny,
     ),
     ("mongosh <<'EOF'\ndb.x.find() && db.y.find()\nEOF", Pass),
+    // A unit read is allowed here and at the far end, where the body is read as
+    // the command line it is.
+    ("journalctl -u sshd -n 100", Allow),
+    ("systemctl status sshd | tail -20", Allow),
+    ("journalctl --vacuum-size=1G", Pass),
+    ("ssh srv journalctl -u sshd -n 200", Allow),
+    ("ssh -o BatchMode=yes srv 'journalctl -u sshd | grep -i fail'", Allow),
+    // Chained here the deny still wins; chained inside the body it is the far
+    // end's, so nothing objects and nothing vouches for it either.
+    ("ssh srv journalctl -u sshd && ls /x", Deny),
+    ("ssh srv 'journalctl -u sshd && ls /x'", Pass),
+    ("ssh srv sudo journalctl -u sshd", Pass),
     // The read-whole/substitute/write-back trio in one script body. An analysis
     // script over the same heredoc keeps its prompt.
     (
