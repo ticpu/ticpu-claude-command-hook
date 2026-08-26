@@ -58,3 +58,7 @@ that can run or write something (`| sh`, `| xargs rm`, `| tee`).
   `realpath`, `readlink`, `date`, `uname`, `id`, `printf` — may sit beside any of the above
   without costing the allow. Any other command in the chain forfeits it, and a segment carrying
   a `$(…)` forfeits it whatever it is.
+- The assignment only counts while nothing expands it: `P=/some/path; cmd $P` is *refused*.
+  Write the value where it is used — the allows above match the command text, and the
+  assignment in front of it makes the call match none of them. A computed value (`P=$(…)`)
+  is not this and keeps its normal prompt.

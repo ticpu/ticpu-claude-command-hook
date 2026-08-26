@@ -262,14 +262,11 @@ mod tests {
         assert_eq!(rewrite("grep -rn a x > out; grep -rn b y", GF), None);
     }
 
-    /// Naming a path once and reusing it runs nothing, so the chain still folds —
-    /// unless the value can run something or the assignment truncates a file.
+    /// An assignment runs nothing, so the chain still folds — unless the value can
+    /// run something or the assignment truncates a file. Expanding the name later is
+    /// `literal_assignment`'s deny and never reaches here.
     #[test]
     fn a_bare_assignment_is_vouched_for() {
-        assert_eq!(
-            rewrite("C=/x; ls $C/src; grep -rn foo $C/src | head", GF).unwrap(),
-            "C=/x ; ls $C/src ; grep -rn foo $C/src | /opt/hook/gf | head"
-        );
         assert_eq!(
             rewrite("A=1 B=2; grep -rn foo src", GF).unwrap(),
             "A=1 B=2 ; { grep -rn foo src | /opt/hook/gf; (exit ${PIPESTATUS[0]}); }"

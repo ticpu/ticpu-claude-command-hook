@@ -185,6 +185,18 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   substitution — that runs before echo sees its own arguments, so `echo "$(id)"` prompts.
 - `broad_find` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
   repo parent; a find scoped to one repo under GIT is allowed.
+- `literal_assignment` — denies a bare `NAME=value` segment whose name a later segment expands.
+  Every allow above and every `settings.json` prefix rule matches the command *text*, so an
+  assignment in front of the work makes the call match none of them, and the "don't ask again"
+  entry the prompt then offers is that one command with that one value baked in — an approval
+  spent on a string nothing will ever match again. The deny names the value, since the whole
+  point is that it is a literal and can be written where it is used. It fires only on a value
+  that can be: `P=$(…)` is left alone, that being both unwritable inline and the shape
+  `secret_paths` relies on to keep a credential out of the transcript. The name must actually
+  be expanded — an assignment nothing reads is dead (shell state does not survive the call) and
+  still rides along as a `vouch` segment. An environment prefix is one command word, not a
+  segment, so `LANG=C sort` is untouched. Single quotes are not tracked: a `$P` that does not
+  expand leaves the assignment dead either way.
 - `remote_session` — denies an `ssh`/`sshfs`/`psql`/`mysql`/`mariadb`/`mongosh` bundled with
   anything else: no `;`, `&&`, `||`, `&`, and no unquoted newline. A lone `echo` is not
   company (`… ; echo "rc=$?"` is routine), and neither is a wrapper — `shell::command_word`

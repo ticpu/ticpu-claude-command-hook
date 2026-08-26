@@ -104,14 +104,13 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "ls -l /x; grep -rn bar src",
         Fold("ls -l /x ; { grep -rn bar src | {gf}; (exit ${PIPESTATUS[0]}); }"),
     ),
-    // Naming a long path once and reusing it is the shape a chained search arrives in.
+    // Naming a long path once and reusing it: refused, the value being one that can
+    // be written where it is used.
     (
         "C=/x/crate-1.2.3; ls $C/src; grep -rn \"pub fn api\" -A 22 $C/src/ | head -35",
-        Fold(
-            "C=/x/crate-1.2.3 ; ls $C/src ; \
-             grep -rn \"pub fn api\" -A 22 $C/src/ | {gf} | head -35",
-        ),
+        Deny,
     ),
+    // Computed, so it cannot be — and the substitution bars the fold on its own.
     ("C=$(mktemp -d); grep -rn foo $C", Pass),
     ("C=/x > out; grep -rn foo /x", Pass),
     // The filtering search keeps whole paths to match on; gf runs after it.
@@ -147,6 +146,14 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // Redirecting stdout keeps the fold off: the file must get the raw output.
     ("grep -rn foo src 2>&1 >out", Pass),
     ("find / -name foo", Deny),
+    // A literal named once and expanded later: the assignment prefix makes the call
+    // match no permission rule, and the value can simply be written where it is used.
+    ("P=/x/doc.pdf; pdftotext -layout \"$P\" - | head -60", Deny),
+    ("C=/x; ls $C/src; grep -rn foo $C/src | head", Deny),
+    (
+        "A=1 B=2; grep -rn foo src",
+        Fold("A=1 B=2 ; { grep -rn foo src | {gf}; (exit ${PIPESTATUS[0]}); }"),
+    ),
     // `command grep` is the opt-out, even chained or with stderr dropped.
     ("ls -ld /x; command grep -c foo /y", Pass),
     ("command grep -rn foo src 2>/dev/null", Pass),
