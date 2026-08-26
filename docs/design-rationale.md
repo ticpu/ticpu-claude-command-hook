@@ -23,6 +23,17 @@ A `git add` pathspec resolving under the repo root but not the working directory
 the same grounds — wrong root, and the deny can name the right spelling. Only then: a pathspec
 that resolves nowhere is a deletion, which keeps the normal prompt.
 
+A move into the repo the shell is already in is refused for the same reason. The prompt it would
+otherwise take warns about hooks the move cannot reach, while the refusal can name the command
+spelled from here and the bare move, which needs no approval. A move into a different repo keeps
+that prompt: there the warning is true.
+
+## One list of the segments an allow can carry
+
+Every check that can allow a chain reads the same list of segments that grant nothing on their
+own. Kept per check, those lists diverge along each check's own subject, and a chain mixing
+subjects is then refused by both — each for the segment the other was written for.
+
 ## Path shape gates the fold before the filesystem is consulted
 
 `gf` decides that a line's leading text is a path by asking the filesystem whether it exists.
