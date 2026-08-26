@@ -34,6 +34,15 @@ Every check that can allow a chain reads the same list of segments that grant no
 own. Kept per check, those lists diverge along each check's own subject, and a chain mixing
 subjects is then refused by both — each for the segment the other was written for.
 
+## A literal named by a variable is refused, a computed one is not
+
+Every permission rule, here and in the harness, matches command text, so an assignment in front
+of the work makes the call match none of them and spends an approval on a string holding that
+one value. A value the shell does not have to compute is therefore refused, the deny naming it:
+the ground for refusing is that it can be written where it is used. One that must be computed
+cannot be, and is the shape that keeps a credential out of the transcript, so it keeps its
+normal prompt.
+
 ## Path shape gates the fold before the filesystem is consulted
 
 `gf` decides that a line's leading text is a path by asking the filesystem whether it exists.
