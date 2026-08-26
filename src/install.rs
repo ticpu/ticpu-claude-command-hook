@@ -59,7 +59,10 @@ pub fn run() -> Result<()> {
 /// generated: `CLAUDE.md` imports it rather than restating it.
 fn announce_rules(binary: &Path) {
     match crate::rules::doc_path(binary) {
-        Some(path) => println!("Import the allowed shapes from CLAUDE.md: @{}", path.display()),
+        Some(path) => println!(
+            "Import the allowed shapes from CLAUDE.md: @{}",
+            path.display()
+        ),
         None => println!("`{} rules` prints the allowed shapes.", binary.display()),
     }
 }
