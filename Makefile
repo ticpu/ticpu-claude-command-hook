@@ -14,8 +14,11 @@ clippy:
 test:
 	$(CARGO) test
 
+# The generated list is regenerated here, not by hand: a CLAUDE.md importing it
+# must not lag the binary that decides the allows.
 release:
 	$(CARGO) build --release
+	./target/release/ticpu-claude-command-hook rules > docs/allowed-commands.md
 
 # Ad-hoc verdicts for commands on stdin; the asserted table is tests/verdicts.rs.
 probe: release

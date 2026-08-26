@@ -4,6 +4,7 @@ mod checks;
 mod input;
 mod install;
 mod output;
+mod rules;
 
 use input::HookInput;
 
@@ -19,9 +20,10 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some("rules") => rules::print(),
         Some(other) => {
             eprintln!(
-                "hook: unknown argument {other:?}; the hook JSON is read from stdin, and `install` is the only verb"
+                "hook: unknown argument {other:?}; the hook JSON is read from stdin, and the verbs are `install` and `rules`"
             );
             std::process::exit(2);
         }

@@ -38,6 +38,7 @@ pub fn run() -> Result<()> {
     text.push('\n');
     if text == before {
         println!("already installed: {}", settings.display());
+        announce_rules(&binary);
         return Ok(());
     }
     write_atomically(&settings, &text)?;
@@ -50,7 +51,17 @@ pub fn run() -> Result<()> {
     }
     println!("wrote {}", settings.display());
     println!("Run /hooks or restart to load it in a session started before now.");
+    announce_rules(&binary);
     Ok(())
+}
+
+/// What is auto-allowed is no use to a caller that cannot see it, and the file is
+/// generated: `CLAUDE.md` imports it rather than restating it.
+fn announce_rules(binary: &Path) {
+    match crate::rules::doc_path(binary) {
+        Some(path) => println!("Import the allowed shapes from CLAUDE.md: @{}", path.display()),
+        None => println!("`{} rules` prints the allowed shapes.", binary.display()),
+    }
 }
 
 fn settings_path() -> Result<PathBuf> {
