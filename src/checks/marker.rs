@@ -47,6 +47,40 @@ fn creates_marker(stage: &str, name: &str) -> bool {
     redirected_to_it || shell::program(stage).is_some_and(|program| CREATES.contains(&program))
 }
 
+/// True when the command is that creation and nothing else: one segment, one
+/// stage, no redirect, a bare `touch` naming this marker and no other argument.
+/// `creation_requested` is looser on purpose — enough to word a prompt, not to
+/// grant an allow, which ends the decision for the whole call. `leading_word`
+/// rather than `program`: an allow over `sudo touch` is an allow over sudo.
+pub fn creation_only(command: &str, name: &str) -> bool {
+    let segments = shell::chain_segments(command);
+    let Some([segment]) = segments.as_deref() else {
+        return false;
+    };
+    let stages = shell::pipeline_stages(segment);
+    let Some([stage]) = stages.as_deref() else {
+        return false;
+    };
+    if shell::redirects_anything(stage) || shell::has_substitution(stage) {
+        return false;
+    }
+    if shell::leading_word(stage) != Some("touch") {
+        return false;
+    }
+    matches!(
+        shell::program_args(stage).as_deref(),
+        Some([arg]) if names_marker(arg, name)
+    )
+}
+
+/// The marker as either spelling reaches it: the variable this binary tells the
+/// caller to write, or the path that variable expands to here.
+fn names_marker(arg: &str, name: &str) -> bool {
+    let token = shell::unquote_token(arg);
+    token == format!("$XDG_RUNTIME_DIR/claude-hooks/{name}")
+        || path(name).is_some_and(|marker| Path::new(token) == marker)
+}
+
 fn path(name: &str) -> Option<PathBuf> {
     let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
     Some(

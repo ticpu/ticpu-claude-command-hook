@@ -1,6 +1,7 @@
 mod blind_edit;
 mod broad_find;
 mod cargo_tools;
+mod cat_read;
 mod design_rationale;
 mod git_bypass;
 mod glab_read_only;
@@ -48,6 +49,10 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| remote_session::check(cmd))
                 .or_else(|| search_stderr::check(cmd))
                 .or_else(|| search_flags::check(cmd))
+                // After every other objection: each of them says something this
+                // cannot, and `secret_paths` deciding first is what keeps the
+                // waiver here away from a credential.
+                .or_else(|| cat_read::check(cmd))
                 // Last, in order: an allow ends the chain, so every objection gets
                 // first say — and a `git grep` still reaches the fold.
                 .or_else(|| allows(input))
@@ -86,4 +91,5 @@ fn allows(input: &HookInput) -> Option<HookOutput> {
         .or_else(|| systemd_read::allow(cmd))
         .or_else(|| cargo_tools::allow(cmd))
         .or_else(|| lone_echo::allow(cmd))
+        .or_else(|| cat_read::waiver_allowed(cmd))
 }

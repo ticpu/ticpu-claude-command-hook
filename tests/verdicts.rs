@@ -73,7 +73,7 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Deny,
     ),
     ("sed -i '1d' docs/design-rationale.md", Deny),
-    ("cat docs/design-rationale.md", Pass),
+    ("cat -n docs/design-rationale.md", Pass),
     (
         "git commit -m \"docs: fold the retry note into design-rationale.md\"",
         Pass,
@@ -326,9 +326,32 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "mongosh --quiet \"$(yq -r '.uri' $HOME/.config/fsa-secrets.yaml)\" --eval 'db.x.count()'",
         Pass,
     ),
-    ("cat src/checks/secret_paths.rs", Pass),
-    ("cat $HOME/.config/fsa-secrets.yaml.sample", Pass),
-    ("cat $HOME/puppet/data/secrets.eyaml", Pass),
+    // Flagged, so the `cat` check leaves them to the row's own subject.
+    ("cat -n src/checks/secret_paths.rs", Pass),
+    ("cat -n $HOME/.config/fsa-secrets.yaml.sample", Pass),
+    ("cat -n $HOME/puppet/data/secrets.eyaml", Pass),
+    // A file printed into the transcript, and a single file handed to a pipe.
+    ("cat Makefile", Deny),
+    ("cd src && cat main.rs", Deny),
+    ("for i in a b; do cat $i; done", Deny),
+    ("cat Cargo.toml | rg version", Deny),
+    ("cat -A Makefile", Pass),
+    ("cat a.log b.log | sort", Pass),
+    ("cat a.log b.log > merged.log", Pass),
+    // Its waiver is the one this binary grants without a prompt.
+    (
+        "touch \"$XDG_RUNTIME_DIR/claude-hooks/cat-read-waiver\"",
+        Allow,
+    ),
+    // Only that spelling, alone: an allow ends the decision for the whole call.
+    (
+        "touch \"$XDG_RUNTIME_DIR/claude-hooks/cat-read-waiver\" && rm -rf build",
+        Pass,
+    ),
+    (
+        "sudo touch \"$XDG_RUNTIME_DIR/claude-hooks/cat-read-waiver\"",
+        Pass,
+    ),
     // A search's pattern is not a path, and `git log` prints commits.
     ("git log --oneline -8 -- $HOME/.ssh/id_rsa", Allow),
     ("git log -p -- $HOME/.ssh/id_rsa", Deny),
@@ -388,6 +411,20 @@ fn verdicts_match() {
             "command: {command}"
         );
     }
+}
+
+/// The credential gate decides ahead of the `cat` one, so a path that reads as a
+/// credential is refused on those grounds and the waiver the `cat` refusal names is
+/// never the way past it — nor is it consulted or spent there.
+#[test]
+fn a_credential_path_is_refused_before_the_cat_rule() {
+    let stdout = run_hook("cat ~/.ssh/id_ed25519", ".");
+    let json: Value = serde_json::from_str(&stdout).expect("hook JSON");
+    let reason = json["hookSpecificOutput"]["permissionDecisionReason"]
+        .as_str()
+        .expect("a decision carries a reason");
+    assert!(reason.contains("transcript-read-waiver"), "{reason}");
+    assert!(!reason.contains("cat-read-waiver"), "{reason}");
 }
 
 /// Edits to a `design-rationale.md`, judged by the countable rules alone. Every row

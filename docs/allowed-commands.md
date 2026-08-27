@@ -58,6 +58,12 @@ that can run or write something (`| sh`, `| xargs rm`, `| tee`).
   `realpath`, `readlink`, `date`, `uname`, `id`, `printf` — may sit beside any of the above
   without costing the allow. Any other command in the chain forfeits it, and a segment carrying
   a `$(…)` forfeits it whatever it is.
+- A `cat` that opens a file is refused ahead of all of it — use the Read tool, or a flag
+  (`-A`, `-n`, `-v`, `-T`, `-E`) — so it rides along only where it reads a pipe. Refused too:
+  one file piped into another program, which can open it itself. Several files joined is not.
+  The refusal names a waiver, and `touch "$XDG_RUNTIME_DIR/claude-hooks/cat-read-waiver"`
+  alone on the command line is allowed without a prompt; every other marker's creation is
+  prompted.
 - The assignment only counts while nothing expands it: `P=/some/path; cmd $P` is *refused*.
   Write the value where it is used — the allows above match the command text, and the
   assignment in front of it makes the call match none of them. A computed value (`P=$(…)`)
