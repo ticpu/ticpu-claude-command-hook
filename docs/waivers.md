@@ -1,6 +1,6 @@
 # Waivers
 
-Four checks refuse rather than prompt, and each names a one-shot waiver that overrules
+Five checks refuse rather than prompt, and each names a one-shot waiver that overrules
 it. One further marker, at the end, is a standing switch rather than a waiver. A waiver is a file you approve into existence; the binary deletes it as it reads it,
 before the decision it overrules, so a failed delete cannot leave a standing pass behind.
 
@@ -13,7 +13,8 @@ mkdir -p "$XDG_RUNTIME_DIR/claude-hooks"
 Creating one is forced to a permission prompt whatever your allowlist says — an
 allowlisted `touch` must not hand out a pass unseen — and the prompt describes what that
 particular waiver grants. Only *creating* it is prompted: a `test -e`, an `rm` or a grep
-of this repo's source names the file without granting anything.
+of this repo's source names the file without granting anything. `cat-read-waiver` is the
+exception, allowed outright; its section says why.
 
 The model is expected to run these itself after arguing why the objection is wrong, and
 you decide at the prompt. Running one by hand is the same thing without the argument.
@@ -67,6 +68,24 @@ touch "$XDG_RUNTIME_DIR/claude-hooks/transcript-read-waiver"
 
 Spent by the next refusal. Approve only if that path holds nothing secret on this box —
 the contents go into the transcript either way.
+
+## `cat-read-waiver` — granted without a prompt
+
+Refused by: a `cat` printing a file into the transcript, or handing a single file to a
+pipe that could have opened it. A flag (`-A`, `-n`, `-v`, `-T`, `-E`) and several files
+joined are not refused.
+
+```sh
+touch "$XDG_RUNTIME_DIR/claude-hooks/cat-read-waiver"
+```
+
+Spent by the next command this would refuse. Alone among these, that `touch` is allowed
+with no prompt — spelled exactly like that and alone on the command line — because the
+refusal answers a habit rather than a hazard, and the case it cannot settle is the harness
+reporting a read the model does not hold, which is nobody's to arbitrate at a prompt.
+
+It grants nothing over a credential: that check decides first, so a path reading as one is
+refused on its own grounds and this waiver is neither read nor spent there.
 
 ## `design-rationale-gate-off` — a switch, not a waiver
 
