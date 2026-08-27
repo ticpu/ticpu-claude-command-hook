@@ -7,23 +7,7 @@ use crate::output::HookOutput;
 
 /// Traps and API-to-subcommand swaps that the shipped skill does not spell out.
 /// Refresh when glab grows a subcommand for something this still sends to `api`.
-const TRAPS: &str = "\
-Prefer a real subcommand; `glab api` is the fallback, not the default.
-- Pipeline and job state: `ci get [-p <id>] [--merge-request <iid>] [-d]`, not
-  `api projects/:id/pipelines/...`.
-- `ci retry` takes a JOB id. Retrying a whole pipeline has no subcommand — that
-  one really is the API.
-- `ci cancel pipeline|job <id>`, `ci config compile`, `job artifact` (the old
-  `ci artifact` is deprecated).
-- MR comments: `mr note create` with `--reply`, `--file`, `--line`. The flags on
-  the root `mr note` are deprecated.
-- `repo update --archive` archives a project. `repo archive` DOWNLOADS a zip.
-- `mr list` has no `--state`: use `--all`, `--merged`, `--closed`.
-- These groups exist — check `glab <group> --help` before reaching for the API:
-  todo, milestone, iteration, work-items, token, securefile, search, label,
-  release, snippet, variable, schedule, packages, container-registry, runner,
-  security, user, ssh-key, deploy-key, gpg-key.
-- Most list/get take `-F json` and `--jq`. `glab api` has NEITHER — pipe to jq.";
+const TRAPS: &str = include_str!("glab-traps.txt");
 
 const NO_SKILL: &str = "The glab skill is not installed. Install it with \
 `glab skills install --path ~/.claude/skills`, or load Skill(\"glab\") if it is \
@@ -77,7 +61,8 @@ fn strip_frontmatter(text: &str) -> &str {
 
 fn reason(skill: Option<String>) -> String {
     format!(
-        "{TRAPS}\n\n{}",
+        "{}\n\n{}",
+        TRAPS.trim_end(),
         skill
             .as_deref()
             .unwrap_or(NO_SKILL)

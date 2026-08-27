@@ -1,0 +1,9 @@
+design-rationale.md — audit this passage before it lands, against the design-rationale clauses in CLAUDE.md.
+
+Whole first. Where does the reader who needs this stand? Whoever writes one of these opens an existing one and reads it, never this file. Passage saying what that site says, or what would be read there anyway: restatement, cut the section whole — trimming cannot save a section belonging elsewhere. Then name what here already owns the decision: a section, or a convention the code follows. Section owns it: at most a clause inside that section. Draft describing its own way of doing what a convention does: the decision is to use the convention, and using it records nothing.
+
+Then paragraph by paragraph, count the tell: a section is the size of its decision, not of the change carrying it. Paragraph entailed by the one before it, or walking through how the thing works: filler. Fold what it decides into the paragraph owning that, cut the rest.
+
+Then sentence by sentence: would a competent engineer holding this repo know it already, and what later change could violate it? Strip this project's nouns; what is left true of a language, a tool or a platform belongs to that manual. A correction the code already carries is not such a change — nothing downstream honours it, its commit settled it, the sentence goes. Cut what fails any of these. What survives is usually a third of the draft.
+
+Then re-issue the edit: unchanged if the audit changed nothing, saying what you cut if it did. Asked once per draft, so the re-issue reaches the reviewers behind it. Not a finding, nothing to argue: no reviewer has read the passage yet.

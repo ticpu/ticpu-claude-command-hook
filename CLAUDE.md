@@ -392,6 +392,12 @@ a chain starts with a `cd`.
 
 Add a module under `src/checks/`, wire it into `dispatch`, and unit-test the pure decision
 function. Keep IO (filesystem, env) thin and behind a testable core (see `glab_skill::decide`).
+A message the check emits stays a literal beside the branch that emits it until it passes
+a kilobyte; past that it moves to a `*.txt` read with `include_str!` (`audit-ask.txt`,
+`glab-traps.txt`) and is rewritten by `/compress-messages`, which names what it must not
+touch. A deny stays in the transcript for the rest of the session, so one that fires more
+than once a session is paid for every time.
+
 A check that can *allow* also states its shape in `src/rules.rs`: a caller cannot infer an
 allow from a refusal it never sees, and one it cannot predict it does not use.
 

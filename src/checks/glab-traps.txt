@@ -1,0 +1,16 @@
+Prefer a real subcommand; `glab api` is the fallback, not the default.
+- Pipeline and job state: `ci get [-p <id>] [--merge-request <iid>] [-d]`, not
+  `api projects/:id/pipelines/...`.
+- `ci retry` takes a JOB id. Retrying a whole pipeline has no subcommand — that
+  one really is the API.
+- `ci cancel pipeline|job <id>`, `ci config compile`, `job artifact` (the old
+  `ci artifact` is deprecated).
+- MR comments: `mr note create` with `--reply`, `--file`, `--line`. The flags on
+  the root `mr note` are deprecated.
+- `repo update --archive` archives a project. `repo archive` DOWNLOADS a zip.
+- `mr list` has no `--state`: use `--all`, `--merged`, `--closed`.
+- These groups exist — check `glab <group> --help` before reaching for the API:
+  todo, milestone, iteration, work-items, token, securefile, search, label,
+  release, snippet, variable, schedule, packages, container-registry, runner,
+  security, user, ssh-key, deploy-key, gpg-key.
+- Most list/get take `-F json` and `--jq`. `glab api` has NEITHER — pipe to jq.

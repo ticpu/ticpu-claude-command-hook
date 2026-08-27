@@ -51,7 +51,7 @@ pub(super) fn decide(dir: &Path, introduced: &str) -> Option<HookOutput> {
             marker.display()
         );
     }
-    let mut refused = HookOutput::deny("PreToolUse", ASK);
+    let mut refused = HookOutput::deny("PreToolUse", ASK.trim_end());
     // The deny is addressed to the writer, and a refused edit renders no diff, so this
     // is the only place the draft is visible to the person the audit is done for.
     refused.system_message = Some(format!(
@@ -76,33 +76,10 @@ fn excerpt(introduced: &str) -> String {
     }
 }
 
-const ASK: &str = "design-rationale.md — audit this passage before it lands, against the \
-design-rationale clauses in CLAUDE.md.
-
-Whole first: where is the person who needs this standing when they need it? Someone about to \
-write one of these opens an existing one and reads it, and never reaches this file on the way. \
-If what the passage says is stated at that site, or would be read there anyway, it is \
-restatement and the section goes entire — trimming cannot save a section that belongs somewhere \
-else. Then name what here already owns the decision: a section that holds it, or a shared way of \
-doing this the rest of the code follows. Where a section does, the passage is at most a clause \
-inside it; where the draft describes its own way of doing what a convention here already does, \
-the decision is to use the convention, and using it records nothing.
-
-Then paragraph by paragraph, where the count is the tell: a section is the size of its decision, \
-not of the change that carried it. A paragraph stating what the one before it already entails, \
-or walking through how the thing works, is filler however true it is — fold whatever it decides \
-into the paragraph that owns it, and cut the rest.
-
-Then sentence by sentence: would a competent engineer holding this repo already know it, and \
-what later change could violate it? Take this project's nouns out of the sentence; if what is \
-left is a true statement about a language, a tool or a platform, it belongs to that manual. A \
-correction the code already carries is not such a change — if nothing downstream has to keep \
-honouring it, its commit settled it and the sentence goes. Cut what fails any of these. A \
-section that survives is usually a third of what was drafted.
-
-Then re-issue the edit — unchanged if the audit changed nothing, and say what you cut if it did. \
-This is asked once per draft, so the re-issue goes through to the reviewers behind it. It is not \
-a finding and there is nothing here to argue with: no reviewer has read the passage yet.";
+/// Emitted on every draft, so it is kept where `/compress-messages` can rewrite it
+/// without touching the code that sends it. The trailing newline is the file's, not
+/// the message's.
+const ASK: &str = include_str!("audit-ask.txt");
 
 #[cfg(test)]
 mod tests {
