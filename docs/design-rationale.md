@@ -147,6 +147,19 @@ credentials is not one — and that exemption never extends to a location or an 
 identifies a key. What is left is a name that reads like a credential and is not one, which no
 rule here can settle: the refusal names a one-shot waiver, spent as it is read.
 
+## A file printed into the transcript is refused, a file piped is not
+
+A shell print of a whole file is refused where its output reaches the transcript, the tool that
+reads files being named instead. The test is where the bytes go, not which program moves them —
+files joined into a pipe are the concatenation the command exists for, and a flag rendering the
+bytes themselves asks for what no tool result shows.
+
+The waiver over it is granted by this binary instead of prompted, alone among the waivers here.
+It answers a habit rather than a hazard — being wrong costs the same file read a second way —
+and the case it cannot settle, a read the harness records and the model does not hold, is no
+reader's to arbitrate. The credential gate is decided ahead of it and stays there: a waiver over
+a habit must not be the way a secret reaches the transcript.
+
 ## A bug here must not stop the tools
 
 Every failure path exits 0 with no decision, so a check that panics, mis-parses or cannot reach
