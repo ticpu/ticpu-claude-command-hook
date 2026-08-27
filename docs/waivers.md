@@ -4,6 +4,9 @@ Five checks refuse rather than prompt, and each names a one-shot waiver that ove
 it. One further marker, at the end, is a standing switch rather than a waiver. A waiver is a file you approve into existence; the binary deletes it as it reads it,
 before the decision it overrules, so a failed delete cannot leave a standing pass behind.
 
+Each is named `waiver:<name>` where the shorthand is shorter than the path — the generated
+`docs/allowed-commands.md` uses it — and `<name>` is the file below.
+
 They all live in one directory, made once per boot:
 
 ```sh

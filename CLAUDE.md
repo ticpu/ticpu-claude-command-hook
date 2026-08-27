@@ -417,7 +417,10 @@ a re-run after moving the checkout re-points the old entry instead of adding a s
 It is also the only place the matchers are stated, so a new event or tool in `dispatch`
 needs `ENTRIES` in `src/install.rs` widened to match. It prints the `@` line importing
 `docs/allowed-commands.md`, which `make release` regenerates from `src/rules.rs` — a
-`CLAUDE.md` importing that file must never lag the binary deciding the allows.
+`CLAUDE.md` importing that file must never lag the binary deciding the allows. That text is
+imported into every session and priced per token, so it is written flat: one line per shape,
+no headings, bullets, blank lines or backticks, and no sentence that explains rather than
+states. Command words, flags and paths survive verbatim; nothing else has to.
 
 `tests/verdicts.rs` runs the real binary over a table of commands and asserts pass / deny /
 rewritten-command; add a row there for any new shape. `./probe.sh` prints the same verdicts
