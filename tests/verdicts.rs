@@ -300,6 +300,11 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "python3 - <<'PY'\nc=0\nfor line in open('log'):\n    c+=1\nprint(c)\nPY",
         Pass,
     ),
+    // The compiled-pattern spelling reaches the same rewrite without `re.sub`.
+    (
+        "cd wt && python3 - <<'PYEOF'\nimport pathlib, re\np = pathlib.Path('cfg.yaml')\ns = p.read_text()\npat = re.compile(r'crit: 10\\n')\ns, n = pat.subn('crit: 1\\n', s)\np.write_text(s)\nPYEOF",
+        Deny,
+    ),
     (
         "touch \"$XDG_RUNTIME_DIR/claude-hooks/script-edit-waiver\"",
         Ask,

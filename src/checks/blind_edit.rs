@@ -26,10 +26,13 @@ const SLURPS: [&str; 4] = [
 ];
 
 /// Substituting into that string. `re.sub` counts: it is the same unverified
-/// rewrite in a regex spelling.
-const SUBSTITUTES: [&str; 5] = [
+/// rewrite in a regex spelling. Bare `.sub(`/`.subn(` cover the compiled-pattern
+/// spelling, which `re.compile(...)` then `pat.subn(s)` reaches without ever
+/// writing `re.sub`.
+const SUBSTITUTES: [&str; 6] = [
     ".replace(",
-    "re.sub(",
+    ".sub(",
+    ".subn(",
     ".gsub(",
     "preg_replace(",
     "str_replace(",
@@ -140,6 +143,8 @@ mod tests {
             "cd /x && python3 - <<'PY'\ns=open('f.rs').read()\ns=s.replace('x','y')\nopen('f.rs','w').write(s)\nPY",
             "python3 <<PY\nfrom pathlib import Path\nt=Path('a.rs').read_text()\nPath('a.rs').write_text(t.replace('q','r'))\nPY",
             "node - <<'JS'\nlet s=readFileSync('a.ts','utf8')\nwriteFileSync('a.ts', s.replace('x','y'))\nJS",
+            // The compiled-pattern spelling: no `re.sub` anywhere in the body.
+            "cd wt && python3 - <<'PYEOF'\nimport pathlib, re\np = pathlib.Path('cfg.yaml')\ns = p.read_text()\npat = re.compile(r'warn: 1\\n  crit: 10\\n')\ns, n = pat.subn('warn: 1\\n  crit: 1\\n', s)\np.write_text(s)\nPYEOF",
         ] {
             assert!(blind_edit(cmd), "should deny: {cmd}");
         }
