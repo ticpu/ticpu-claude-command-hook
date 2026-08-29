@@ -133,12 +133,24 @@ fn allows_tdd_and_clean() {
     assert_eq!(decision("git status", ""), "allow");
     assert_eq!(decision("git push", ""), "prompt");
     assert!(!blocked("cargo test --no-verify-something"));
+    assert!(!blocked(
+        "git commit --no-verify -m \"build: pin Cargo.lock for v0.38.0\""
+    ));
+    assert!(!blocked("git commit --no-verify -m 'docs: release steps'"));
 }
 
 #[test]
 fn heredoc_test_message_allowed() {
     let cmd = "git commit --no-verify -F - <<EOF\ntest: red bar\nEOF";
     assert!(!blocked(cmd));
+}
+
+/// Only the subject waives the hook: one of the words further down the body is
+/// prose, and all three are common enough to be written by accident.
+#[test]
+fn a_waived_type_in_the_body_is_not_a_subject() {
+    let cmd = "git commit --no-verify -F - <<EOF\nfeat: x\n\ndocs follow later.\nEOF";
+    assert!(blocked(cmd));
 }
 
 /// The reported stall: a subagent inspecting another directory of the project

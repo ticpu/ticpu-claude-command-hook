@@ -19,8 +19,13 @@ pub use crate::checks::git_bypass::add::is_explicit_add;
 pub use crate::checks::git_bypass::commit::is_stdin_commit;
 pub use crate::checks::git_bypass::read_only::is_read_only_segment;
 
-const NO_VERIFY: &str = "`--no-verify` is only allowed for TDD (commit message starts with \"test\"). \
-CLAUDE.md forbids skipping git hooks otherwise.";
+const NO_VERIFY: &str = "`--no-verify` is only allowed on a commit whose subject starts with \
+\"test\", \"build\" or \"docs\". CLAUDE.md forbids skipping git hooks otherwise.";
+
+/// Commit types whose content the pre-commit hook has nothing to say about: a
+/// red TDD commit, a lockfile pin, prose. The subject has to *start* with one, so
+/// a message merely naming a type is not one.
+const NO_VERIFY_TYPES: &[&str] = &["test", "build", "docs"];
 
 const NO_SIGN: &str = "Command bypasses git signing (--no-gpg-sign / commit.gpgsign=false). \
 CLAUDE.md forbids this unless explicitly requested. If GPG fails on the TTY, run the commit \
@@ -244,8 +249,8 @@ fn disables_signing(cmd: &str) -> bool {
         })
 }
 
-/// TDD escape hatch: a commit whose message starts with "test", supplied either
-/// inline via `-m` or through a heredoc body.
+/// The escape hatch: a commit subject opening with one of `NO_VERIFY_TYPES`,
+/// supplied either inline via `-m` or as the first line of a heredoc body.
 fn allows_no_verify(cmd: &str) -> bool {
     let mut rest = cmd;
     while let Some(pos) = rest.find("-m") {
@@ -253,16 +258,27 @@ fn allows_no_verify(cmd: &str) -> bool {
         let after = after
             .strip_prefix(['"', '\''])
             .unwrap_or(after);
-        if after.starts_with("test") {
+        if is_waived_type(after) {
             return true;
         }
         rest = &rest[pos + 2..];
     }
-    cmd.contains("<<")
-        && cmd
-            .lines()
-            .any(|l| {
-                l.trim_start()
-                    .starts_with("test")
-            })
+    // Only the subject, not the whole body: a paragraph opening with one of the
+    // words is body text, and the words are common enough to be written by accident.
+    cmd.find("<<")
+        .and_then(|pos| cmd[pos..].split_once('\n'))
+        .and_then(|(_, body)| {
+            body.lines()
+                .find(|line| !line
+                    .trim()
+                    .is_empty())
+        })
+        .is_some_and(is_waived_type)
+}
+
+fn is_waived_type(subject: &str) -> bool {
+    let subject = subject.trim_start();
+    NO_VERIFY_TYPES
+        .iter()
+        .any(|kind| subject.starts_with(kind))
 }

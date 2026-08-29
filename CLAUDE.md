@@ -74,8 +74,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   (`repo archive` downloads). Refresh them when glab grows a subcommand for something the list
   still sends to `api`. A missing skill file degrades to the traps plus an install hint, since
   the traps are the half that cannot be recovered by loading anything.
-- `git_bypass` — denies, per chain segment. `--no-verify` (unless the
-  commit message starts with `test`) in every spelling git accepts it — the long flag, a
+- `git_bypass` — denies, per chain segment. `--no-verify` (unless the commit subject starts with
+  `test`, `build` or `docs`, the three the hook has nothing to check — a red test, a lockfile
+  pin, prose; the subject only, since all three are words a body writes by accident) in every
+  spelling git accepts it — the long flag, a
   wholly-quoted `"--no-verify"`, and the `-n` that means it on `commit` alone — plus
   `--no-gpg-sign` and `commit.gpgsign=` set to any of git's four off values, case-insensitively,
   plus a `git -C` pointing at the current workdir ("drop the -C") whatever the verb — `vouch`
