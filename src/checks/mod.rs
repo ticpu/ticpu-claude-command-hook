@@ -82,6 +82,12 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
 /// is the classification the check itself was written to avoid needing.
 fn allows(input: &HookInput) -> Option<HookOutput> {
     let cmd = input.command();
+    // Ahead of the gate, and the only thing that goes there: a quote-delimited
+    // heredoc body is literal, so a `$( )` or an apostrophe in a commit message is
+    // text. This check applies the same gate to the head, which is what runs.
+    if let Some(allowed) = vouch::allow_heredoc_commit(input) {
+        return Some(allowed);
+    }
     if shell::has_substitution(cmd) {
         return None;
     }

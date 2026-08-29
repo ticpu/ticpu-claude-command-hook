@@ -375,6 +375,69 @@ pub fn before_heredoc(cmd: &str) -> &str {
         .unwrap_or(cmd)
 }
 
+/// The text in front of a heredoc whose body cannot act: one `<<` with a quoted
+/// delimiter, terminated, with nothing after the terminator line. A quoted
+/// delimiter is what makes the body literal — no expansion, no substitution — so
+/// the head alone decides what runs, and it is ordinary command text every other
+/// function here can scan. `None` on an unquoted delimiter, a herestring, a
+/// missing terminator, or a command resuming past it.
+pub fn inert_heredoc(cmd: &str) -> Option<&str> {
+    let start = cmd.find("<<")?;
+    let head = &cmd[..start];
+    // The `<<` has to be shell syntax and not text: a quote opened in the head and
+    // closed in the body leaves the head unbalanced, which `scan` refuses.
+    if !analyzable(head) || unquoted_mask(head).is_none() {
+        return None;
+    }
+    let rest = &cmd[start + 2..];
+    if rest.starts_with('<') {
+        return None;
+    }
+    let (strip_tabs, rest) = match rest.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, rest),
+    };
+    let (line, body) = rest
+        .trim_start_matches(' ')
+        .split_once('\n')?;
+    let quote = line
+        .chars()
+        .next()
+        .filter(|c| *c == '\'' || *c == '"')?;
+    let end = line[1..].find(quote)? + 1;
+    let delimiter = &line[1..end];
+    if delimiter.is_empty()
+        || !delimiter
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        || !line[end + 1..]
+            .trim()
+            .is_empty()
+    {
+        return None;
+    }
+    let mut consumed = 0;
+    let mut terminated = false;
+    for raw in body.split_inclusive('\n') {
+        consumed += raw.len();
+        let text = raw.trim_end_matches('\n');
+        let text = if strip_tabs {
+            text.trim_start_matches('\t')
+        } else {
+            text
+        };
+        if text == delimiter {
+            terminated = true;
+            break;
+        }
+    }
+    (terminated
+        && body[consumed..]
+            .trim()
+            .is_empty())
+    .then_some(head)
+}
+
 /// A token in command position: first, or right after a chain operator or pipe.
 /// For use on text the splitters gave up on, so glued forms (`cd /x; git …`) count.
 pub fn starts_a_command(tokens: &[&str], i: usize) -> bool {
@@ -585,6 +648,22 @@ fn split(s: &str, op: impl Fn(&[u8], usize) -> Option<usize>) -> Option<Vec<(&st
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_inert_heredoc_is_the_quoted_terminated_one() {
+        assert_eq!(
+            inert_heredoc("git commit -F - <<'EOF'\nmsg\nEOF\n"),
+            Some("git commit -F - ")
+        );
+        assert_eq!(inert_heredoc("cat <<-\"E\"\n\tmsg\n\tE"), Some("cat "));
+        // Expanded body, herestring, missing terminator, and a command past it.
+        assert_eq!(inert_heredoc("cat <<EOF\nmsg\nEOF"), None);
+        assert_eq!(inert_heredoc("cat <<<'msg'"), None);
+        assert_eq!(inert_heredoc("cat <<'EOF'\nmsg\n"), None);
+        assert_eq!(inert_heredoc("cat <<'EOF'\nmsg\nEOF\nrm -rf /x"), None);
+        // The marker sits inside a quote the body closes: not shell syntax.
+        assert_eq!(inert_heredoc("echo 'a << b'\n"), None);
+    }
 
     #[test]
     fn splits_chains_but_not_pipes() {

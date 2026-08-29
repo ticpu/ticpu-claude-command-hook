@@ -24,6 +24,7 @@ ssh options: -4 -6 -q -T -t -n -C -v -p -l -i, -o BatchMode ConnectTimeout Conne
 Never: sudo either end, -f/--follow, journal writes (--rotate --vacuum-* --flush --sync).
 git read verbs: status log show diff blame rev-parse grep ls-files for-each-ref rev-list check-ignore diff-tree …, under -C <path> too; read-only modes of branch tag config remote reflog symbolic-ref.
 git add <path> naming at least one path existing as a file. Refused: -A . -u *, pathspec spelled from repo root while below it.
+git commit -F - <<'EOF' … EOF, delimiter quoted, terminator last line. Flags: -F - --file=- -s --signoff -q --quiet. Refused: -a --amend -m, a pathspec, -C, -c, an unquoted <<EOF.
 cd <path> && git … inside the current repo: refused for every other verb; run from here, or bare cd first (directory persists between calls). cd to another repo keeps its prompt.
 glab read pairs: mr view|list|diff|checks, issue view|list, ci view|list|status|trace|get, pipeline view|list|status, release view|list, repo view|list|contributors, snippet view|list, label list, milestone list, incident view|list, schedule list, auth status, glab version.
 glab api <path>: GET only, no body flag.

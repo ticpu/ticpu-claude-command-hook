@@ -1,4 +1,5 @@
 mod add;
+mod commit;
 mod parse;
 mod read_only;
 #[cfg(test)]
@@ -15,6 +16,7 @@ use crate::input::HookInput;
 use crate::output::HookOutput;
 
 pub use crate::checks::git_bypass::add::is_explicit_add;
+pub use crate::checks::git_bypass::commit::is_stdin_commit;
 pub use crate::checks::git_bypass::read_only::is_read_only_segment;
 
 const NO_VERIFY: &str = "`--no-verify` is only allowed for TDD (commit message starts with \"test\"). \

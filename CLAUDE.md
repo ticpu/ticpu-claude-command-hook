@@ -139,6 +139,18 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   `git show <sha>:<file> | grep …` reached neither check. One that runs a program of its own
   (`shell::search_runs_a_program`, shared with the fold) is not a plain consumer. It runs last in
   `dispatch` so every objection gets first say and a `git grep` still reaches the fold.
+  Its second allow is the commit shape — explicit staging, then `git commit -F -` reading a
+  quote-delimited heredoc — and it stands apart from `allow_chain` because everything above
+  fails open on a heredoc: `chain_segments` refuses one, and a message body holding an
+  apostrophe or a `$(` forfeits every allow at the substitution gate before any check sees it.
+  The quoted delimiter is what settles that, the body being literal text nothing expands, so
+  `shell::inert_heredoc` hands back the head and the gate is applied there instead — the one
+  allow in `dispatch` that runs ahead of it. The terminator must be the last line, or what
+  follows it is a command nothing judged. Which files land in the commit is the other half:
+  `-a`, `--amend`, `-m`, a pathspec, `-C` and `-c` are all off `commit.rs`'s flag list, so the
+  commit contains what a `git add` named and the hooks it runs are the ones this repo would
+  have run anyway. `--no-verify` and `--no-gpg-sign` never reach it — `git_bypass` denies
+  those first, reading its flags from the same text in front of the marker.
 - `glab_read_only` — allows a glab invocation that only reads, with the usual do-nothing
   segments around it and display-only consumers. glab is judged here rather than by a
   `settings.json` prefix rule because `api` is one prefix covering both directions: the method

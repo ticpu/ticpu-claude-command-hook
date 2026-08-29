@@ -196,6 +196,21 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // A directory or a variable sweeps whatever is under it.
     ("git add src", Pass),
     ("git add \"$PWD\"", Pass),
+    // The commit shape: the body may hold anything, the head decides.
+    (
+        "git add src/main.rs && git commit -F - <<'EOF'\nfix: don't $(x)\nEOF",
+        Allow,
+    ),
+    ("git commit -F - <<\"EOF\"\nfix: x\nEOF", Allow),
+    // An unquoted delimiter expands the body, so it is no longer only data.
+    ("git commit -F - <<EOF\nfix: x\nEOF", Pass),
+    ("git commit -F - <<'EOF'\nfix: x\nEOF\nrm -rf /zztest", Pass),
+    // Each of these commits something no `git add` named.
+    ("git commit -a -F - <<'EOF'\nfix: x\nEOF", Pass),
+    ("git commit --amend -F - <<'EOF'\nfix: x\nEOF", Pass),
+    ("git commit -F - src/main.rs <<'EOF'\nfix: x\nEOF", Pass),
+    ("git commit -F msg.txt <<'EOF'\nfix: x\nEOF", Pass),
+    ("git add . && git commit -F - <<'EOF'\nfix: x\nEOF", Deny),
     // git is git however it is reached.
     ("/usr/bin/git commit --no-verify -m \"feat: x\"", Deny),
     ("{ git commit --no-verify -m \"feat: x\"; }", Deny),

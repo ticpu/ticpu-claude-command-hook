@@ -15,6 +15,9 @@ use crate::output::HookOutput;
 const ALLOW_SAFE: &str =
     "a bare `cd`, read-only git, or `git add` on explicit paths (auto-allowed by the hook)";
 
+const ALLOW_COMMIT: &str = "`git commit -F -` taking its message from a quoted heredoc, on paths \
+staged by name (auto-allowed by the hook)";
+
 /// A segment that adds no reach to whatever else the chain is allowed for: it
 /// moves the shell, names a variable, prints, or reads. `here` is the directory
 /// the segment runs in — `git add` is judged on the paths it names from there.
@@ -56,4 +59,34 @@ pub fn allow_chain(input: &HookInput) -> Option<HookOutput> {
             || git_bypass::is_explicit_add(segment, here);
     }
     works.then(|| HookOutput::allow("PreToolUse", ALLOW_SAFE))
+}
+
+/// The commit shape: explicit staging, then `git commit -F -` fed by a
+/// quote-delimited heredoc. It is separate from `allow_chain` because the heredoc
+/// is what the rest of this module fails open on — `chain_segments` refuses a
+/// command holding one, and a message body carrying an apostrophe or a `$(` would
+/// forfeit every allow at the substitution gate. A quoted delimiter settles that:
+/// the body is literal text nothing expands, so the head in front of it is the
+/// whole of what runs and is scanned like any other chain.
+///
+/// What the commit contains is what the caller staged by name — `-a`, `--amend`
+/// and a pathspec are all off the flag list — and the hooks it runs are this
+/// repo's own, which is what the prompt would have been protecting.
+pub fn allow_heredoc_commit(input: &HookInput) -> Option<HookOutput> {
+    let head = shell::inert_heredoc(input.command())?;
+    if shell::has_substitution(head) {
+        return None;
+    }
+    let segments = shell::chain_segments(head)?;
+    let here = dirs(&segments, &input.cwd);
+    let (commit, staging) = segments.split_last()?;
+    for (segment, here) in staging
+        .iter()
+        .zip(&here)
+    {
+        if shell::redirects_anything(segment) || !is_harmless_segment(segment, here) {
+            return None;
+        }
+    }
+    git_bypass::is_stdin_commit(commit).then(|| HookOutput::allow("PreToolUse", ALLOW_COMMIT))
 }
