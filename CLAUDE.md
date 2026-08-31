@@ -35,7 +35,7 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   program passes and a printer among the outer tokens does not. What that program then does with
   the value is beyond this — which is also why a path given as the value of a key flag (`ssh -i`,
   a client's `--sslkey`) is not a print, nor is one named by a command that opens nothing (a mode
-  change, a `stat`, a `test`, a `git log` carrying no patch flag). A search's pattern is exempt
+  change, a rename, a `stat`, a `test`, a `git log` carrying no patch flag). A search's pattern is exempt
   wherever it sits — `search_flags::pattern_words` tells it from the paths, since a pattern is the
   one argument a command names and does not open, and `rg 'password|secret' src/` was refused for
   quoting the word it looks for. A printer's own words go the same way — it opens nothing, so a

@@ -70,7 +70,7 @@ const PRINTERS: &[&str] = &["echo", "printf", "print"];
 /// filesystem says about it, and cannot put a byte of its contents anywhere.
 const OPENS_NOTHING: &[&str] = &[
     "ls", "stat", "test", "[", "chmod", "chown", "chgrp", "touch", "rm", "mkdir", "realpath",
-    "dirname", "basename",
+    "dirname", "basename", "mv", "ln",
 ];
 
 /// What turns `git log` into a printer of the file it names.
@@ -535,6 +535,8 @@ mod tests {
             "curl --key ~/.ssh/id_rsa https://example.test/",
             "chmod 600 ~/.ssh/id_ed25519",
             "ls -l ~/.ssh/",
+            "mv vault/id_rsa vault/host-key.pem",
+            "ln -s ~/.ssh/id_ed25519 keys/current",
             "test -f .env",
             "cat src/read_secret_management.rs",
             "rg -n secrets src/",

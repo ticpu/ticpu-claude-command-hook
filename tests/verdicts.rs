@@ -333,6 +333,7 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // value is captured. Spelled with `$HOME`/`~` so no row turns on this box
     // having the file.
     ("cat ~/.ssh/id_ed25519", Deny),
+    ("mv $HOME/vault/id_rsa $HOME/vault/host-key.pem", Pass),
     ("rg -n uri -A2 $HOME/.config/fsa-secrets.yaml", Deny),
     (
         "yq '.eido.uri' $HOME/.config/fsa-secrets.yaml | head -1",
