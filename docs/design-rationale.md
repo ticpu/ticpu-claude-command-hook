@@ -143,8 +143,9 @@ output still has to get the work done. What a program does with an argument it w
 outside this: the test is what the shell prints.
 
 Matching on wording alone is exempt where the file is source or prose — a module about
-credentials is not one — and that exemption never extends to a location or an extension that
-identifies a key. What is left is a name that reads like a credential and is not one, which no
+credentials is not one — or where git already tracks the file, a committed value being spent
+whatever this session does with it. Neither exemption extends to a location or an extension
+that identifies a key. What is left is a name that reads like a credential and is not one, which no
 rule here can settle: the refusal names a one-shot waiver, spent as it is read.
 
 ## A file printed into the transcript is refused, a file piped is not

@@ -339,10 +339,35 @@ fn secret_path(token: &str, cwd: &str) -> Option<String> {
         return None;
     }
     match resolvable(path, cwd) {
-        Some(resolved) => resolved
-            .exists()
-            .then(|| path.to_string()),
+        Some(resolved) => (resolved.exists() && !tracked(&resolved)).then(|| path.to_string()),
         None => Some(path.to_string()),
+    }
+}
+
+/// The file is committed, so whatever it holds is already in a history the
+/// transcript cannot spend twice — a checked-in `secrets.yaml` is a template, an
+/// eyaml block or a value that needed rotating the day it landed. The watch is for
+/// the credentials living on this box outside any repo. Only the wording rules give
+/// way: a `.ssh` inside a repo is still a key directory.
+fn tracked(path: &std::path::Path) -> bool {
+    let Some(dir) = path.parent() else {
+        return false;
+    };
+    match std::process::Command::new("git")
+        .args(["ls-files", "--error-unmatch", "--"])
+        .arg(path)
+        .current_dir(dir)
+        // "did not match any file" is the untracked answer, not a failure.
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+    {
+        Ok(status) => status.success(),
+        // No git, or none to run it in: the path stands on its name, which refuses.
+        Err(e) => {
+            eprintln!("secret_paths: git ls-files {}: {e}", path.display());
+            false
+        }
     }
 }
 
@@ -486,6 +511,34 @@ mod tests {
     fn denies(command: &str) -> bool {
         let cwd = fixtures();
         printed_path(command, &cwd.to_string_lossy()).is_some()
+    }
+
+    /// A repo of its own, so the fixtures above keep answering "untracked".
+    fn committed_fixtures() -> PathBuf {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/secret-paths-tracked");
+        fs::create_dir_all(dir.join(".ssh")).unwrap();
+        fs::write(dir.join("secrets.yaml"), "x\n").unwrap();
+        fs::write(dir.join(".ssh/id_rsa"), "x\n").unwrap();
+        let git = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?}");
+        };
+        git(&["init", "-q"]);
+        git(&["add", "--", "secrets.yaml", ".ssh/id_rsa"]);
+        dir
+    }
+
+    #[test]
+    fn a_committed_credential_name_reads_normally() {
+        let dir = committed_fixtures();
+        let cwd = dir.to_string_lossy();
+        assert!(printed_path("cat secrets.yaml", &cwd).is_none());
+        // The directory rule does not give way to tracking.
+        assert!(printed_path("cat .ssh/id_rsa", &cwd).is_some());
     }
 
     #[test]

@@ -49,7 +49,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   alone, the values being removed or encrypted before either file is committed — the directory
   rule still standing over both, so a `.gpg` under `.password-store` is refused. A name that
   resolves has to exist before it counts — a bare word naming no file here is a word, not a path —
-  while a glob or a variable, having nothing to stat, is judged on its wording. `Read` and `Grep` are matched on
+  while a glob or a variable, having nothing to stat, is judged on its wording. A resolved name
+  git already tracks gives the name rules way: a committed credential is spent the day it landed,
+  and what this is watching for is the ones living on the box outside any repo. The directory rule
+  does not give way with them — a `.ssh` inside a checkout still holds keys, tracked or not. `Read` and `Grep` are matched on
   the path they name by the same rules; `Edit`/`Write` are not, a write printing nothing. A
   command `shell` cannot split is judged whole rather than waved through: this is the one check
   with no allow to withhold, so being wrong costs a prompt. A name that reads like a credential
