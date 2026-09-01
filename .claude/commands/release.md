@@ -23,7 +23,8 @@ grants it: "commit the fix" never means release.
 
 Never reuse a version that has left this machine. Anything already holding it never upgrades.
 
-- apt repository: search the published suite for the package name.
+- apt repository: search the published suite for the package name. The deploy script names the
+  host and the repo; read it rather than typing either from memory.
 - crates.io: `cargo info <crate> --registry crates-io` — the `--registry` is not optional
   inside a workspace, or you read the local path dep's version instead.
 
@@ -68,10 +69,10 @@ deployed.
 
 For the .deb path (`packaging/`):
 
-- Delete the previous version's `*.deb` from the deploy directory first. `deploy-aptly.sh`
-  uploads every `.deb` it finds there, so a stale one is re-uploaded silently.
-- `make -C packaging deb`, then check the built binary is newer than the sources you just changed —
-  a stale `dist/` packages the previous release under the new version number.
+- Delete the previous version's `*.deb` from the build directory first. A deploy script uploads
+  every `.deb` it finds there, so a stale one is re-uploaded silently.
+- `make -C packaging deb`, then check the built binary is newer than the sources you just
+  changed — a stale `dist/` packages the previous release under the new version number.
 - Smoke-test the packaged binary for this arch before uploading, not the one in `target/`.
 - Run the repo's deploy script, then verify with the same search from step 2.
 
