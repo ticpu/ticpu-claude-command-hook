@@ -7,8 +7,14 @@ useDefault = true
 
 # `gitleaks dir` walks build output too, where any 10-digit constant (u32::MAX,
 # for one) trips the NANP rule. Nothing under here is ever committed.
-[allowlist]
+[[allowlists]]
 paths = ['''target/''']
+
+# The release key's fingerprint is public by construction — the archive that
+# verifies the signatures publishes it — and generic-api-key reads it as a token.
+[[allowlists]]
+paths = ['''sign-release\.sh''']
+regexes = ['''RELEASE_KEY=[0-9A-F]{40}''']
 
 [[rules]]
 id = "phone-number-e164"
