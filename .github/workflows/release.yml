@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    # Full history: the packaging Makefile derives the version from the tag.
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    # The lockfile is gitignored during development and force-added on the
+    # release commit; without it the source tarball resolves to other versions.
+    - name: Check the release commit carries Cargo.lock
+      if: github.ref_type == 'tag'
+      run: test -f Cargo.lock
+
+    # One container pass cross-compiles both arches, so there is no build matrix.
+    # docker rather than podman: rootless podman's subuid provisioning on the
+    # hosted runner is unverified, and BuildKit here is not.
+    - name: Build .debs
+      env:
+        CONTAINER_CMD: docker
+      run: make -C packaging deb
+
+    - name: Stage assets
+      run: |
+        version=$(grep '^version' Cargo.toml | head -1 | cut -d'"' -f2)
+        if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+          echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
+          exit 1
+        fi
+        mkdir assets
+        mv packaging/*.deb assets/
+        for arch in amd64 arm64; do
+          cp "packaging/dist/ticpu-claude-command-hook.$arch" "assets/ticpu-claude-command-hook-$version-linux-$arch"
+          cp "packaging/dist/gf.$arch" "assets/gf-$version-linux-$arch"
+        done
+        git archive --format=tar.gz \
+          --prefix="ticpu-claude-command-hook-$version/" \
+          -o "assets/ticpu-claude-command-hook-$version.tar.gz" HEAD
+        # Written outside and moved in, so the sums file cannot list itself.
+        (cd assets && sha256sum ./*) > SHA256SUMS
+        mv SHA256SUMS assets/
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: assets
+        path: assets/*
+        if-no-files-found: error
+
+    # Draft: sign-release.sh signs the assets and publishes it. A published
+    # release's assets can no longer be replaced once immutability is enabled.
+    # The annotated tag's message is the changelog; `contents:body` drops the
+    # subject (already the title) and the PGP block on a signed tag.
+    - name: Create draft release
+      if: github.ref_type == 'tag'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        gh release create "$GITHUB_REF_NAME" \
+          --draft \
+          --title "$GITHUB_REF_NAME" \
+          --notes "$(git tag -l --format='%(contents:body)' "$GITHUB_REF_NAME")" \
+          assets/*

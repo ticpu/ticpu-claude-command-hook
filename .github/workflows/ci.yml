@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+
+    - uses: Swatinem/rust-cache@v2
+
+    # The repo's own gate: clippy -D warnings plus the verdict table.
+    - run: make -j check
+
+  # A broken Containerfile or control file otherwise surfaces after the tag is
+  # pushed, when the release job is the first thing to build a package.
+  package:
+    runs-on: ubuntu-latest
+    env:
+      CONTAINER_CMD: docker
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - run: make -C packaging deb
+
+    - name: Inspect both packages
+      run: |
+        for deb in packaging/*.deb; do
+          dpkg-deb -I "$deb"
+          dpkg-deb -c "$deb"
+        done
