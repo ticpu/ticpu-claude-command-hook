@@ -98,6 +98,28 @@ const KEY_FLAGS: &[&str] = &[
     "--tlscertificatekeyfile",
     "--ssh-key",
 ];
+/// Programs whose first positional argument is an expression over their input
+/// rather than a file — the same exemption a search's pattern gets: `jq -r
+/// '.[]?|.key'` names a field, and `.key` reads like a key only because a filter
+/// and a filename are spelled alike.
+const FILTER_PROGRAMS: &[&str] = &["jq", "yq", "jaq", "gojq", "xq", "tomlq"];
+
+/// Long options of those programs taking one value, and the four taking two. An
+/// option this does not know is read as a switch; one taking a value it cannot
+/// see leaves the filter unlocated rather than exempting the wrong word.
+const FILTER_VALUE_FLAGS: &[&str] = &[
+    "from-file",
+    "indent",
+    "output-format",
+    "input-format",
+    "split-exp",
+];
+const FILTER_PAIR_FLAGS: &[&str] = &["arg", "argjson", "slurpfile", "rawfile"];
+
+/// Short options taking a value, which ends the cluster: the value is the rest of
+/// the word or the word after it.
+const FILTER_VALUE_SHORTS: &str = "fopI";
+
 /// The waiver for a path this cannot tell from a credential: named in the deny,
 /// created by a command the user approves, spent by the next refusal. Its own name
 /// carries none of the words above, or the command creating it would be refused.
@@ -157,6 +179,9 @@ pub fn waiver_requested(command: &str) -> Option<HookOutput> {
 /// cannot be split is judged whole: this check has no allow to withhold, so being
 /// wrong costs a prompt rather than a tool call.
 fn printed_path(command: &str, cwd: &str) -> Option<String> {
+    // A quoted, terminated heredoc body is literal text nothing opens — a commit
+    // message may name a credential file without reading one.
+    let command = shell::inert_heredoc(command).unwrap_or(command);
     shell::chain_segments(command)
         .unwrap_or_else(|| vec![command])
         .iter()
@@ -179,6 +204,7 @@ fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
         .then(|| search_flags::pattern_words(stage))
         .flatten()
         .unwrap_or_default();
+    let filter = filter_word(stage);
     let outer = outside_substitutions(stage, &spans);
     // A printer opens nothing: an argument of its own is text on its way to the
     // screen, and only a substitution inside it can have read a file.
@@ -192,7 +218,7 @@ fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
         let Some(path) = secret_path(token, cwd) else {
             continue;
         };
-        if handed_over(&all, i) || patterns.contains(&i) {
+        if handed_over(&all, i) || patterns.contains(&i) || filter == Some(i) {
             continue;
         }
         if !spans
@@ -208,6 +234,63 @@ fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
     }
     let captured = captured?;
     prints_its_arguments(&outer).then_some(captured)
+}
+
+/// Which word of the stage is the filter a `jq`-family program applies to its
+/// input. The paths after it are still read, so only that one index is exempt.
+fn filter_word(stage: &str) -> Option<usize> {
+    let program = shell::program(stage)?;
+    if !FILTER_PROGRAMS.contains(&program) {
+        return None;
+    }
+    let args = shell::program_args(stage)?;
+    let base = stage
+        .split_whitespace()
+        .count()
+        - args.len();
+    let mut i = 0;
+    // `-f`/`--from-file` puts the filter in a file, leaving every positional a path.
+    let mut from_file = false;
+    while let Some(word) = args
+        .get(i)
+        .copied()
+    {
+        if word == "--" {
+            return (!from_file).then_some(base + i + 1);
+        }
+        if let Some(long) = word.strip_prefix("--") {
+            let name = long
+                .split('=')
+                .next()
+                .unwrap_or(long);
+            from_file |= name == "from-file";
+            i += 1;
+            if long.contains('=') {
+                continue;
+            }
+            i += if FILTER_PAIR_FLAGS.contains(&name) {
+                2
+            } else {
+                usize::from(FILTER_VALUE_FLAGS.contains(&name))
+            };
+            continue;
+        }
+        let Some(cluster) = word
+            .strip_prefix('-')
+            .filter(|cluster| !cluster.is_empty())
+        else {
+            return (!from_file).then_some(base + i);
+        };
+        from_file |= cluster.contains('f');
+        i += match cluster
+            .chars()
+            .position(|c| FILTER_VALUE_SHORTS.contains(c))
+        {
+            Some(at) if at + 1 == cluster.chars().count() => 2,
+            _ => 1,
+        };
+    }
+    None
 }
 
 /// The stage names a path without opening it. `git log` reports commits rather
@@ -561,6 +644,10 @@ mod tests {
             "git log -p -- ~/.ssh/id_rsa",
             "git log -L 1,5:$HOME/.ssh/id_rsa",
             "psql <<EOF\nselect 1;\nEOF\ncat fsa-secrets.yaml",
+            // Only the filter is exempt; a path beside it is still read.
+            "jq . .env",
+            "jq -r '.uri' fsa-secrets.yaml",
+            "jq -f query.jq fsa-secrets.yaml",
         ] {
             assert!(denies(command), "should deny: {command}");
         }
@@ -609,6 +696,12 @@ mod tests {
             "git log --format=%s -- config/id_rsa*",
             "cat notes.md",
             "git commit -m 'fix: read the secret from the env'",
+            "git commit -F - <<'EOF'\nfix: stop reading .env\n\nA `.key` filter is not a path.\nEOF\n",
+            // A jq filter is the argument the program does not open.
+            "glab api 'projects/213/variables' | jq -r '.[]?|.key'",
+            "jq -r --arg n x '.[].key' response.json",
+            "yq -o json '.secret' notes.md",
+            "jq -r -- '.credentials' report.json",
         ] {
             assert!(!denies(command), "should pass: {command}");
         }

@@ -38,7 +38,13 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   change, a rename, a `stat`, a `test`, a `git log` carrying no patch flag). A search's pattern is exempt
   wherever it sits — `search_flags::pattern_words` tells it from the paths, since a pattern is the
   one argument a command names and does not open, and `rg 'password|secret' src/` was refused for
-  quoting the word it looks for. A printer's own words go the same way — it opens nothing, so a
+  quoting the word it looks for. A `jq`-family filter is the same argument under another name —
+  `jq -r '.[]?|.key'` was refused for a field spelled like a key extension — so the one positional
+  before the paths is exempt too, located by walking the flags rather than by how it reads. An
+  long option it does not know is read as a switch, so one taking a path would exempt that path
+  instead, and `-f` moves the filter into a file, which leaves every positional a path. A quoted,
+  terminated heredoc is read as its head alone, the body being literal text nothing opens — the
+  commit message describing this refusal was itself refused for quoting the filter. A printer's own words go the same way — it opens nothing, so a
   credential name among them is text on its way to the screen and only a substitution inside it
   can have read a file. A name matches on the basename (a word saying what it holds, a known
   credential dotfile, an `id_` key without `.pub`, a key or keystore extension) or on a directory

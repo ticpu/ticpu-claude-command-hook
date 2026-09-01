@@ -347,6 +347,9 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "mongosh --quiet \"$(yq -r '.uri' $HOME/.config/fsa-secrets.yaml)\" --eval 'db.x.count()'",
         Pass,
     ),
+    // A jq filter names a field, not a file; the path beside one is still read.
+    ("printf '{}' | jq -r '.[]?|.key'", Pass),
+    ("jq -r '.key' $HOME/.config/fsa-secrets.yaml", Deny),
     // Flagged, so the `cat` check leaves them to the row's own subject.
     ("cat -n src/checks/secret_paths.rs", Pass),
     ("cat -n $HOME/.config/fsa-secrets.yaml.sample", Pass),
