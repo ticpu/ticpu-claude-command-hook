@@ -41,14 +41,53 @@ pub fn print() {
     print!("{RULES}");
 }
 
-/// The generated file's path, from this binary's own `target/<profile>/` location,
-/// so `install` can name the line to import. `None` when the binary was moved out
-/// of its checkout, where there is nothing to point a `CLAUDE.md` at.
+const PACKAGED_DOC: &str = "share/doc/ticpu-claude-command-hook/allowed-commands.md";
+
+/// The generated file's path, so `install` can name the line to import. `None` when
+/// the binary was moved away from both copies, where there is nothing to point a
+/// `CLAUDE.md` at.
 pub fn doc_path(binary: &Path) -> Option<PathBuf> {
-    let root = binary
+    doc_candidates(binary)
+        .into_iter()
+        .find(|p| p.is_file())
+}
+
+/// A checkout has it three levels up from `target/<profile>/`; the .deb ships it
+/// under the prefix the binary sits in.
+fn doc_candidates(binary: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(root) = binary
         .ancestors()
-        .nth(3)?;
-    let path = root.join(FILE);
-    path.is_file()
-        .then_some(path)
+        .nth(3)
+    {
+        candidates.push(root.join(FILE));
+    }
+    if let Some(prefix) = binary
+        .ancestors()
+        .nth(2)
+    {
+        candidates.push(prefix.join(PACKAGED_DOC));
+    }
+    candidates
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checkout_and_packaged_locations_are_both_offered() {
+        let candidates = doc_candidates(Path::new("/usr/bin/ticpu-claude-command-hook"));
+        assert!(candidates.contains(&PathBuf::from(
+            "/usr/share/doc/ticpu-claude-command-hook/allowed-commands.md"
+        )));
+
+        let candidates = doc_candidates(Path::new(
+            "/home/x/repo/target/release/ticpu-claude-command-hook",
+        ));
+        assert_eq!(
+            candidates[0],
+            PathBuf::from("/home/x/repo/docs/allowed-commands.md")
+        );
+    }
 }
