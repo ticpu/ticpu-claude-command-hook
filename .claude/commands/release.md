@@ -76,6 +76,12 @@ For the .deb path (`packaging/`):
 - Smoke-test the packaged binary for this arch before uploading, not the one in `target/`.
 - Run the repo's deploy script, then verify with the same search from step 2.
 
+For a public archive fed by GitHub releases: pushing the tag is the whole build step — CI
+packages it and creates the release as a **draft**. Then `./sign-release.sh`, which detach-signs
+every asset with the fingerprint in `user.signingkey`, uploads the `.asc` files and clears the
+draft flag last. Never publish the release by hand first: assets cannot be added to a published
+release, so an unsigned one can never be signed.
+
 For AUR: no `Co-Authored-By`; edit pkgver, `updpkgsums`, `makepkg --printsrcinfo > .SRCINFO`,
 commit both, push.
 
