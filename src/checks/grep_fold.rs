@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
@@ -27,23 +27,32 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
     ))
 }
 
-/// `gf` ships beside this binary; without it there is nothing to pipe into.
+/// `gf` ships beside this binary in a checkout; the .deb keeps it out of `PATH`,
+/// two letters being a name to leave to whoever claims it first.
 fn gf_path() -> Option<PathBuf> {
     let exe = std::env::current_exe()
         .inspect_err(|e| eprintln!("hook: cannot locate own path, skipping gf rewrite: {e}"))
         .ok()?;
-    let gf = exe
-        .parent()?
-        .join("gf");
-    if !gf.is_file() {
-        return None;
-    }
+    let gf = gf_candidates(&exe).into_iter().find(|p| p.is_file())?;
     // Quoting a path with shell-special characters is not worth the risk.
     let printable = gf.to_str()?;
     printable
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || "/._-+@".contains(c))
         .then_some(gf)
+}
+
+const PACKAGED_GF: &str = "libexec/ticpu-claude-command-hook/gf";
+
+fn gf_candidates(exe: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(dir) = exe.parent() {
+        candidates.push(dir.join("gf"));
+    }
+    if let Some(prefix) = exe.ancestors().nth(2) {
+        candidates.push(prefix.join(PACKAGED_GF));
+    }
+    candidates
 }
 
 /// Folds every segment that can be folded and leaves the rest verbatim, so one
@@ -159,7 +168,19 @@ fn changes_output_shape(word: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
+
     const GF: &str = "/opt/hook/gf";
+
+    #[test]
+    fn a_packaged_hook_looks_outside_its_own_directory() {
+        let candidates = super::gf_candidates(Path::new("/usr/bin/ticpu-claude-command-hook"));
+        assert_eq!(candidates[0], PathBuf::from("/usr/bin/gf"));
+        assert_eq!(
+            candidates[1],
+            PathBuf::from("/usr/libexec/ticpu-claude-command-hook/gf")
+        );
+    }
 
     /// The directory only decides a `git add`, and no fold covers one.
     fn rewrite(command: &str, gf: &str) -> Option<String> {

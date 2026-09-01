@@ -37,12 +37,13 @@ define purge-stale-debs
 	done
 endef
 
-# gf has to land beside the hook binary: that is how the fold rewrite finds it.
+# gf stays out of PATH: two letters is a name to leave to whoever claims it in a
+# distribution first. The hook looks for it here when it is not its own sibling.
 define build-deb
 	$(call purge-stale-debs)
 	rm -rf "$(PKG)"
 	install -D -m 755 -T "dist/$(BINARY).$(1)" "$(PKG)/usr/bin/$(BINARY)"
-	install -D -m 755 -T "dist/gf.$(1)" "$(PKG)/usr/bin/gf"
+	install -D -m 755 -T "dist/gf.$(1)" "$(PKG)/usr/libexec/$(NAME)/gf"
 	install -D -m 644 -T ../docs/allowed-commands.md "$(PKG)/usr/share/doc/$(NAME)/allowed-commands.md"
 	install -D -m 644 -T ../LICENSE "$(PKG)/usr/share/doc/$(NAME)/copyright"
 	install -D -m 644 -T control "$(PKG)/DEBIAN/control"
