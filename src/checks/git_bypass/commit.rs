@@ -25,7 +25,11 @@ pub fn is_stdin_commit(segment: &str) -> bool {
         return false;
     }
     let p = parse(stage);
-    if p.subcommand != Some("commit") || p.sets_config || p.c_path.is_some() {
+    if p.subcommand != Some("commit")
+        || p.sets_config
+        || p.c_path
+            .is_some()
+    {
         return false;
     }
     let mut from_stdin = false;

@@ -269,9 +269,11 @@ fn allows_no_verify(cmd: &str) -> bool {
         .and_then(|pos| cmd[pos..].split_once('\n'))
         .and_then(|(_, body)| {
             body.lines()
-                .find(|line| !line
-                    .trim()
-                    .is_empty())
+                .find(|line| {
+                    !line
+                        .trim()
+                        .is_empty()
+                })
         })
         .is_some_and(is_waived_type)
 }
