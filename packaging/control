@@ -1,0 +1,14 @@
+Package: ticpu-claude-command-hook
+Version: 0.0.0-replaced-by-makefile
+Section: devel
+Priority: optional
+Architecture: amd64
+Depends: libc6 (>= 0.0), libgcc-s1
+Installed-Size: 0
+Maintainer: Jérôme Poulin <jeromepoulin@gmail.com>
+Homepage: https://github.com/ticpu/ticpu-claude-command-hook
+Description: Claude Code hook dispatcher
+ Single binary backing every Claude Code hook entry: permission guards over
+ Bash commands and file edits, plus the gf search-output folder it pipes
+ searches through. Run "ticpu-claude-command-hook install" once per user to
+ write the settings.json entries.
