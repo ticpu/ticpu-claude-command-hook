@@ -1,6 +1,6 @@
 CARGO ?= cargo
 
-.PHONY: all check clippy test release probe
+.PHONY: all check clippy test release probe install uninstall
 
 all: release
 
@@ -19,6 +19,15 @@ test:
 release:
 	$(CARGO) build --release
 	./target/release/ticpu-claude-command-hook rules > docs/allowed-commands.md
+
+install: release
+	./target/release/ticpu-claude-command-hook install
+
+# Takes the settings.json entries out; the built binary stays. It matches by binary
+# name, so it works from a checkout that has moved since the install. Built first
+# because the installed binary predates the verb.
+uninstall: release
+	./target/release/ticpu-claude-command-hook uninstall
 
 # Ad-hoc verdicts for commands on stdin; the asserted table is tests/verdicts.rs.
 probe: release

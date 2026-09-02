@@ -20,10 +20,16 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some("uninstall") => {
+            if let Err(e) = install::uninstall() {
+                eprintln!("uninstall: {e:#}");
+                std::process::exit(1);
+            }
+        }
         Some("rules") => rules::print(),
         Some(other) => {
             eprintln!(
-                "hook: unknown argument {other:?}; the hook JSON is read from stdin, and the verbs are `install` and `rules`"
+                "hook: unknown argument {other:?}; the hook JSON is read from stdin, and the verbs are `install`, `uninstall` and `rules`"
             );
             std::process::exit(2);
         }

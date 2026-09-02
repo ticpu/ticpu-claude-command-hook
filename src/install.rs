@@ -1,8 +1,10 @@
-//! `install` — writes this binary's hook entries into Claude Code's settings.json.
+//! `install` / `uninstall` — writes or removes this binary's hook entries in Claude
+//! Code's settings.json.
 //!
 //! Merging is by hook *command*, not by matcher: an entry naming this binary under any
 //! path is this binary's, so a moved or renamed checkout re-points instead of leaving a
-//! second entry running a stale build.
+//! second entry running a stale build. `uninstall` reads the same name the same way, so
+//! it takes out the entry a checkout that has since moved left behind.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -18,19 +20,9 @@ const ENTRIES: &[(&str, &str)] = &[
 ];
 
 pub fn run() -> Result<()> {
-    let binary = std::env::current_exe()
-        .context("resolving this binary's path")?
-        .canonicalize()
-        .context("canonicalizing this binary's path")?;
+    let binary = binary_path()?;
     let settings = settings_path()?;
-
-    let before = match fs::read_to_string(&settings) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => "{}".to_string(),
-        Err(e) => return Err(e).context(format!("reading {}", settings.display())),
-    };
-    let mut root: Value =
-        serde_json::from_str(&before).with_context(|| format!("parsing {}", settings.display()))?;
+    let (before, mut root) = load(&settings)?;
 
     let replaced = merge(&mut root, &binary.to_string_lossy())?;
 
@@ -53,6 +45,49 @@ pub fn run() -> Result<()> {
     println!("Run /hooks or restart to load it in a session started before now.");
     announce_rules(&binary);
     Ok(())
+}
+
+pub fn uninstall() -> Result<()> {
+    let binary = binary_path()?;
+    let settings = settings_path()?;
+    let (_, mut root) = load(&settings)?;
+
+    let removed = strip(&mut root, &binary.to_string_lossy())?;
+    if removed.is_empty() {
+        println!("not installed: {}", settings.display());
+        return Ok(());
+    }
+
+    let mut text = serde_json::to_string_pretty(&root).context("serializing settings")?;
+    text.push('\n');
+    write_atomically(&settings, &text)?;
+
+    for (event, gone) in removed {
+        println!("removed {event} entry: {gone}");
+    }
+    println!("wrote {}", settings.display());
+    println!("Run /hooks or restart to drop it from a session started before now.");
+    Ok(())
+}
+
+fn binary_path() -> Result<PathBuf> {
+    std::env::current_exe()
+        .context("resolving this binary's path")?
+        .canonicalize()
+        .context("canonicalizing this binary's path")
+}
+
+/// An absent settings.json is an empty config, not a failure: `install` writes it and
+/// `uninstall` then has nothing to take out.
+fn load(settings: &Path) -> Result<(String, Value)> {
+    let before = match fs::read_to_string(settings) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => "{}".to_string(),
+        Err(e) => return Err(e).context(format!("reading {}", settings.display())),
+    };
+    let root =
+        serde_json::from_str(&before).with_context(|| format!("parsing {}", settings.display()))?;
+    Ok((before, root))
 }
 
 /// What is auto-allowed is no use to a caller that cannot see it, and the file is
@@ -79,19 +114,8 @@ fn settings_path() -> Result<PathBuf> {
 /// runs a binary of this name. Returns the commands dropped. Every other hook — and
 /// every other setting — is left as it stands, so this is safe over a live config.
 fn merge(root: &mut Value, binary: &str) -> Result<Vec<String>> {
-    let name = Path::new(binary)
-        .file_name()
-        .context("this binary has no file name")?
-        .to_string_lossy()
-        .into_owned();
-
-    let hooks = root
-        .as_object_mut()
-        .context("settings.json is not a JSON object")?
-        .entry("hooks")
-        .or_insert_with(|| json!({}))
-        .as_object_mut()
-        .context("settings.json `hooks` is not a JSON object")?;
+    let name = binary_name(binary)?;
+    let hooks = hooks_object(root)?;
 
     let mut replaced = Vec::new();
     for (event, matcher) in ENTRIES {
@@ -109,6 +133,55 @@ fn merge(root: &mut Value, binary: &str) -> Result<Vec<String>> {
         groups.push(entry(matcher, binary));
     }
     Ok(replaced)
+}
+
+/// Takes this binary out of every event it is named under, not only the ones `ENTRIES`
+/// currently lists: an install from an older build may sit under an event since dropped.
+/// Returns each command removed with the event it was under — the same path appears once
+/// per event, which reads as a repeat unless the event is named beside it.
+fn strip(root: &mut Value, binary: &str) -> Result<Vec<(String, String)>> {
+    let name = binary_name(binary)?;
+    let hooks = hooks_object(root)?;
+
+    let mut removed = Vec::new();
+    for (event, groups) in hooks.iter_mut() {
+        let groups = groups
+            .as_array_mut()
+            .with_context(|| format!("settings.json `hooks.{event}` is not an array"))?;
+        let mut here = Vec::new();
+        for group in groups.iter_mut() {
+            prune(group, &name, &mut here);
+        }
+        groups.retain(|group| !runs_nothing(group));
+        removed.extend(
+            here.into_iter()
+                .map(|command| (event.clone(), command)),
+        );
+    }
+    // An event left with no group at all is our own leftover, so it goes with the entry.
+    hooks.retain(|_, groups| {
+        !groups
+            .as_array()
+            .is_some_and(Vec::is_empty)
+    });
+    Ok(removed)
+}
+
+fn binary_name(binary: &str) -> Result<String> {
+    Ok(Path::new(binary)
+        .file_name()
+        .context("this binary has no file name")?
+        .to_string_lossy()
+        .into_owned())
+}
+
+fn hooks_object(root: &mut Value) -> Result<&mut serde_json::Map<String, Value>> {
+    root.as_object_mut()
+        .context("settings.json is not a JSON object")?
+        .entry("hooks")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .context("settings.json `hooks` is not a JSON object")
 }
 
 fn prune(group: &mut Value, name: &str, replaced: &mut Vec<String>) {
@@ -244,6 +317,64 @@ mod tests {
             ["/usr/local/bin/audit-log", "/new/ticpu-claude-command-hook"]
         );
         assert_eq!(commands(&root, "Stop"), ["/usr/local/bin/chime"]);
+    }
+
+    #[test]
+    fn uninstall_leaves_other_hooks_and_settings() {
+        let mut root = json!({
+            "model": "opus",
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Bash",
+                    "hooks": [
+                        { "type": "command", "command": "/usr/local/bin/audit-log" },
+                        { "type": "command", "command": "/old/ticpu-claude-command-hook" },
+                    ],
+                }],
+                "Stop": [{ "hooks": [{ "type": "command", "command": "/usr/local/bin/chime" }] }],
+            },
+        });
+        let removed = strip(&mut root, "/new/ticpu-claude-command-hook").unwrap();
+
+        assert_eq!(
+            removed,
+            [(
+                "PreToolUse".to_string(),
+                "/old/ticpu-claude-command-hook".to_string()
+            )]
+        );
+        assert_eq!(root["model"], "opus");
+        assert_eq!(commands(&root, "PreToolUse"), ["/usr/local/bin/audit-log"]);
+        assert_eq!(commands(&root, "Stop"), ["/usr/local/bin/chime"]);
+    }
+
+    /// Nothing of ours may survive an install-then-uninstall round trip, whatever the
+    /// events `ENTRIES` names today.
+    #[test]
+    fn uninstall_undoes_install() {
+        let mut root = json!({ "model": "opus" });
+        merge(&mut root, "/opt/hook/ticpu-claude-command-hook").unwrap();
+        let removed = strip(&mut root, "/opt/hook/ticpu-claude-command-hook").unwrap();
+
+        assert_eq!(removed.len(), ENTRIES.len());
+        assert_eq!(root, json!({ "model": "opus", "hooks": {} }));
+    }
+
+    #[test]
+    fn uninstall_removes_nothing_when_not_installed() {
+        let mut root = json!({
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Bash",
+                    "hooks": [{ "type": "command", "command": "/usr/local/bin/audit-log" }],
+                }],
+            },
+        });
+        let before = root.clone();
+        let removed = strip(&mut root, "/opt/hook/ticpu-claude-command-hook").unwrap();
+
+        assert!(removed.is_empty());
+        assert_eq!(root, before);
     }
 
     /// Twice in a row has to leave what once was there — the shape `run` compares to

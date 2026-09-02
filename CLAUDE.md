@@ -451,6 +451,13 @@ imported into every session and priced per token, so it is written flat: one lin
 no headings, bullets, blank lines or backticks, and no sentence that explains rather than
 states. Command words, flags and paths survive verbatim; nothing else has to.
 
+`make install` and `make uninstall` are those two verbs over the built binary. `uninstall`
+matches the same way install does — by binary name, under every event rather than the ones
+`ENTRIES` lists today — so an entry left by an older build or a checkout that has since moved
+goes with the rest, and a group or event holding nothing else goes with it. It touches no
+other hook and no other setting, and it leaves the binary and `docs/allowed-commands.md`
+alone: it takes the hook out of Claude Code, it does not undo the build.
+
 `tests/verdicts.rs` runs the real binary over a table of commands and asserts pass / deny /
 rewritten-command; add a row there for any new shape. `./probe.sh` prints the same verdicts
 for commands on stdin when you just want to try one.
