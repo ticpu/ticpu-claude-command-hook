@@ -1,5 +1,5 @@
 mod blind_edit;
-mod broad_find;
+mod broad_walk;
 mod cargo_tools;
 mod cat_read;
 mod design_rationale;
@@ -44,7 +44,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| blind_edit::waiver_requested(cmd))
                 .or_else(|| blind_edit::check(cmd))
                 .or_else(|| git_bypass::check(input))
-                .or_else(|| broad_find::check(cmd))
+                .or_else(|| broad_walk::check(cmd))
                 .or_else(|| literal_assignment::check(cmd))
                 .or_else(|| remote_session::check(cmd))
                 .or_else(|| search_stderr::check(cmd))

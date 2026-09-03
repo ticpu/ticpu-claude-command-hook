@@ -146,6 +146,11 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // Redirecting stdout keeps the fold off: the file must get the raw output.
     ("grep -rn foo src 2>&1 >out", Pass),
     ("find / -name foo", Deny),
+    // A lister rides along as a reader everywhere else, so the deny has to come
+    // before the allow that would otherwise carry it.
+    ("ls /home/jerome.poulin/GIT/ | head -20; ls /usr/src 2>&1 | head", Deny),
+    ("ls -d ~/GIT", Pass),
+    ("ls ~/GIT/eido", Pass),
     // A literal named once and expanded later: the assignment prefix makes the call
     // match no permission rule, and the value can simply be written where it is used.
     ("P=/x/doc.pdf; pdftotext -layout \"$P\" - | head -60", Deny),

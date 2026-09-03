@@ -206,8 +206,15 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   lone is `shell::is_lone_echo`, shared with `git_bypass` (where an echo is a neutral segment)
   and `remote_session` (where it is not company): one stage, no redirect of any fd, and no
   substitution — that runs before echo sees its own arguments, so `echo "$(id)"` prompts.
-- `broad_find` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
-  repo parent; a find scoped to one repo under GIT is allowed.
+- `broad_walk` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
+  repo parent; a find scoped to one repo under GIT is allowed. A trailing glob is judged
+  on its parent, `~/GIT/*` being that same walk under another spelling. An `ls`/`tree` of
+  the GIT parent or the home dir goes the same way, for a different reason: those two hold
+  hundreds of entries and a repo path is built from its name, so the listing is browsing to
+  guess rather than reading an answer. `/` is off that half — it prints two dozen names and
+  answers a real question — and so is `ls -d`, which names the directory instead of
+  listing it, while `tree -d` still walks. A lister is a neutral segment everywhere else,
+  so this has to deny ahead of the allow that would otherwise carry it.
 - `literal_assignment` — denies a bare `NAME=value` segment whose name a later segment expands.
   Every allow above and every `settings.json` prefix rule matches the command *text*, so an
   assignment in front of the work makes the call match none of them, and the "don't ask again"
