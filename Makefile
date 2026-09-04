@@ -1,6 +1,6 @@
 CARGO ?= cargo
 
-.PHONY: all check clippy test release probe install uninstall
+.PHONY: all check clippy test release probe install uninstall archpkg archpkg-install
 
 all: release
 
@@ -28,6 +28,15 @@ install: release
 # because the installed binary predates the verb.
 uninstall: release
 	./target/release/ticpu-claude-command-hook uninstall
+
+# The .deb is cross-compiled in a container for two architectures; this one builds
+# the checkout natively for the machine it runs on. pacman -U prompts for the
+# install, so it is not the --noconfirm shape.
+archpkg:
+	cd packaging && makepkg -f
+
+archpkg-install:
+	cd packaging && makepkg -fsi
 
 # Ad-hoc verdicts for commands on stdin; the asserted table is tests/verdicts.rs.
 probe: release

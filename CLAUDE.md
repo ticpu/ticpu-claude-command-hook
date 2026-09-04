@@ -465,6 +465,14 @@ goes with the rest, and a group or event holding nothing else goes with it. It t
 other hook and no other setting, and it leaves the binary and `docs/allowed-commands.md`
 alone: it takes the hook out of Claude Code, it does not undo the build.
 
+`make archpkg-install` builds `packaging/PKGBUILD` natively and hands the package to
+pacman — the Arch counterpart of the cross-compiled `.deb`, same layout (`/usr/bin`,
+`gf` under `/usr/libexec/<name>/`). `make archpkg` stops at the built package. It builds
+the checkout it sits in, not a tarball, so it is a local-install path and not a
+distributable PKGBUILD. After installing, `ticpu-claude-command-hook install` re-points
+`settings.json` at `/usr/bin` — the entries otherwise still name this checkout's
+`target/release/`.
+
 `tests/verdicts.rs` runs the real binary over a table of commands and asserts pass / deny /
 rewritten-command; add a row there for any new shape. `./probe.sh` prints the same verdicts
 for commands on stdin when you just want to try one.

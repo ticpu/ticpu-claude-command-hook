@@ -1,0 +1,40 @@
+# Maintainer: Jérôme Poulin <jeromepoulin@gmail.com>
+# Builds the checkout it sits in, not a release tarball: this is the local-install
+# path (`make archpkg-install`), so the sources are already here.
+
+pkgname=ticpu-claude-command-hook
+pkgver=0.4.0
+pkgrel=1
+pkgdesc='Claude Code hook dispatcher: permission guards over Bash commands and file edits'
+arch=('x86_64' 'aarch64')
+url='https://github.com/ticpu/ticpu-claude-command-hook'
+license=('GPL-3.0-only')
+depends=('gcc-libs' 'glibc')
+makedepends=('cargo')
+# The release profile strips, so a debug package would be empty and gdb-add-index
+# fails loudly over it.
+options=('!lto' '!debug')
+
+_repo="$startdir/.."
+
+pkgver() {
+	grep -m1 '^version' "$_repo/Cargo.toml" | cut -d'"' -f2
+}
+
+build() {
+	cargo build --release --manifest-path "$_repo/Cargo.toml" --target-dir "$srcdir/target"
+	"$srcdir/target/release/$pkgname" rules > "$srcdir/allowed-commands.md"
+}
+
+check() {
+	cargo test --release --manifest-path "$_repo/Cargo.toml" --target-dir "$srcdir/target"
+}
+
+# gf stays out of PATH: two letters is a name to leave to whoever claims it in a
+# distribution first. The hook looks for it here when it is not its own sibling.
+package() {
+	install -Dm755 "$srcdir/target/release/$pkgname" "$pkgdir/usr/bin/$pkgname"
+	install -Dm755 "$srcdir/target/release/gf" "$pkgdir/usr/libexec/$pkgname/gf"
+	install -Dm644 "$srcdir/allowed-commands.md" "$pkgdir/usr/share/doc/$pkgname/allowed-commands.md"
+	install -Dm644 "$_repo/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

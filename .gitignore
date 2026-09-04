@@ -4,3 +4,6 @@
 /packaging/dist/
 /packaging/*.deb
 /packaging/package.tmp/
+/packaging/*.pkg.tar.zst
+/packaging/pkg/
+/packaging/src/
