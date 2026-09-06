@@ -77,7 +77,8 @@ fn lists_a_broad_dir(command: &str) -> bool {
                 && args
                     .iter()
                     .any(|a| {
-                        *a == "--directory" || (a.starts_with('-') && !a.starts_with("--") && a.contains('d'))
+                        *a == "--directory"
+                            || (a.starts_with('-') && !a.starts_with("--") && a.contains('d'))
                     })
             {
                 return false;

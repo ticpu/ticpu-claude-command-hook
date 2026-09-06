@@ -33,7 +33,9 @@ fn gf_path() -> Option<PathBuf> {
     let exe = std::env::current_exe()
         .inspect_err(|e| eprintln!("hook: cannot locate own path, skipping gf rewrite: {e}"))
         .ok()?;
-    let gf = gf_candidates(&exe).into_iter().find(|p| p.is_file())?;
+    let gf = gf_candidates(&exe)
+        .into_iter()
+        .find(|p| p.is_file())?;
     // Quoting a path with shell-special characters is not worth the risk.
     let printable = gf.to_str()?;
     printable
@@ -49,7 +51,10 @@ fn gf_candidates(exe: &Path) -> Vec<PathBuf> {
     if let Some(dir) = exe.parent() {
         candidates.push(dir.join("gf"));
     }
-    if let Some(prefix) = exe.ancestors().nth(2) {
+    if let Some(prefix) = exe
+        .ancestors()
+        .nth(2)
+    {
         candidates.push(prefix.join(PACKAGED_GF));
     }
     candidates

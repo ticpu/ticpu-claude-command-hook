@@ -286,7 +286,14 @@ fn filter_word(stage: &str) -> Option<usize> {
             .chars()
             .position(|c| FILTER_VALUE_SHORTS.contains(c))
         {
-            Some(at) if at + 1 == cluster.chars().count() => 2,
+            Some(at)
+                if at + 1
+                    == cluster
+                        .chars()
+                        .count() =>
+            {
+                2
+            }
             _ => 1,
         };
     }
