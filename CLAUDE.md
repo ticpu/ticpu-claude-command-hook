@@ -103,6 +103,7 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   root, so the deny names the spelling that works. A bare `cd` earlier in the chain moves that
   working directory first, so every segment is judged where the shell will actually run it —
   otherwise `cd <root> && git add <path-from-root>` reads as misrooted precisely when it is right.
+  Also a `Claude-Session:` trailer on a commit or tag message, matched line-anchored so prose naming it passes.
   Last of all, that same `cd` in front of a git command `vouch` does not carry — a `git mv`, a
   checkout, a push — when it lands in the repo the shell is already in: the move reaches no hook
   that command could not already run, so the prompt Claude Code shows for it warns about nothing,

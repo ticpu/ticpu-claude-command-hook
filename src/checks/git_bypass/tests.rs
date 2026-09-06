@@ -145,6 +145,29 @@ fn heredoc_test_message_allowed() {
     assert!(!blocked(cmd));
 }
 
+#[test]
+fn session_trailer_denied() {
+    assert!(blocked(
+        "git add README.md && git commit -q -F - <<'EOF'\ndocs: x\n\nClaude-Session: https://claude.ai/code/session_01\nEOF"
+    ));
+    assert!(blocked(
+        "git commit -m \"fix: x\n\nclaude-session: https://claude.ai/code/session_01\""
+    ));
+    assert!(blocked(
+        "git tag -F - v1.0 <<'EOF'\nv1.0\n\nClaude-Session: https://claude.ai/code/session_01\nEOF"
+    ));
+}
+
+/// The line has to be a trailer, not a mention of one: this repo's own commit
+/// describing the deny names it in prose.
+#[test]
+fn session_trailer_in_prose_allowed() {
+    assert!(!blocked(
+        "git commit -F - <<'EOF'\nfeat: deny a Claude-Session: trailer in commit messages\nEOF"
+    ));
+    assert!(!blocked("git log --grep=session"));
+}
+
 /// Only the subject waives the hook: one of the words further down the body is
 /// prose, and all three are common enough to be written by accident.
 #[test]

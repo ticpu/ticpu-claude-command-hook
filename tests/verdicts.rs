@@ -148,7 +148,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("find / -name foo", Deny),
     // A lister rides along as a reader everywhere else, so the deny has to come
     // before the allow that would otherwise carry it.
-    ("ls /home/jerome.poulin/GIT/ | head -20; ls /usr/src 2>&1 | head", Deny),
+    (
+        "ls /home/jerome.poulin/GIT/ | head -20; ls /usr/src 2>&1 | head",
+        Deny,
+    ),
     ("ls -d ~/GIT", Pass),
     ("ls ~/GIT/eido", Pass),
     // A literal named once and expanded later: the assignment prefix makes the call
@@ -216,6 +219,16 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("git commit -F - src/main.rs <<'EOF'\nfix: x\nEOF", Pass),
     ("git commit -F msg.txt <<'EOF'\nfix: x\nEOF", Pass),
     ("git add . && git commit -F - <<'EOF'\nfix: x\nEOF", Deny),
+    // A session link outlives the session; the trailer has to be line-anchored,
+    // so the commit describing this deny may name it.
+    (
+        "git add src/main.rs && git commit -F - <<'EOF'\nfix: x\n\nClaude-Session: https://claude.ai/code/session_01\nEOF",
+        Deny,
+    ),
+    (
+        "git commit -F - <<'EOF'\nfeat: refuse a Claude-Session: trailer\nEOF",
+        Allow,
+    ),
     // git is git however it is reached.
     ("/usr/bin/git commit --no-verify -m \"feat: x\"", Deny),
     ("{ git commit --no-verify -m \"feat: x\"; }", Deny),

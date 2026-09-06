@@ -51,6 +51,10 @@ first if unsure what is untracked.";
 
 const MISROOTED_ADD: &str = "Pathspec spelled from the repo root, not from here: ";
 
+const CLAUDE_SESSION: &str = "Commit message carries a `Claude-Session:` trailer. It points at a \
+transcript only this box can open, and it outlives the session that wrote it by years — drop the \
+line and commit again. The `Co-Authored-By` trailer already names the agent.";
+
 /// Config values git reads as "off". Keys are case-insensitive, so the whole
 /// token is lowercased before comparison.
 const FALSY: &[&str] = &["false", "0", "no", "off"];
@@ -182,6 +186,9 @@ fn deny(flags: &str, full: &str, cwd: &str) -> Option<HookOutput> {
     {
         return Some(HookOutput::deny("PreToolUse", NO_SIGN));
     }
+    if writes_a_message(flags) && links_a_session(full) {
+        return Some(HookOutput::deny("PreToolUse", CLAUDE_SESSION));
+    }
     // Pathspecs are read from the raw text: `git add "."` has to keep its quoted
     // token, which the span-deleting unquote would drop entirely.
     if is_blanket_add(flags) {
@@ -246,6 +253,25 @@ fn disables_signing(cmd: &str) -> bool {
             let word = unquote_token(word).to_ascii_lowercase();
             word.strip_prefix("commit.gpgsign=")
                 .is_some_and(|value| FALSY.contains(&value))
+        })
+}
+
+/// Read as a bare token, not through `parse`: its subcommand is the *first* git in
+/// the text, which for a heredoc commit is the `git add` staging the files.
+fn writes_a_message(cmd: &str) -> bool {
+    cmd.split_whitespace()
+        .any(|word| word == "commit" || word == "tag")
+}
+
+/// A session-link trailer in the message text. Line-anchored, so prose naming the
+/// trailer is not one and this deny can be described in the commit that adds it.
+fn links_a_session(full: &str) -> bool {
+    full.lines()
+        .any(|line| {
+            line.trim_start()
+                .trim_start_matches(['"', '\''])
+                .get(..15)
+                .is_some_and(|head| head.eq_ignore_ascii_case("claude-session:"))
         })
 }
 
