@@ -10,7 +10,6 @@ DEB_VERSION := $(patsubst v%,%,$(BASE_VERSION))
 DEB_AMD64 := $(NAME)_$(DEB_VERSION)_amd64.deb
 DEB_ARM64 := $(NAME)_$(DEB_VERSION)_arm64.deb
 BINARIES := dist/$(BINARY).amd64 dist/gf.amd64 dist/$(BINARY).arm64 dist/gf.arm64
-DEPENDS := dist/deb-depends
 PKG := package.tmp
 
 .PHONY: all clean binaries deb deb-amd64 deb-arm64
@@ -47,10 +46,8 @@ define build-deb
 	install -D -m 644 -T ../docs/allowed-commands.md "$(PKG)/usr/share/doc/$(NAME)/allowed-commands.md"
 	install -D -m 644 -T ../LICENSE "$(PKG)/usr/share/doc/$(NAME)/copyright"
 	install -D -m 644 -T control "$(PKG)/DEBIAN/control"
-	@test -s $(DEPENDS) || { echo "$(DEPENDS) is empty: Depends would ship blank" >&2; exit 1; }
 	sed -i -e "s/^Version:.*/Version: $(DEB_VERSION)/" \
 		-e "s/^Architecture:.*/Architecture: $(1)/" \
-		-e "s/^Depends:.*/Depends: $$(cat $(DEPENDS))/" \
 		-e "s/^Installed-Size:.*/Installed-Size: $$(du -ks --exclude=DEBIAN $(PKG) | cut -f1)/" \
 		"$(PKG)/DEBIAN/control"
 	cd "$(PKG)" && find . -path ./DEBIAN -prune -o -type f -print0 \
@@ -59,14 +56,14 @@ define build-deb
 	rm -rf "$(PKG)"
 endef
 
-$(DEB_AMD64): dist/$(BINARY).amd64 dist/gf.amd64 $(DEPENDS) control ../LICENSE
+$(DEB_AMD64): dist/$(BINARY).amd64 dist/gf.amd64 control ../LICENSE
 	$(call build-deb,amd64)
 
-$(DEB_ARM64): dist/$(BINARY).arm64 dist/gf.arm64 $(DEPENDS) control ../LICENSE
+$(DEB_ARM64): dist/$(BINARY).arm64 dist/gf.arm64 control ../LICENSE
 	$(call build-deb,arm64)
 
 # One container build cross-compiles every target, so they share a single rule
-$(BINARIES) $(DEPENDS) &: build.sh Containerfile ../Cargo.toml $(wildcard ../Cargo.lock) $(wildcard ../src/*.rs ../src/*/*.rs)
+$(BINARIES) &: build.sh Containerfile ../Cargo.toml $(wildcard ../Cargo.lock) $(wildcard ../src/*.rs ../src/*/*.rs)
 	./build.sh
 
 clean:

@@ -3,7 +3,6 @@ Version: 0.0.0-replaced-by-makefile
 Section: devel
 Priority: optional
 Architecture: amd64
-Depends: libc6 (>= 0.0), libgcc-s1
 Installed-Size: 0
 Maintainer: Jérôme Poulin <jeromepoulin@gmail.com>
 Homepage: https://github.com/ticpu/ticpu-claude-command-hook
