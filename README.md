@@ -128,6 +128,23 @@ one quote-aware splitter every command-shape question goes through — don't gro
 `tests/verdicts.rs` is the asserted verdict table, run against the real binary; `probe.sh`
 answers the same question for one-off commands.
 
+## Release
+
+```
+./release.sh vX.Y.Z -F changelog.md
+```
+
+Preflight, version bump, `release:` commit carrying the lockfile, annotated tag, push, then
+it waits on the tag's `release.yml` run, signs the draft the run created, and reads back the
+published `.deb`: version, no `Depends`, no `DT_NEEDED`, and `rules` output matching
+`docs/allowed-commands.md`. The artifact is checked rather than the tree it was built from,
+a stale `dist/` being how the previous release gets packaged under the new number.
+
+Each step asks whether it is already done, so an interrupted release resumes by re-running
+the same command. A tag already on origin is never re-pointed and an existing release
+refuses the run rather than replacing its assets: a published version is cut again by
+bumping, not by rewriting.
+
 ## License
 
 GPL-3.0-only.
