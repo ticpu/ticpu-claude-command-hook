@@ -170,7 +170,7 @@ mod tests {
             "glab mr view 2408",
             "glab mr list --author=@me",
             "glab ci status",
-            "glab --repo gitlab.cauca.ca/x/y issue list",
+            "glab --repo gitlab.example.com/x/y issue list",
             "glab mr diff 2408 | head -40",
             "cd /x && glab release list; echo done",
             "glab api projects/:id/merge_requests --paginate",

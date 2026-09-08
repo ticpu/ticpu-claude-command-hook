@@ -140,6 +140,10 @@ published `.deb`: version, no `Depends`, no `DT_NEEDED`, and `rules` output matc
 `docs/allowed-commands.md`. The artifact is checked rather than the tree it was built from,
 a stale `dist/` being how the previous release gets packaged under the new number.
 
+The last step publishes those signed `.deb` files to [apt.ticpu.net](https://apt.ticpu.net),
+and it is not optional-by-default: a release page nobody's `apt-get` reads is half a release.
+`--no-apt` skips it for a release that is deliberately not going to the archive.
+
 Each step asks whether it is already done, so an interrupted release resumes by re-running
 the same command. A tag already on origin is never re-pointed and an existing release
 refuses the run rather than replacing its assets: a published version is cut again by

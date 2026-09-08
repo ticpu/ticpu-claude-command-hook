@@ -7,4 +7,13 @@ if ! command -v gitleaks >/dev/null 2>&1; then
     exit 1
 fi
 
-exec gitleaks git --staged --no-banner
+# .gitleaks.local.toml extends the default rules with private identifiers that
+# must not reach a public repository. It is itself uncommitted — the patterns
+# name what they are looking for — so a checkout without it scans with the
+# defaults alone.
+args=()
+if [ -f .gitleaks.local.toml ]; then
+    args=(--config .gitleaks.local.toml)
+fi
+
+exec gitleaks git --staged --no-banner "${args[@]}"

@@ -1,9 +1,10 @@
 #!/bin/bash
-# Cut a release: preflight, bump, tag, push, wait for CI, sign, verify.
+# Cut a release: preflight, bump, tag, push, wait for CI, sign, verify, publish.
 #
-# Usage: ./release.sh vX.Y.Z [-F <changelog-file>|-] [--no-push]
+# Usage: ./release.sh vX.Y.Z [-F <changelog-file>|-] [--no-push] [--no-apt]
 #          -F        the tag's changelog; "-" reads stdin, absent opens $EDITOR
 #          --no-push stop after the tag, so it can be read before it leaves
+#          --no-apt  stop after the release, leaving the apt archive a version behind
 #
 # Every step asks whether it is already done, so an interrupted release resumes
 # by re-running the same command instead of being unpicked by hand. Nothing here
@@ -19,6 +20,8 @@ die() { echo "$*" >&2; exit 1; }
 TAG=""
 CHANGELOG_FILE=""
 PUSH=1
+APT=1
+APT_REPO="${APT_REPO:-$HOME/GIT/apt-ticpu-net}"
 while (($#)); do
 	case "$1" in
 		-F | --file)
@@ -26,8 +29,9 @@ while (($#)); do
 			shift
 			;;
 		--no-push) PUSH=0 ;;
+		--no-apt) APT=0 ;;
 		-h | --help)
-			sed -n '2,6p' "$0"
+			sed -n '2,7p' "$0"
 			exit 0
 			;;
 		-*) die "unknown option: $1" ;;
@@ -37,7 +41,7 @@ while (($#)); do
 done
 
 [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
-	die "usage: ${0##*/} vX.Y.Z [-F <changelog-file>|-] [--no-push]"
+	die "usage: ${0##*/} vX.Y.Z [-F <changelog-file>|-] [--no-push] [--no-apt]"
 VERSION="${TAG#v}"
 
 # Read before anything is changed: a "-" that turns out to be an empty stdin
@@ -150,3 +154,12 @@ diff -u docs/allowed-commands.md <("$binary" rules) ||
 
 rm -rf "$WORKDIR"
 echo "$TAG published and verified: $(gh release view "$TAG" --json url --jq .url)"
+
+# Every release goes to the apt archive; a release page nobody's apt-get reads
+# is half a release. ingest.sh pulls the assets that were just signed, so the
+# archive serves the release's own bytes and nothing is rebuilt.
+if [ "$APT" = 1 ]; then
+	[ -x "$APT_REPO/ingest.sh" ] ||
+		die "$APT_REPO/ingest.sh is missing: clone the archive there, or pass --no-apt"
+	"$APT_REPO/ingest.sh" ticpu-claude-command-hook "$TAG"
+fi
