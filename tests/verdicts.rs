@@ -153,6 +153,11 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Deny,
     ),
     ("ls -d ~/GIT", Pass),
+    // Passing time is not work: an echo labelling the wait is not company either.
+    ("sleep 60", Deny),
+    ("sleep 60; echo waited", Deny),
+    ("true", Deny),
+    ("sleep 2 && curl -s localhost:8080/health", Pass),
     ("ls ~/GIT/eido", Pass),
     // A literal named once and expanded later: the assignment prefix makes the call
     // match no permission rule, and the value can simply be written where it is used.

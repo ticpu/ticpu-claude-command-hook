@@ -216,6 +216,16 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   answers a real question — and so is `ls -d`, which names the directory instead of
   listing it, while `tree -d` still walks. A lister is a neutral segment everywhere else,
   so this has to deny ahead of the allow that would otherwise carry it.
+- `idle_burn` — denies a command whose every segment only passes time or hands back an exit
+  status (`sleep`, `usleep`, `true`, `false`, `:`), an `echo` labelling the wait not
+  counting as company. Nothing here is waiting to be polled: background work re-invokes the
+  model when it finishes, a foreground `sleep` is refused by the harness anyway, and a
+  condition is what the Monitor tool is for — so a bare `sleep 60` run in the background buys
+  a turn and its own tool result and nothing else, which is why the deny says to end the turn
+  instead. `wait` is off the list: it blocks on jobs the shell started, which is a real one.
+  One idle segment is enough to deny, but
+  only where the whole chain idles: `sleep 2 && curl …` waits for something, and a poll loop
+  names its condition in the segment before the `do`, so both pass.
 - `literal_assignment` — denies a bare `NAME=value` segment whose name a later segment expands.
   Every allow above and every `settings.json` prefix rule matches the command *text*, so an
   assignment in front of the work makes the call match none of them, and the "don't ask again"

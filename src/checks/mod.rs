@@ -7,6 +7,7 @@ mod git_bypass;
 mod glab_read_only;
 mod glab_skill;
 mod grep_fold;
+mod idle_burn;
 mod literal_assignment;
 /// Path resolution every check needs, not git's alone.
 mod location;
@@ -45,6 +46,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| blind_edit::check(cmd))
                 .or_else(|| git_bypass::check(input))
                 .or_else(|| broad_walk::check(cmd))
+                .or_else(|| idle_burn::check(cmd))
                 .or_else(|| literal_assignment::check(cmd))
                 .or_else(|| remote_session::check(cmd))
                 .or_else(|| search_stderr::check(cmd))
