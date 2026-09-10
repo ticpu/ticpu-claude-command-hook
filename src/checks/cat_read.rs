@@ -96,16 +96,27 @@ fn stage_sink(stage: &str, ends_the_pipeline: bool) -> Option<Sink> {
     (files == 1).then_some(Sink::Pipe)
 }
 
-/// How many files this `cat` opens — operands plus an input redirect. `None` when
-/// a flag is present: a flag asks for a rendering no tool result gives, which is
-/// the use this check has nothing to say about. `-` and `--` are not flags.
+/// A kernel virtual filesystem, whose files are generated at read time and report
+/// no size. The Read tool is not the alternative there, so they are not counted.
+fn is_kernel_path(token: &str) -> bool {
+    ["/proc", "/sys", "/dev"]
+        .iter()
+        .any(|root| token == *root || token.starts_with(&format!("{root}/")))
+}
+
+/// How many files this `cat` opens — operands plus an input redirect, kernel
+/// virtual filesystems excluded. `None` when a flag is present: a flag asks for a
+/// rendering no tool result gives, which is the use this check has nothing to say
+/// about. `-` and `--` are not flags.
 fn plain_cat_files(args: &[&str]) -> Option<usize> {
     let mut files = 0;
-    let mut expect_target = false;
+    let mut count_next = None;
     for arg in args {
         let token = shell::unquote_token(arg);
-        if expect_target {
-            expect_target = false;
+        if let Some(counts) = count_next.take() {
+            if counts && !is_kernel_path(token) {
+                files += 1;
+            }
             continue;
         }
         if token == "-" || token == "--" {
@@ -115,15 +126,22 @@ fn plain_cat_files(args: &[&str]) -> Option<usize> {
             return None;
         }
         if token.contains('>') {
-            expect_target = token.ends_with('>');
+            if token.ends_with('>') {
+                count_next = Some(false);
+            }
             continue;
         }
         if let Some(target) = token.strip_prefix('<') {
-            expect_target = target.is_empty();
-            files += 1;
+            if target.is_empty() {
+                count_next = Some(true);
+            } else if !is_kernel_path(target) {
+                files += 1;
+            }
             continue;
         }
-        files += 1;
+        if !is_kernel_path(token) {
+            files += 1;
+        }
     }
     Some(files)
 }
@@ -181,6 +199,12 @@ mod tests {
             "cat a.log b.log | sort",
             "cat a.log b.log > merged.log",
             "cat one.txt > copy.txt",
+            // Kernel virtual filesystems, which no Read tool call replaces.
+            "cat /proc/2040/cgroup",
+            "cat /sys/class/net/eth0/address",
+            "cat /proc/mounts | rg bcachefs",
+            "cat < /proc/cpuinfo",
+            "sudo cat /dev/shm/x",
             // A heredoc leaves the command unsplittable.
             "cat <<'EOF' > notes.md\nsome text\nEOF",
         ] {

@@ -349,7 +349,9 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   file handed to a pipe the next program could have opened itself. Several files joined is the
   concatenation the command exists for and passes, as does any flag — `-A`, `-v`, `-T`, `-E`,
   `-n` ask for bytes a tool result renders away, which is the one read no tool does — and so
-  does `cat a b > merged`, a copy rather than a read. It is judged on where the bytes go and not
+  does `cat a b > merged`, a copy rather than a read. A path under `/proc`, `/sys` or `/dev` is
+  not counted as a file at all: those are generated at read time and report no size, so the Read
+  tool is not the alternative and this check has nothing to offer. It is judged on where the bytes go and not
   on the program, so a `cd` in front, a `sudo`, a path and the loop-body spelling
   (`for i in …; do cat $i; done`) all reach it through `shell::program`. It runs last among the
   denies: every other objection names something this one cannot, and `secret_paths` deciding
