@@ -234,6 +234,20 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "git commit -F - <<'EOF'\nfeat: refuse a Claude-Session: trailer\nEOF",
         Allow,
     ),
+    // A generated-with line, anchored the same way and refused wherever a body
+    // reaches other people.
+    (
+        "git add src/main.rs && git commit -F - <<'EOF'\nfix: x\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\nEOF",
+        Deny,
+    ),
+    (
+        "gh pr create --title x --body \"fix\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\"",
+        Deny,
+    ),
+    (
+        "git commit -F - <<'EOF'\nfeat(attribution): deny a 🤖 generated-with line in a body\nEOF",
+        Allow,
+    ),
     // git is git however it is reached.
     ("/usr/bin/git commit --no-verify -m \"feat: x\"", Deny),
     ("{ git commit --no-verify -m \"feat: x\"; }", Deny),

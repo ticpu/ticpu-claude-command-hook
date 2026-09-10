@@ -1,3 +1,4 @@
+mod attribution;
 mod blind_edit;
 mod broad_walk;
 mod cargo_tools;
@@ -45,6 +46,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| blind_edit::waiver_requested(cmd))
                 .or_else(|| blind_edit::check(cmd))
                 .or_else(|| git_bypass::check(input))
+                .or_else(|| attribution::check(cmd))
                 .or_else(|| broad_walk::check(cmd))
                 .or_else(|| idle_burn::check(cmd))
                 .or_else(|| literal_assignment::check(cmd))

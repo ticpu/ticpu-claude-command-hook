@@ -122,6 +122,17 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   any `-c`, which can point config at a program under a read-only verb. The plumbing readers
   (`check-ignore`, `diff-tree`, `cherry`, …) are on the list because a script reaches for them
   where a porcelain verb would do, not because anything about them is special.
+- `attribution` — denies a body carrying a generated-with line: `git commit`/`tag`, and the forge
+  verbs that take a description or a comment (`gh`, `glab` and the token wrappers whose names
+  start with it). It is separate from `git_bypass`'s `Claude-Session:` deny because the line does
+  not arrive as a trailer and does not arrive from git alone — the harness attribution block asks
+  for it in a PR body in so many words, so it is written by a session whose own context is telling
+  it to, and no amount of reading CLAUDE.md first has stopped one landing. Line-anchored like the
+  trailer, over `\n` escapes as well as real newlines, so prose naming the line — this bullet, the
+  deny's own commit message — is not one, and `Co-Authored-By: Claude …` is untouched, being the
+  trailer CLAUDE.md wants. The verb is read from the whole text rather than through
+  `chain_segments`, which gives up on the heredoc a commit message arrives in; a body word that
+  happens to spell a verb costs nothing, the anchored line being what decides.
 - `vouch` — one notion of a segment an allow can carry, and the chain allow built on it: a bare
   `cd`, a bare `NAME=value`, a utility that only reads and prints, a provably read-only git
   pipeline, or a `git add` naming at least one path that exists as a file — a directory, glob or
