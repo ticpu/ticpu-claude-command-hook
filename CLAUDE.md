@@ -411,9 +411,6 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   takes a value swallows the rest of its cluster (`rg -trust` is `--type rust`, not `-r ust`),
   and the next word too when nothing is glued on.
 
-`command grep` is the documented opt-out from both: `shell::WRAPPERS` deliberately omits
-`command`, so it never classifies as a search.
-
 Five of the denies above are overruled by a one-shot waiver, and `disabled` is a standing
 switch over the same `marker.rs`. Every creation but `cat_read`'s is forced to a prompt.
 `docs/waivers.md` lists them with the command that creates each — it is written for the user running one by hand, so a new marker goes in it as well as
