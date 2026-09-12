@@ -24,7 +24,93 @@ once, and configured directory prefixes are removed from the paths shown.
 
 With no GREP-ARG, gf filters stdin. With GREP-ARG, gf runs the child, filters
 its stdout, and exits with the child's status. $PWD is always stripped.
+
+Running the child, gf also reads its stderr and counts the diagnostics that
+repeat: 'N × Permission denied (e.g. PATH)' on gf's own stderr, one line per
+kind. The two streams stay separate, so nothing is interleaved or hidden.
 ";
+
+/// One searcher diagnostic, split into the part that repeats and the part that
+/// does not. `rg` reports every unreadable path, which on a tree like /var/log is
+/// the same sentence a thousand times over with only the path moving.
+struct Diagnostic<'a> {
+    kind: &'a str,
+    path: &'a str,
+}
+
+/// Splits `rg: /var/log/x: Permission denied (os error 13)` and the ugrep and GNU
+/// grep spellings of it into kind and path. `None` for a line that is not one of
+/// those, which then prints verbatim.
+fn parse_diagnostic(line: &str) -> Option<Diagnostic<'_>> {
+    let rest = line
+        .split_once(": ")
+        .map(|(prog, rest)| {
+            if prog.contains('/') || prog.contains(' ') {
+                line
+            } else {
+                rest
+            }
+        })?;
+    let rest = rest
+        .strip_prefix("warning: ")
+        .unwrap_or(rest);
+    let rest = rest
+        .strip_prefix("cannot read ")
+        .unwrap_or(rest);
+    let (path, kind) = rest.rsplit_once(": ")?;
+    let kind = kind
+        .split(" (os error ")
+        .next()?
+        .trim_end();
+    (!path.is_empty() && !kind.is_empty() && !kind.contains('/'))
+        .then_some(Diagnostic { kind, path })
+}
+
+/// Counts each diagnostic kind and keeps the first path that showed it, so the
+/// summary carries something to act on without repeating the rest.
+#[derive(Default)]
+struct Errors {
+    kinds: Vec<(String, String, usize)>,
+    passthrough: Vec<String>,
+}
+
+impl Errors {
+    fn line(&mut self, line: &str) {
+        match parse_diagnostic(line) {
+            Some(Diagnostic { kind, path }) => {
+                match self
+                    .kinds
+                    .iter_mut()
+                    .find(|(k, _, _)| k == kind)
+                {
+                    Some((_, _, n)) => *n += 1,
+                    None => self
+                        .kinds
+                        .push((kind.to_string(), path.to_string(), 1)),
+                }
+            }
+            None => self
+                .passthrough
+                .push(line.to_string()),
+        }
+    }
+
+    /// A single occurrence is its own line: a count of one buys nothing and loses
+    /// the path the searcher already named.
+    fn report(&self, out: &mut dyn Write) -> io::Result<()> {
+        for line in &self.passthrough {
+            writeln!(out, "{line}")?;
+        }
+        for (kind, path, n) in &self.kinds {
+            if *n == 1 {
+                writeln!(out, "gf: {kind}: {path}")?;
+            } else {
+                writeln!(out, "gf: {n} × {kind} (e.g. {path})")?;
+            }
+        }
+        Ok(())
+    }
+}
 
 enum Detected {
     /// Same path as the previous line: drop the whole path.
@@ -433,6 +519,7 @@ fn main() -> ExitCode {
         match Command::new(&opts.cmd)
             .args(&opts.child_args)
             .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
         {
             Ok(c) => Some(c),
@@ -449,6 +536,30 @@ fn main() -> ExitCode {
         None
     };
 
+    // Its own thread: the two pipes have independent buffers, so draining one
+    // from the loop that drains the other deadlocks as soon as either fills.
+    let errors = child
+        .as_mut()
+        .and_then(|c| {
+            c.stderr
+                .take()
+        })
+        .map(|stderr| {
+            std::thread::spawn(move || {
+                let mut errors = Errors::default();
+                for line in BufReader::new(stderr).lines() {
+                    match line {
+                        Ok(line) => errors.line(&line),
+                        Err(e) => {
+                            eprintln!("gf: reading stderr: {e}");
+                            break;
+                        }
+                    }
+                }
+                errors
+            })
+        });
+
     let result = match &mut child {
         Some(c) => {
             let stdout = c
@@ -464,6 +575,17 @@ fn main() -> ExitCode {
         None => pump(io::stdin().lock(), &mut out, &mut folder),
     };
     let flushed = out.flush();
+
+    if let Some(handle) = errors {
+        match handle.join() {
+            Ok(errors) => {
+                if let Err(e) = errors.report(&mut io::stderr().lock()) {
+                    eprintln!("gf: writing the error summary: {e}");
+                }
+            }
+            Err(_) => eprintln!("gf: the stderr reader panicked; its summary is lost"),
+        }
+    }
 
     for e in [result, flushed] {
         if let Err(e) = e {
@@ -677,6 +799,57 @@ mod tests {
         ] {
             assert!(!is_path_shaped(bad.as_bytes()), "{bad}");
         }
+    }
+
+    fn summarize(lines: &[&str]) -> String {
+        let mut errors = Errors::default();
+        for line in lines {
+            errors.line(line);
+        }
+        let mut out = Vec::new();
+        errors
+            .report(&mut out)
+            .unwrap();
+        String::from_utf8(out).unwrap()
+    }
+
+    #[test]
+    fn every_searcher_spelling_is_counted() {
+        for line in [
+            "rg: /var/log/x.log: Permission denied (os error 13)",
+            "ugrep: warning: cannot read /var/log/x.log: Permission denied",
+            "grep: /var/log/x.log: Permission denied",
+        ] {
+            let d = parse_diagnostic(line).unwrap_or_else(|| panic!("{line}"));
+            assert_eq!(d.kind, "Permission denied", "{line}");
+            assert_eq!(d.path, "/var/log/x.log", "{line}");
+        }
+    }
+
+    #[test]
+    fn repeats_fold_to_a_count_and_singles_keep_their_path() {
+        let out = summarize(&[
+            "rg: /var/log/a.log: Permission denied (os error 13)",
+            "rg: /var/log/b.log: Permission denied (os error 13)",
+            "rg: /var/log/c.log: Permission denied (os error 13)",
+            "rg: /nope: No such file or directory (os error 2)",
+        ]);
+        assert_eq!(
+            out,
+            "gf: 3 × Permission denied (e.g. /var/log/a.log)\n\
+             gf: No such file or directory: /nope\n"
+        );
+    }
+
+    /// Anything that is not a diagnostic is the searcher telling us something we
+    /// have no pattern for, so it survives verbatim rather than being counted.
+    #[test]
+    fn other_stderr_passes_through() {
+        let out = summarize(&["rg: error parsing flag --nope", "some unstructured warning"]);
+        assert_eq!(
+            out,
+            "rg: error parsing flag --nope\nsome unstructured warning\n"
+        );
     }
 
     #[test]
