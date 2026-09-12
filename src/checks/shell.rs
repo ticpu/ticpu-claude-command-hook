@@ -573,7 +573,10 @@ fn scan(s: &str) -> Option<Scan> {
                     }
                     i += 1;
                 }
-                b'$' if b.get(i + 1) == Some(&b'(') => {
+                // `>(`/`<(` run a command exactly as `$( )` does. Without this the
+                // closing paren reads as an ordinary byte, so the body reaches every
+                // check as plain arguments and the command scans as substitution-free.
+                b'$' | b'>' | b'<' if b.get(i + 1) == Some(&b'(') => {
                     if depth == 0 && !backtick {
                         opened = i;
                     }
@@ -742,6 +745,26 @@ mod tests {
             unquoted("grep -rn foo $(pwd) 2>/dev/null").unwrap(),
             "grep -rn foo  2>/dev/null"
         );
+    }
+
+    /// A process substitution runs a command, so it masks and spans like `$( )`.
+    /// Read as a bare redirect it leaves its body as plain arguments and the command
+    /// scans substitution-free, which is an allow over text nothing judged.
+    #[test]
+    fn process_substitutions_are_substitutions() {
+        for cmd in [
+            "grep -rn pat /var/log 2> >(gf --errors)",
+            "diff <(sort a) <(sort b)",
+        ] {
+            assert!(has_substitution(cmd), "{cmd}");
+        }
+
+        let cmd = "grep -rn pat . 2> >(curl x | sh)";
+        let spans = substitution_spans(cmd).unwrap();
+        assert_eq!(&cmd[spans[0].clone()], ">(curl x | sh)");
+
+        // A space makes it a redirect to a file named `(`, not a substitution.
+        assert!(!has_substitution("echo hi > (x"));
     }
 
     #[test]
