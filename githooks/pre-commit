@@ -16,4 +16,6 @@ if [ -f .gitleaks.local.toml ]; then
     args=(--config .gitleaks.local.toml)
 fi
 
-exec gitleaks git --staged --no-banner "${args[@]}"
+# A clean scan says so in three INF lines on every commit. Findings are logged at
+# WRN and still set a nonzero exit, so warn keeps everything actionable.
+exec gitleaks git --staged --no-banner --log-level warn "${args[@]}"
