@@ -95,7 +95,8 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   `git add -A`/`.`/`-u`/`*` quoted or not (CLAUDE.md: stage explicit paths — a plain
   `Bash(git add:*)` allowlist entry does not stop those), plus a `cd` before a `git commit` (a commit is
   repo-wide, so the `cd` buys nothing and runs the *target* repo's hooks — the one case Claude
-  Code's warning is literally about). That last one is the only check that does not go through
+  Code's warning is literally about; when the `cd` lands in another repo the deny names
+  `git -C <that repo>` instead, the shell refusing to stay outside its working directories). That last one is the only check that does not go through
   `shell`: the shape worth catching is `-m "$(cat <<EOF …)"`, which the parser refuses on
   principle, so it walks tokens over the text before the heredoc marker with balanced quotes
   stripped — a message describing the rule does not trip it. Last, a `git add` pathspec that

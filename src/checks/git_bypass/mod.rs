@@ -9,7 +9,7 @@ use std::path::Path;
 
 use crate::checks::git_bypass::add::{is_blanket_add, misrooted_paths};
 use crate::checks::git_bypass::parse::{git_c_path, has_token, is_git, mentions_git, parse};
-use crate::checks::location::{dirs, hint, resolve, same_dir, same_repo};
+use crate::checks::location::{dirs, hint, repo_root, resolve, same_dir, same_repo};
 use crate::checks::shell;
 use crate::checks::shell::unquote_token;
 use crate::input::HookInput;
@@ -37,8 +37,11 @@ avoid `git -C`; use `git <verb>` directly.";
 
 const CD_COMMIT: &str = "Don't `cd` to commit: a commit covers the whole repo, so plain \
 `git commit` from the directory you are already in does the same thing and takes the normal \
-per-command approval. If the target really is a different repo, work from there or say so and \
-let me run it.";
+per-command approval.";
+
+const CD_COMMIT_ELSEWHERE: &str = "Don't `cd` to commit: the `cd` lands in another repo, and \
+the shell will not stay there. Name that repo instead of moving, which takes the normal \
+per-command approval: git -C ";
 
 const CD_SAME_REPO: &str = "The `cd` stays inside this repo, so it reaches no hook this command \
 could not already run and the prompt it costs warns about nothing. Run the git command from \
@@ -78,11 +81,21 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
             .flatten(),
     };
     // Last, so a bypass flag in the same command is reported before the cd. The
-    // commit case first: it names the one reason a `cd` before a commit is always
-    // pointless, whichever repo it lands in.
+    // commit case first: a `cd` before a commit is always pointless, whichever repo
+    // it lands in.
     flagged
-        .or_else(|| cd_before_commit(cmd).then(|| located(CD_COMMIT, &input.cwd)))
+        .or_else(|| cd_before_commit(cmd, &input.cwd).map(|dir| cd_commit(dir, &input.cwd)))
         .or_else(|| cd_within_repo(cmd, &input.cwd))
+}
+
+/// `dir` is where the commit would run, `None` when a `cd` target is not a literal.
+fn cd_commit(dir: Option<String>, cwd: &str) -> HookOutput {
+    match dir {
+        Some(dir) if repo_root(&dir).is_some() && !same_repo(&dir, cwd) => {
+            located(&format!("{CD_COMMIT_ELSEWHERE}{dir} commit …"), cwd)
+        }
+        _ => located(CD_COMMIT, cwd),
+    }
 }
 
 /// A `cd` that stays inside the repo the shell is already in, followed by a git
@@ -125,13 +138,15 @@ fn walk<T>(
 /// A `cd` preceding a `git commit` in the same command. Deliberately not routed
 /// through `chain_segments`: the shape worth catching is `-m "$(cat <<EOF …)"`,
 /// which that parser refuses on principle. Balanced quotes are dropped first, so
-/// only operators the shell would act on remain.
-fn cd_before_commit(cmd: &str) -> bool {
+/// only operators the shell would act on remain. Returns the directory the commit
+/// runs in, `Some(None)` when a `cd` target is not a literal path.
+fn cd_before_commit(cmd: &str, cwd: &str) -> Option<Option<String>> {
     let head = shell::before_heredoc(cmd);
     let head = shell::unquoted(head).unwrap_or_else(|| head.to_string());
     let tokens: Vec<&str> = head
         .split_whitespace()
         .collect();
+    let mut here = Some(cwd.to_string());
     let mut saw_cd = false;
     for (i, token) in tokens
         .iter()
@@ -141,17 +156,28 @@ fn cd_before_commit(cmd: &str) -> bool {
             continue;
         }
         if *token == "cd" {
+            let target = tokens
+                .get(i + 1)
+                .map(|t| t.trim_end_matches(['&', ';', '|']))
+                .filter(|t| !t.is_empty() && !t.starts_with('-') && !t.contains(['~', '$']));
+            here = target
+                .zip(here)
+                .map(|(t, from)| {
+                    resolve(t, &from)
+                        .display()
+                        .to_string()
+                });
             saw_cd = true;
             continue;
         }
         if saw_cd && (*token == "git" || token.ends_with("/git")) {
             let rest = tokens[i..].join(" ");
             if parse(&rest).subcommand == Some("commit") {
-                return true;
+                return Some(here);
             }
         }
     }
-    false
+    None
 }
 
 /// True when `git -C <path>` targets the same directory the tool already runs in,

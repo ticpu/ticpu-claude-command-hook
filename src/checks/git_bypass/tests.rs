@@ -247,6 +247,25 @@ fn a_cd_before_commit_is_denied() {
     }
 }
 
+fn reason(cmd: &str, cwd: &str) -> String {
+    check(&input(cmd, cwd))
+        .and_then(|out| out.hook_specific_output)
+        .and_then(|h| h.permission_decision_reason)
+        .expect("a deny")
+}
+
+/// A `cd` into another repo cannot be answered by committing from here, so the
+/// deny names the `-C` spelling for that repo.
+#[test]
+fn a_cd_into_another_repo_names_git_c() {
+    let root = env!("CARGO_MANIFEST_DIR");
+    let cmd = format!("cd {root}/src && git commit -F - <<'EOF'\nfeat: y\nEOF");
+    assert!(reason(&cmd, "/").contains(&format!("git -C {root}/src commit")));
+    let same = reason(&cmd, root);
+    assert!(!same.contains("git -C"), "{same}");
+    assert!(!reason("cd /x && git commit -m y", "/").contains("git -C"));
+}
+
 /// The rule keys on a real `cd`, not a description of one.
 #[test]
 fn talking_about_the_cd_is_not_doing_it() {
