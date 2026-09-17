@@ -19,6 +19,7 @@ mod search_flags;
 mod search_stderr;
 mod secret_paths;
 mod shell;
+mod sudo_journal;
 mod systemd_read;
 mod vouch;
 
@@ -50,6 +51,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| broad_walk::check(cmd))
                 .or_else(|| idle_burn::check(cmd))
                 .or_else(|| literal_assignment::check(cmd))
+                .or_else(|| sudo_journal::check(cmd))
                 .or_else(|| remote_session::check(cmd))
                 .or_else(|| search_stderr::check(cmd))
                 .or_else(|| search_flags::check(cmd))

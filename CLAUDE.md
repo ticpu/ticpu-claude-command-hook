@@ -203,6 +203,16 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   one `-o` is enough to hand the connection either. Neither end takes a wrapper —
   `shell::leading_word`, not `shell::program`, because an allow covering `sudo` covers what
   sudo does with it.
+- `sudo_journal` — denies a `journalctl` run under `sudo`, here or as the command an `ssh` hands
+  the far end. Reading the journal comes from systemd-journal group membership, so the elevation
+  changes nothing about what prints and asks for a password this shell cannot answer; the deny
+  says so, and the retry is the same command without it. `systemctl` is not covered — its writes
+  do need root, and a `sudo` in front of one is the shape it is for. The `sudo` is found by
+  `leading_word` and the program under it by `shell::program`, so a wrapper between them
+  (`sudo timeout 30 journalctl`) still counts. Over ssh the body is taken from the first `sudo`
+  onwards rather than from the destination, which is what saves an option table this deny does
+  not need — a miss costs a prompt, `systemd_read` allowing nothing that carries a wrapper at
+  either end. Judged in front of a heredoc, so a commit message naming the refusal is prose.
 - `cargo_tools` — allows a cargo build/report verb piped into display-only stages. The
   allowlist grants those verbs too, but a prefix rule can only match text, and Claude Code
   refuses to evaluate a command holding `${PIPESTATUS[0]}`: a subscript is arith-evaluated, so

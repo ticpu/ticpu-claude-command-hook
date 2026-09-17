@@ -341,7 +341,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // end's, so nothing objects and nothing vouches for it either.
     ("ssh srv journalctl -u sshd && ls /x", Deny),
     ("ssh srv 'journalctl -u sshd && ls /x'", Pass),
-    ("ssh srv sudo journalctl -u sshd", Pass),
+    // Elevation buys nothing a journal read needs, either end.
+    ("ssh srv sudo journalctl -u sshd", Deny),
+    ("sudo journalctl -u sshd -n 100", Deny),
+    ("sudo systemctl restart sshd", Pass),
     // The read-whole/substitute/write-back trio in one script body. An analysis
     // script over the same heredoc keeps its prompt.
     (
