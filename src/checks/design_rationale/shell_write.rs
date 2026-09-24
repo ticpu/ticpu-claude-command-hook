@@ -69,20 +69,28 @@ pub fn waiver_requested(command: &str) -> Option<HookOutput> {
 }
 
 /// A command that can leave a `design-rationale.md` different from how it found it.
-/// A command holding a heredoc cannot be split into stages, so its text is judged
-/// whole instead of waved through: the body of an interpreter heredoc is a program
-/// that can write the document, and the marker line can carry the redirect that does.
+/// A heredoc is judged twice: its text whole, since an interpreter body is a program
+/// that can write the document, and the commands around its bodies stage by stage.
 fn rewrites_document(command: &str) -> bool {
     if !command.contains(DOCUMENT) {
         return false;
     }
-    match shell::chain_segments(command) {
-        Some(segments) => segments
-            .iter()
-            .flat_map(|segment| shell::pipeline_stages(segment).unwrap_or_else(|| vec![segment]))
-            .any(writes_document),
-        None => writes_document(command),
+    if let Some(segments) = shell::chain_segments(command) {
+        return any_stage_writes(&segments);
     }
+    writes_document(command)
+        || shell::without_heredoc_bodies(command)
+            .and_then(|text| {
+                shell::chain_segments(&text).map(|segments| any_stage_writes(&segments))
+            })
+            .unwrap_or(false)
+}
+
+fn any_stage_writes(segments: &[&str]) -> bool {
+    segments
+        .iter()
+        .flat_map(|segment| shell::pipeline_stages(segment).unwrap_or_else(|| vec![segment]))
+        .any(writes_document)
 }
 
 /// Either the document is where this stage's output is sent, or the program is one
@@ -179,6 +187,8 @@ mod tests {
             "truncate -s 0 docs/design-rationale.md",
             "awk -i inplace '{print}' docs/design-rationale.md",
             "awk '{print > \"docs/design-rationale.md\"}' draft.md",
+            "cat > scratch/dr.md <<'EOF'\n### A section\nEOF\nsed -i '9r scratch/dr.md' docs/design-rationale.md && sed -n '1,9p' docs/design-rationale.md",
+            "mkdir -p scratch && cat > scratch/dr.md <<'EOF'\ntext\nEOF\ncp scratch/dr.md docs/design-rationale.md",
         ] {
             assert!(rewrites_document(command), "should deny: {command}");
         }

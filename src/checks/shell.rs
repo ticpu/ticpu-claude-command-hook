@@ -382,60 +382,137 @@ pub fn before_heredoc(cmd: &str) -> &str {
 /// function here can scan. `None` on an unquoted delimiter, a herestring, a
 /// missing terminator, or a command resuming past it.
 pub fn inert_heredoc(cmd: &str) -> Option<&str> {
-    let start = cmd.find("<<")?;
-    let head = &cmd[..start];
-    // The `<<` has to be shell syntax and not text: a quote opened in the head and
-    // closed in the body leaves the head unbalanced, which `scan` refuses.
-    if !analyzable(head) || unquoted_mask(head).is_none() {
+    let (text, markers) = heredocs(cmd)?;
+    let [marker] = &markers[..] else {
         return None;
-    }
-    let rest = &cmd[start + 2..];
-    if rest.starts_with('<') {
-        return None;
-    }
-    let (strip_tabs, rest) = match rest.strip_prefix('-') {
-        Some(rest) => (true, rest),
-        None => (false, rest),
     };
-    let (line, body) = rest
-        .trim_start_matches(' ')
-        .split_once('\n')?;
-    let quote = line
-        .chars()
-        .next()
-        .filter(|c| *c == '\'' || *c == '"')?;
-    let end = line[1..].find(quote)? + 1;
-    let delimiter = &line[1..end];
-    if delimiter.is_empty()
-        || !delimiter
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        || !line[end + 1..]
-            .trim()
-            .is_empty()
-    {
-        return None;
-    }
-    let mut consumed = 0;
-    let mut terminated = false;
-    for raw in body.split_inclusive('\n') {
-        consumed += raw.len();
-        let text = raw.trim_end_matches('\n');
-        let text = if strip_tabs {
-            text.trim_start_matches('\t')
-        } else {
-            text
-        };
-        if text == delimiter {
-            terminated = true;
-            break;
-        }
-    }
-    (terminated
-        && body[consumed..]
+    let head = &cmd[..marker.at];
+    (marker.quoted
+        && analyzable(head)
+        && text[head.len()..]
             .trim()
             .is_empty())
     .then_some(head)
+}
+
+/// The command text a shell runs around its heredocs: every body cut out along with
+/// the marker introducing it, the rest of the marker line and whatever follows the
+/// terminator kept, so a command chained past a heredoc reaches the splitters.
+pub fn without_heredoc_bodies(cmd: &str) -> Option<String> {
+    heredocs(cmd).map(|(text, _)| text)
+}
+
+struct HeredocMarker {
+    /// Byte offset of the `<<` in the command.
+    at: usize,
+    quoted: bool,
+}
+
+/// Sole heredoc parser in this module. A `<<` counts only where the text in front
+/// of it scans balanced, so one inside a quote is text. `None` on a delimiter this
+/// cannot read or a body with no terminator, the end of the body being unknown.
+fn heredocs(cmd: &str) -> Option<(String, Vec<HeredocMarker>)> {
+    let mut text = String::new();
+    let mut markers = Vec::new();
+    let mut rest = cmd;
+    let mut offset = 0;
+    while !rest.is_empty() {
+        let (line, after) = match rest.split_once('\n') {
+            Some((line, after)) => (line, Some(after)),
+            None => (rest, None),
+        };
+        let mut pending = Vec::new();
+        let mut cursor = 0;
+        let mut search = 0;
+        while let Some(found) = line[search..].find("<<") {
+            let at = search + found;
+            search = at + 2;
+            if line[at..].starts_with("<<<") {
+                search = at + 3;
+                continue;
+            }
+            if unquoted_mask(&format!("{text}{}", &line[cursor..at])).is_none() {
+                continue;
+            }
+            let (delimiter, quoted, strip_tabs, len) = heredoc_delimiter(&line[at + 2..])?;
+            text.push_str(&line[cursor..at]);
+            markers.push(HeredocMarker {
+                at: offset + at,
+                quoted,
+            });
+            pending.push((delimiter, strip_tabs));
+            cursor = at + 2 + len;
+            search = cursor;
+        }
+        text.push_str(&line[cursor..]);
+        offset += line.len() + 1;
+        let Some(mut after) = after else {
+            return pending
+                .is_empty()
+                .then_some((text, markers));
+        };
+        text.push('\n');
+        for (delimiter, strip_tabs) in pending {
+            loop {
+                let (body_line, next) = match after.split_once('\n') {
+                    Some((body_line, next)) => (body_line, next),
+                    None if !after.is_empty() => (after, ""),
+                    None => return None,
+                };
+                offset += body_line.len() + (after.len() > body_line.len()) as usize;
+                after = next;
+                let body_line = if strip_tabs {
+                    body_line.trim_start_matches('\t')
+                } else {
+                    body_line
+                };
+                if body_line == delimiter {
+                    break;
+                }
+            }
+        }
+        rest = after;
+    }
+    Some((text, markers))
+}
+
+/// The delimiter after a `<<`: whether it is quoted, whether `-` strips tabs, and
+/// how many bytes the whole marker spans.
+fn heredoc_delimiter(after: &str) -> Option<(&str, bool, bool, usize)> {
+    let (strip_tabs, word) = match after.strip_prefix('-') {
+        Some(word) => (true, word),
+        None => (false, after),
+    };
+    let word = word.trim_start_matches(' ');
+    let lead = after.len() - word.len();
+    let is_delimiter = |d: &str| {
+        !d.is_empty()
+            && d.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    };
+    if let Some(quote) = word
+        .chars()
+        .next()
+        .filter(|c| *c == '\'' || *c == '"')
+    {
+        let end = word[1..].find(quote)? + 1;
+        let delimiter = &word[1..end];
+        return is_delimiter(delimiter).then_some((delimiter, true, strip_tabs, lead + end + 1));
+    }
+    let (escaped, bare) = match word.strip_prefix('\\') {
+        Some(bare) => (true, bare),
+        None => (false, word),
+    };
+    let end = bare
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .unwrap_or(bare.len());
+    let delimiter = &bare[..end];
+    is_delimiter(delimiter).then_some((
+        delimiter,
+        escaped,
+        strip_tabs,
+        lead + escaped as usize + end,
+    ))
 }
 
 /// A token in command position: first, or right after a chain operator or pipe.
@@ -666,6 +743,24 @@ mod tests {
         assert_eq!(inert_heredoc("cat <<'EOF'\nmsg\nEOF\nrm -rf /x"), None);
         // The marker sits inside a quote the body closes: not shell syntax.
         assert_eq!(inert_heredoc("echo 'a << b'\n"), None);
+    }
+
+    #[test]
+    fn heredoc_bodies_are_cut_and_the_commands_around_them_kept() {
+        assert_eq!(
+            without_heredoc_bodies("cat > a <<'EOF'\nx && y\nEOF\nsed -i 1d b && ls").as_deref(),
+            Some("cat > a \nsed -i 1d b && ls")
+        );
+        assert_eq!(
+            without_heredoc_bodies("cat <<A <<-\\B | wc\na\nA\n\tb\n\tB\nls").as_deref(),
+            Some("cat   | wc\nls")
+        );
+        assert_eq!(
+            without_heredoc_bodies("echo 'a << b' <<<x").as_deref(),
+            Some("echo 'a << b' <<<x")
+        );
+        assert_eq!(without_heredoc_bodies("cat <<'EOF'"), None);
+        assert_eq!(without_heredoc_bodies("cat <<EOF\nno terminator\n"), None);
     }
 
     #[test]

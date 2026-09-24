@@ -353,8 +353,10 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   a pager and a checksum are absent, `sed`/`awk` count only in place, `cp` counts on its
   destination alone, and of git's verbs only those that replace a working-tree file — a commit
   message naming the document is not a write of it, which is most of what the shell says about
-  this file. A heredoc leaves no stages, so the text is judged whole rather than waved through:
-  its marker line carries the redirect and an interpreter's body is a program that can write.
+  this file. A heredoc is judged twice: its text whole, the marker line carrying the redirect and
+  an interpreter's body being a program that can write, and then with the bodies cut out
+  (`shell::without_heredoc_bodies`) stage by stage, since a command chained past the terminator is
+  one the whole-text read only ever saw the first program of.
 - `blind_edit` — denies an interpreter heredoc whose body reads a file whole, substitutes into
   the result, and writes it back: the substitution is unverified, so one that matches nothing
   rewrites nothing and reports nothing, leaving a file that looks edited. The Edit tool is the

@@ -73,6 +73,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Deny,
     ),
     ("sed -i '1d' docs/design-rationale.md", Deny),
+    (
+        "cat > scratch/dr.md <<'EOF'\n### A section\nEOF\nsed -i '9r scratch/dr.md' docs/design-rationale.md",
+        Deny,
+    ),
     ("cat -n docs/design-rationale.md", Pass),
     (
         "git commit -m \"docs: fold the retry note into design-rationale.md\"",
