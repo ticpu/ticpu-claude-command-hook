@@ -31,9 +31,9 @@ fn names_sudo_journalctl(text: &str, depth: usize) -> bool {
 fn stage_elevates_journalctl(stage: &str, depth: usize) -> bool {
     match shell::leading_word(stage) {
         Some("sudo") => shell::program(stage) == Some("journalctl"),
-        Some("ssh") if depth > 0 => remote_body(stage).is_some_and(|body| {
-            names_sudo_journalctl(&body, depth - 1)
-        }),
+        Some("ssh") if depth > 0 => {
+            remote_body(stage).is_some_and(|body| names_sudo_journalctl(&body, depth - 1))
+        }
         _ => false,
     }
 }
