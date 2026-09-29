@@ -79,7 +79,7 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ),
     ("cat -n docs/design-rationale.md", Pass),
     (
-        "i=0\nfor sz in 1200 1280; do\n  truncate -s ${sz}M scratch/m$i.img\n  i=$((i+1))\ndone",
+        "set -e\nD=scratch/x-$(head -c4 /dev/urandom | od -An -tx1 | tr -d ' \\n')\nmkdir \"$D\"; echo \"$D\"\ni=0\nfor sz in 1200 1280; do\n  f=$D/m$i.img\n  truncate -s ${sz}M \"$f\"\n  losetup -P -f --show \"$f\"\n  i=$((i+1))\ndone",
         Pass,
     ),
     (

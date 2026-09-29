@@ -33,14 +33,13 @@ fn reason(name: &str, value: &str) -> String {
 that text starts with the assignment — so the call matches nothing that was ever approved, and \
 the entry the prompt offers to remember is this exact command with this exact value in it. The \
 value is a literal: write it where `${name}` is used and drop the assignment segment. A value \
-that has to be computed (`{name}=$(…)`) is not this and keeps its normal prompt."
+that expands anything (`{name}=$(…)`, `{name}=$X/y`) is not this and keeps its normal prompt."
     )
 }
 
 /// The `NAME=value` pairs of a segment that is nothing but assignments. A value
-/// holding a substitution is not one: it cannot be written where it is used, and
-/// capturing a command's output into a variable is the shape that keeps a
-/// credential out of the transcript.
+/// expanding anything is not one: it varies with shell state, and capturing a
+/// command's output is the shape that keeps a credential out of the transcript.
 fn literal_assignments(segment: &str) -> Vec<(&str, &str)> {
     if !shell::is_bare_assignment(segment) {
         return Vec::new();
@@ -48,7 +47,7 @@ fn literal_assignments(segment: &str) -> Vec<(&str, &str)> {
     segment
         .split_whitespace()
         .filter_map(|word| word.split_once('='))
-        .filter(|(_, value)| !shell::has_substitution(value))
+        .filter(|(_, value)| !value.contains('$') && !shell::has_substitution(value))
         .collect()
 }
 
@@ -140,6 +139,8 @@ mod tests {
             "i=0\nfor s in a b; do\n  f=m$i.img\n  i=$((i+1))\ndone",
             "i=0; for s in a b; do echo $i; ((i++)); done",
             "n=1; while test $n -lt 3; do let n+=1; done",
+            // Built from other variables, so it varies with them.
+            "for i in 1 2; do f=/x/m$i.img; truncate -s 1M \"$f\"; done",
         ] {
             assert!(!denied(cmd), "should allow: {cmd}");
         }

@@ -255,7 +255,8 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   spent on a string nothing will ever match again. The deny names the value, since the whole
   point is that it is a literal and can be written where it is used. It fires only on a value
   that can be: `P=$(…)` is left alone, that being both unwritable inline and the shape
-  `secret_paths` relies on to keep a credential out of the transcript. The name must actually
+  `secret_paths` relies on to keep a credential out of the transcript, and so is a value built
+  from other variables (`f=$D/m$i.img`), which varies with them. The name must actually
   be expanded — an assignment nothing reads is dead (shell state does not survive the call) and
   still rides along as a `vouch` segment. A name set again by another segment — a loop
   counter's `i=$((i+1))`, `((i++))`, `let` — is a variable, not a literal, and passes. An environment prefix is one command word, not a
