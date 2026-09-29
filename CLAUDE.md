@@ -257,7 +257,8 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   that can be: `P=$(…)` is left alone, that being both unwritable inline and the shape
   `secret_paths` relies on to keep a credential out of the transcript. The name must actually
   be expanded — an assignment nothing reads is dead (shell state does not survive the call) and
-  still rides along as a `vouch` segment. An environment prefix is one command word, not a
+  still rides along as a `vouch` segment. A name set again by another segment — a loop
+  counter's `i=$((i+1))`, `((i++))`, `let` — is a variable, not a literal, and passes. An environment prefix is one command word, not a
   segment, so `LANG=C sort` is untouched. Single quotes are not tracked: a `$P` that does not
   expand leaves the assignment dead either way.
 - `remote_session` — denies an `ssh`/`sshfs`/`psql`/`mysql`/`mariadb`/`mongosh` bundled with

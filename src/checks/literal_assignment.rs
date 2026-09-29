@@ -11,9 +11,14 @@ pub fn check(command: &str) -> Option<HookOutput> {
         .enumerate()
     {
         for (name, value) in literal_assignments(segment) {
-            if segments[i + 1..]
+            let reassigned = segments
                 .iter()
-                .any(|later| expands(later, name))
+                .enumerate()
+                .any(|(j, other)| j != i && assigns(other, name));
+            if !reassigned
+                && segments[i + 1..]
+                    .iter()
+                    .any(|later| expands(later, name))
             {
                 return Some(HookOutput::deny("PreToolUse", &reason(name, value)));
             }
@@ -45,6 +50,34 @@ fn literal_assignments(segment: &str) -> Vec<(&str, &str)> {
         .filter_map(|word| word.split_once('='))
         .filter(|(_, value)| !shell::has_substitution(value))
         .collect()
+}
+
+/// Whether the segment sets `name` again — a counter's `i=$((i+1))`, `((i++))` or
+/// `let i++` — which makes it a variable rather than a literal to inline.
+fn assigns(segment: &str, name: &str) -> bool {
+    let body = segment.trim_start();
+    let body = ["do ", "then ", "else "]
+        .iter()
+        .find_map(|keyword| body.strip_prefix(keyword))
+        .unwrap_or(body)
+        .trim_start();
+    if body.starts_with("((") || body.starts_with("let ") {
+        return names(body, name);
+    }
+    shell::is_bare_assignment(body)
+        && body
+            .split_whitespace()
+            .any(|word| {
+                word.split_once('=')
+                    .is_some_and(|(n, _)| n == name)
+            })
+}
+
+/// Whether `name` occurs in the text as a whole identifier.
+fn names(text: &str, name: &str) -> bool {
+    let ident = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    text.match_indices(name)
+        .any(|(i, _)| !text[..i].ends_with(ident) && !text[i + name.len()..].starts_with(ident))
 }
 
 /// Whether the text expands `name`, as `$name` or `${name…}`. Single quotes are not
@@ -103,8 +136,19 @@ mod tests {
             "echo $P; P=/x",
             // Not an assignment at all.
             "cd /x; grep -rn foo .",
+            // A counter set again later is a variable, not a literal.
+            "i=0\nfor s in a b; do\n  f=m$i.img\n  i=$((i+1))\ndone",
+            "i=0; for s in a b; do echo $i; ((i++)); done",
+            "n=1; while test $n -lt 3; do let n+=1; done",
         ] {
             assert!(!denied(cmd), "should allow: {cmd}");
+        }
+    }
+
+    #[test]
+    fn a_reassignment_of_another_name_does_not_excuse_it() {
+        for cmd in ["P=/x; j=0; ls $P; j=$((j+1))", "i=0; ((ii++)); echo $i"] {
+            assert!(denied(cmd), "should deny: {cmd}");
         }
     }
 }

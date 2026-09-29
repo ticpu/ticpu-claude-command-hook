@@ -79,6 +79,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ),
     ("cat -n docs/design-rationale.md", Pass),
     (
+        "i=0\nfor sz in 1200 1280; do\n  truncate -s ${sz}M scratch/m$i.img\n  i=$((i+1))\ndone",
+        Pass,
+    ),
+    (
         "git commit -m \"docs: fold the retry note into design-rationale.md\"",
         Pass,
     ),
