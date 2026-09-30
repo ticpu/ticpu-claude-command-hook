@@ -324,7 +324,38 @@ pub fn leading_word(stage: &str) -> Option<&str> {
 
 /// True when a pipeline stage only displays what it is handed.
 pub fn is_display_only(stage: &str) -> bool {
-    command_word(stage).is_some_and(|w| DISPLAY_ONLY.contains(&w))
+    match command_word(stage) {
+        Some("cut") => cuts_columns(stage),
+        Some(w) => DISPLAY_ONLY.contains(&w),
+        None => false,
+    }
+}
+
+/// `cut` truncating each line by character or byte position. `-f`/`-d` split on a
+/// delimiter, which is parsing the path off the line, so they are left out.
+fn cuts_columns(stage: &str) -> bool {
+    let is_list = |s: &str| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_digit() || c == ',' || c == '-')
+    };
+    let mut args = stage.split_whitespace().skip(1);
+    let mut lists = 0;
+    while let Some(arg) = args.next() {
+        let list = match arg {
+            "-c" | "-b" => args.next().unwrap_or(""),
+            "-n" => continue,
+            _ => ["-c", "-b", "--characters=", "--bytes="]
+                .iter()
+                .find_map(|p| arg.strip_prefix(p))
+                .unwrap_or(""),
+        };
+        if !is_list(list) {
+            return false;
+        }
+        lists += 1;
+    }
+    lists > 0
 }
 
 /// A later stage that writes nothing and runs nothing. Weaker than `grep_fold`'s

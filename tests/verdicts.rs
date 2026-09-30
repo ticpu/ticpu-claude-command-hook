@@ -151,6 +151,11 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "rg -n foo src | rg bar | head -30",
         Fold("rg -n foo src | rg bar | {gf} | head -30"),
     ),
+    (
+        "rg -n foo src | cut -c1-250 | head -30",
+        Fold("rg -n foo src | {gf} | cut -c1-250 | head -30"),
+    ),
+    ("rg -n foo src | cut -d: -f1 | head", Pass),
     // Redirecting stdout keeps the fold off: the file must get the raw output.
     ("grep -rn foo src 2>&1 >out", Pass),
     ("find / -name foo", Deny),
