@@ -8,23 +8,36 @@ use crate::checks::shell;
 /// run. `-a`/`--all`, `--amend`, `--allow-empty` and a pathspec are absent because
 /// each of them commits something the caller did not stage by name; `--no-verify`
 /// and `--no-gpg-sign` are denied outright elsewhere.
-const COMMIT_FLAGS: &[&str] = &["-s", "--signoff", "-q", "--quiet"];
+const COMMIT_FLAGS: &[&str] = &["-s", "--signoff", "-q", "--quiet", "2>&1"];
 
-/// `git commit` whose message comes from stdin (`-F -`) and which names no path.
+/// Metadata only, taking a value glued with `=` or as the next word.
+const COMMIT_VALUE_FLAGS: &[&str] = &["--author", "--date"];
+
+/// `git commit` whose message comes from stdin (`-F -`) and which names no path,
+/// its output optionally merged and piped into consumers that write nothing.
 /// Every other argument has to be on `COMMIT_FLAGS`, so an unrecognized flag
 /// falls through to the normal prompt rather than riding along.
 pub fn is_stdin_commit(segment: &str) -> bool {
-    if shell::redirects_anything(segment) {
+    if shell::redirects_to_a_path(segment) {
         return false;
     }
-    let stages = shell::pipeline_stages(segment);
-    let Some([stage]) = stages.as_deref() else {
+    let Some(stages) = shell::pipeline_stages(segment) else {
         return false;
     };
-    if !is_git(stage) {
+    let (stage, consumers) = stages
+        .split_first()
+        .expect("pipeline_stages never yields an empty list");
+    if !is_git(stage)
+        || !consumers
+            .iter()
+            .all(|stage| shell::is_harmless_consumer(stage))
+    {
         return false;
     }
-    let p = parse(stage);
+    let Some(stage) = quotes_opaque(stage) else {
+        return false;
+    };
+    let p = parse(&stage);
     if p.subcommand != Some("commit")
         || p.sets_config
         || p.c_path
@@ -41,6 +54,19 @@ pub fn is_stdin_commit(segment: &str) -> bool {
         if COMMIT_FLAGS.contains(&arg) {
             continue;
         }
+        if COMMIT_VALUE_FLAGS.contains(&arg) {
+            args.next();
+            continue;
+        }
+        if COMMIT_VALUE_FLAGS
+            .iter()
+            .any(|flag| {
+                arg.strip_prefix(flag)
+                    .is_some_and(|rest| rest.starts_with('='))
+            })
+        {
+            continue;
+        }
         let value = match arg {
             "-F" | "--file" => args.next(),
             "--file=-" => Some("-"),
@@ -54,4 +80,17 @@ pub fn is_stdin_commit(segment: &str) -> bool {
         from_stdin = true;
     }
     from_stdin
+}
+
+/// Each quoted span as one opaque word, so `--author="A B"` stays one argument and
+/// a quoted pathspec still reads as an argument nothing here accepts.
+fn quotes_opaque(stage: &str) -> Option<String> {
+    let mut out = stage.to_owned();
+    for span in shell::quoted_spans(stage)?
+        .into_iter()
+        .rev()
+    {
+        out.replace_range(span, "Q");
+    }
+    Some(out)
 }

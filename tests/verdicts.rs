@@ -237,6 +237,19 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("git commit -F - src/main.rs <<'EOF'\nfix: x\nEOF", Pass),
     ("git commit -F msg.txt <<'EOF'\nfix: x\nEOF", Pass),
     ("git add . && git commit -F - <<'EOF'\nfix: x\nEOF", Deny),
+    ("git commit -F - \"src/main.rs\" <<'EOF'\nfix: x\nEOF", Pass),
+    // Authorship is metadata; the marker line's rest runs and is judged.
+    (
+        "git commit --author=\"A B <a@example.test>\" --date \"2026-09-15 10:28:27 -0400\" \
+         -F - <<'EOF' 2>&1 | tail -15\nfix: x\nEOF",
+        Allow,
+    ),
+    ("git commit -F - <<'EOF' > /zztest/log\nfix: x\nEOF", Pass),
+    ("git commit -F - <<'EOF' | sh\nfix: x\nEOF", Pass),
+    (
+        "git commit -F - <<'EOF' && rm -rf /zztest\nfix: x\nEOF",
+        Pass,
+    ),
     // A session link outlives the session; the trailer has to be line-anchored,
     // so the commit describing this deny may name it.
     (

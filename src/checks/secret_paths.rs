@@ -181,7 +181,11 @@ pub fn waiver_requested(command: &str) -> Option<HookOutput> {
 fn printed_path(command: &str, cwd: &str) -> Option<String> {
     // A quoted, terminated heredoc body is literal text nothing opens — a commit
     // message may name a credential file without reading one.
-    let command = shell::inert_heredoc(command).unwrap_or(command);
+    let command = shell::inert_heredoc(command).map_or_else(
+        || command.to_owned(),
+        |(head, tail)| format!("{head}{tail}"),
+    );
+    let command = command.as_str();
     shell::chain_segments(command)
         .unwrap_or_else(|| vec![command])
         .iter()

@@ -73,11 +73,16 @@ pub fn allow_chain(input: &HookInput) -> Option<HookOutput> {
 /// and a pathspec are all off the flag list — and the hooks it runs are this
 /// repo's own, which is what the prompt would have been protecting.
 pub fn allow_heredoc_commit(input: &HookInput) -> Option<HookOutput> {
-    let head = shell::inert_heredoc(input.command())?;
-    if shell::has_substitution(head) {
+    let (head, tail) = shell::inert_heredoc(input.command())?;
+    let runs = format!("{head}{tail}");
+    if shell::has_substitution(&runs) {
         return None;
     }
-    let segments = shell::chain_segments(head)?;
+    let segments = shell::chain_segments(&runs)?;
+    // A tail chaining past the marker adds a command the heredoc does not feed.
+    if shell::chain_segments(head)?.len() != segments.len() {
+        return None;
+    }
     let here = dirs(&segments, &input.cwd);
     let (commit, staging) = segments.split_last()?;
     for (segment, here) in staging

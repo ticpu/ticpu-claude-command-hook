@@ -427,24 +427,30 @@ pub fn before_heredoc(cmd: &str) -> &str {
         .unwrap_or(cmd)
 }
 
-/// The text in front of a heredoc whose body cannot act: one `<<` with a quoted
+/// The text around a heredoc whose body cannot act: one `<<` with a quoted
 /// delimiter, terminated, with nothing after the terminator line. A quoted
 /// delimiter is what makes the body literal — no expansion, no substitution — so
-/// the head alone decides what runs, and it is ordinary command text every other
-/// function here can scan. `None` on an unquoted delimiter, a herestring, a
-/// missing terminator, or a command resuming past it.
-pub fn inert_heredoc(cmd: &str) -> Option<&str> {
+/// the text before the marker and the rest of its line (`2>&1 | tail`) decide what
+/// runs, and joined they are ordinary command text every other function here can
+/// scan. `None` on an unquoted delimiter, a herestring, a missing terminator, or a
+/// command resuming past it.
+pub fn inert_heredoc(cmd: &str) -> Option<(&str, &str)> {
     let (text, markers) = heredocs(cmd)?;
     let [marker] = &markers[..] else {
         return None;
     };
     let head = &cmd[..marker.at];
+    let line_rest = &cmd[marker.end..];
+    let tail = line_rest
+        .split_once('\n')
+        .map_or(line_rest, |(tail, _)| tail);
     (marker.quoted
-        && analyzable(head)
+        && analyzable(&format!("{head}{tail}"))
         && text[head.len()..]
+            .strip_prefix(tail)?
             .trim()
             .is_empty())
-    .then_some(head)
+    .then_some((head, tail))
 }
 
 /// The command text a shell runs around its heredocs: every body cut out along with
@@ -457,6 +463,8 @@ pub fn without_heredoc_bodies(cmd: &str) -> Option<String> {
 struct HeredocMarker {
     /// Byte offset of the `<<` in the command.
     at: usize,
+    /// Byte offset just past the delimiter word.
+    end: usize,
     quoted: bool,
 }
 
@@ -490,6 +498,7 @@ fn heredocs(cmd: &str) -> Option<(String, Vec<HeredocMarker>)> {
             text.push_str(&line[cursor..at]);
             markers.push(HeredocMarker {
                 at: offset + at,
+                end: offset + at + 2 + len,
                 quoted,
             });
             pending.push((delimiter, strip_tabs));
@@ -785,9 +794,16 @@ mod tests {
     fn an_inert_heredoc_is_the_quoted_terminated_one() {
         assert_eq!(
             inert_heredoc("git commit -F - <<'EOF'\nmsg\nEOF\n"),
-            Some("git commit -F - ")
+            Some(("git commit -F - ", ""))
         );
-        assert_eq!(inert_heredoc("cat <<-\"E\"\n\tmsg\n\tE"), Some("cat "));
+        assert_eq!(
+            inert_heredoc("cat <<-\"E\"\n\tmsg\n\tE"),
+            Some(("cat ", ""))
+        );
+        assert_eq!(
+            inert_heredoc("git commit -F - <<'EOF' 2>&1 | tail -15\nmsg\nEOF"),
+            Some(("git commit -F - ", " 2>&1 | tail -15"))
+        );
         // Expanded body, herestring, missing terminator, and a command past it.
         assert_eq!(inert_heredoc("cat <<EOF\nmsg\nEOF"), None);
         assert_eq!(inert_heredoc("cat <<<'msg'"), None);
