@@ -3,7 +3,16 @@
 # The asserted version of this lives in tests/verdicts.rs; this is for one-offs:
 #
 #   echo 'grep -rn foo src | head' | ./probe.sh
+#
+# -z reads NUL-separated commands instead, for one spanning lines (a heredoc):
+#
+#   printf '%s\0' "$(cat cmd.txt)" | ./probe.sh -z
 set -uo pipefail
+
+delim=$'\n'
+if [[ ${1:-} == -z ]]; then
+	delim=''
+fi
 
 hook=${HOOK:-$(dirname "$0")/target/release/ticpu-claude-command-hook}
 # The hook resolves its own path, so match the canonical form to shorten it here.
@@ -14,7 +23,7 @@ if [[ ! -x $hook ]]; then
 	exit 1
 fi
 
-while IFS= read -r command; do
+while IFS= read -r -d "$delim" command; do
 	[[ -z $command ]] && continue
 	payload=$(jq -nc --arg c "$command" \
 		'{hook_event_name:"PreToolUse",tool_name:"Bash",cwd:".",tool_input:{command:$c}}')
