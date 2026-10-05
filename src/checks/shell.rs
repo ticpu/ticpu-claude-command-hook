@@ -339,11 +339,15 @@ fn cuts_columns(stage: &str) -> bool {
             && s.chars()
                 .all(|c| c.is_ascii_digit() || c == ',' || c == '-')
     };
-    let mut args = stage.split_whitespace().skip(1);
+    let mut args = stage
+        .split_whitespace()
+        .skip(1);
     let mut lists = 0;
     while let Some(arg) = args.next() {
         let list = match arg {
-            "-c" | "-b" => args.next().unwrap_or(""),
+            "-c" | "-b" => args
+                .next()
+                .unwrap_or(""),
             "-n" => continue,
             _ => ["-c", "-b", "--characters=", "--bytes="]
                 .iter()
