@@ -571,8 +571,8 @@ fn the_judge_objects_to_prose_the_rules_forbid() {
 not message framing, so a reader has to cope with partial reads and re-assemble frames \
 itself. Previously the reader used a fixed 4096-byte buffer, and an earlier version grew it \
 on demand. The consequence is that frames larger than the buffer were split across reads.\n";
-    assert_eq!(edit_verdict(path, added), Deny);
-    let reason = edit_reason(path, added);
+    let (verdict, reason) = judged_edit(path, added);
+    assert_eq!(verdict, Deny);
     assert!(reason.contains("judge objects"), "{reason}");
     assert!(reason.contains("Rule "), "{reason}");
     // The deny has to carry the way past it, or the objection is unappealable.
@@ -591,7 +591,7 @@ length prefix before it reserves anything for the body, and refuses a length abo
 rather than growing to meet it: a body sized from the wire lets the peer name the allocation. \
 Reserving first would need the same check one stage later, with the memory already \
 committed.\n";
-    assert_eq!(edit_verdict(path, added), Ask);
+    assert_eq!(judged_edit(path, added).0, Ask);
 }
 
 /// `Read` and `Grep` name their path in a field of their own, so the same rules
@@ -638,35 +638,45 @@ fn tool_verdict(tool_name: &str, field: &str, path: &str) -> Verdict<String> {
     }
 }
 
-fn edit_reason(file_path: &str, new_string: &str) -> String {
-    let payload = serde_json::json!({
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Edit",
-        "cwd": env!("CARGO_MANIFEST_DIR"),
-        "tool_input": { "file_path": file_path, "old_string": "", "new_string": new_string },
-    });
-    let json: Value = serde_json::from_str(&feed(&payload)).expect("hook JSON");
+/// The judge sits behind the audit, which refuses each draft once, so a draft it
+/// has not seen is issued a second time.
+fn judged_edit(file_path: &str, new_string: &str) -> (Verdict<String>, String) {
+    let mut stdout = edit_stdout(file_path, new_string);
+    if reason(&stdout).starts_with("design-rationale.md — audit this passage") {
+        stdout = edit_stdout(file_path, new_string);
+    }
+    (decision(&stdout), reason(&stdout))
+}
+
+fn reason(stdout: &str) -> String {
+    let json: Value = serde_json::from_str(stdout).expect("hook JSON");
     json["hookSpecificOutput"]["permissionDecisionReason"]
         .as_str()
         .expect("a decision carries a reason")
         .to_string()
 }
 
-fn edit_verdict(file_path: &str, new_string: &str) -> Verdict<String> {
-    let payload = serde_json::json!({
+fn edit_stdout(file_path: &str, new_string: &str) -> String {
+    feed(&serde_json::json!({
         "hook_event_name": "PreToolUse",
         "tool_name": "Edit",
         "cwd": env!("CARGO_MANIFEST_DIR"),
         "tool_input": { "file_path": file_path, "old_string": "", "new_string": new_string },
-    });
-    let stdout = feed(&payload);
+    }))
+}
+
+fn edit_verdict(file_path: &str, new_string: &str) -> Verdict<String> {
+    decision(&edit_stdout(file_path, new_string))
+}
+
+fn decision(stdout: &str) -> Verdict<String> {
     if stdout
         .trim()
         .is_empty()
     {
         return Pass;
     }
-    let json: Value = serde_json::from_str(&stdout).expect("hook JSON");
+    let json: Value = serde_json::from_str(stdout).expect("hook JSON");
     match json["hookSpecificOutput"]["permissionDecision"].as_str() {
         Some("deny") => Deny,
         Some("allow") => Allow,
@@ -707,7 +717,10 @@ fn run_hook(command: &str, cwd: &str) -> String {
 }
 
 fn feed(payload: &Value) -> String {
+    // The box's own markers would be read, and its waivers spent.
+    landlock_test_confine::to_scratch_only(&landlock_test_confine::target_dir());
     let mut child = Command::new(env!("CARGO_BIN_EXE_ticpu-claude-command-hook"))
+        .env("XDG_RUNTIME_DIR", env!("CARGO_TARGET_TMPDIR"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

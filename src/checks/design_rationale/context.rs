@@ -9,17 +9,14 @@
 //! written for and not every edit after it.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+use crate::checks::marker;
 
 pub(super) const FILE: &str = "design-rationale-judge-context";
 
 fn path() -> Option<PathBuf> {
-    let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
-    Some(
-        Path::new(&runtime)
-            .join("claude-hooks")
-            .join(FILE),
-    )
+    Some(marker::dir()?.join(FILE))
 }
 
 /// The answers waiting for this edit, taken as they are read. Absent is the normal

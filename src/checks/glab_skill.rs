@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::checks::shell;
+use crate::checks::{marker, shell};
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
@@ -22,12 +22,7 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
     if !is_glab(input.command()) {
         return None;
     }
-    let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
-    decide(
-        Path::new(&runtime),
-        &input.session_id,
-        &reason(load_skill()),
-    )
+    decide(&marker::dir()?, &input.session_id, &reason(load_skill()))
 }
 
 /// `~/.claude/skills/glab/SKILL.md`, or the same path under `CLAUDE_CONFIG_DIR`.
@@ -91,9 +86,8 @@ fn is_glab(command: &str) -> bool {
     }
 }
 
-fn decide(runtime: &Path, session_id: &str, reason: &str) -> Option<HookOutput> {
-    let dir = runtime.join("claude-hooks");
-    if let Err(e) = fs::create_dir_all(&dir) {
+fn decide(dir: &Path, session_id: &str, reason: &str) -> Option<HookOutput> {
+    if let Err(e) = fs::create_dir_all(dir) {
         eprintln!("glab_skill: create_dir_all {} failed: {e}", dir.display());
         return None;
     }

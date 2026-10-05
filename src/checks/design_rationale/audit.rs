@@ -15,6 +15,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
+use crate::checks::marker;
 use crate::output::HookOutput;
 
 /// One marker per draft, in the directory this binary keeps its others in. They live
@@ -27,9 +28,7 @@ fn marker(dir: &Path, introduced: &str) -> PathBuf {
 }
 
 pub(super) fn gate(introduced: &str) -> Option<HookOutput> {
-    let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
-    let dir = Path::new(&runtime).join("claude-hooks");
-    decide(&dir, introduced)
+    decide(&marker::dir()?, introduced)
 }
 
 /// `None` once this draft has been asked for. An IO failure asks again rather than

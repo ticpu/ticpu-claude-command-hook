@@ -81,13 +81,24 @@ fn names_marker(arg: &str, name: &str) -> bool {
         || path(name).is_some_and(|marker| Path::new(token) == marker)
 }
 
+/// Where every marker this binary keeps lives. Unit tests get their own, so a run
+/// neither reads the switches set on this box nor spends a waiver left for a session.
+pub fn dir() -> Option<PathBuf> {
+    #[cfg(not(test))]
+    return std::env::var_os("XDG_RUNTIME_DIR")
+        .map(|runtime| Path::new(&runtime).join("claude-hooks"));
+    #[cfg(test)]
+    {
+        // A path that slips past this seam is refused by the kernel, not spent.
+        landlock_test_confine::to_scratch_only(&landlock_test_confine::target_dir());
+        Some(landlock_test_confine::scratch_dir(
+            "test-scratch/claude-hooks",
+        ))
+    }
+}
+
 fn path(name: &str) -> Option<PathBuf> {
-    let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
-    Some(
-        Path::new(&runtime)
-            .join("claude-hooks")
-            .join(name),
-    )
+    Some(dir()?.join(name))
 }
 
 /// True while the marker exists, leaving it there. The other half of `spend`: a
@@ -128,4 +139,21 @@ pub fn location(name: &str) -> String {
 /// but the first — and a `touch` that fails for want of it says so.
 pub fn command(name: &str) -> String {
     format!("touch {}", location(name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dir;
+    use std::path::Path;
+
+    #[test]
+    fn a_thread_reaching_markers_cannot_write_outside_target() {
+        dir();
+        let stray = Path::new(env!("CARGO_MANIFEST_DIR")).join("landlock-probe");
+        let written = std::fs::write(&stray, "");
+        if written.is_ok() {
+            std::fs::remove_file(&stray).expect("remove the probe");
+        }
+        assert!(written.is_err(), "wrote {}", stray.display());
+    }
 }
