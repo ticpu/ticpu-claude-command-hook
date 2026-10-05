@@ -106,6 +106,23 @@ pub fn redirects_anything(segment: &str) -> bool {
     redirects_stdout(segment) || unquoted(segment).is_none_or(|bare| bare.contains('>'))
 }
 
+/// A redirect that can touch a file or move stdout: any but the `2>&1` that merges
+/// stderr into the pipe a report is read from.
+pub fn redirects_to_a_path(segment: &str) -> bool {
+    if redirects_stdout(segment) {
+        return true;
+    }
+    let Some(bare) = unquoted(segment) else {
+        return true;
+    };
+    bare.match_indices('>')
+        .any(|(i, _)| {
+            !bare[i + 1..]
+                .trim_start()
+                .starts_with('&')
+        })
+}
+
 /// `>>` is one operator; its second byte must not count as another redirect.
 fn preceded_by(b: &[u8], i: usize, c: u8) -> bool {
     i > 0 && b[i - 1] == c

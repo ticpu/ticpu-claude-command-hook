@@ -40,7 +40,7 @@ pub fn allow(command: &str) -> Option<HookOutput> {
     for segment in segments {
         // `2>&1` merges stderr into the pipe and is the point of the shape; a
         // redirect naming a path would truncate it.
-        if shell::redirects_stdout(segment) || names_a_redirect_target(segment) {
+        if shell::redirects_to_a_path(segment) {
             return None;
         }
         if shell::is_bare_cd(segment) || shell::is_lone_echo(segment) {
@@ -52,19 +52,6 @@ pub fn allow(command: &str) -> Option<HookOutput> {
         cargo_seen = true;
     }
     cargo_seen.then(|| HookOutput::allow("PreToolUse", BUILDS))
-}
-
-/// Any redirect whose target is not the `&1`/`&2` fd duplication `2>&1` performs.
-fn names_a_redirect_target(segment: &str) -> bool {
-    let Some(bare) = shell::unquoted(segment) else {
-        return true;
-    };
-    bare.match_indices('>')
-        .any(|(i, _)| {
-            !bare[i + 1..]
-                .trim_start()
-                .starts_with('&')
-        })
 }
 
 fn is_reporting_segment(segment: &str) -> bool {
