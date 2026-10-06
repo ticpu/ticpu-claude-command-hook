@@ -3,7 +3,7 @@ mod blind_edit;
 mod broad_walk;
 mod cargo_tools;
 mod cat_read;
-mod design_rationale;
+pub mod design_rationale;
 mod git_bypass;
 mod glab_read_only;
 mod glab_skill;

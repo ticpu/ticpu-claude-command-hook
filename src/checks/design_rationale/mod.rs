@@ -7,7 +7,7 @@ mod context;
 pub mod disabled;
 mod judge;
 mod mechanical;
-mod ollama;
+pub mod ollama;
 mod overlap;
 pub mod shell_write;
 #[cfg(test)]
@@ -64,9 +64,14 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
             // quoted sentence can carry, and the clauses that cut most of a padded
             // section — what a future change would act on, what the reader already
             // knows — are not among them. The writer applies those or nobody does.
-            true => {
-                audit::gate(introduced).or_else(|| reviewed(&document, replaced, added, introduced))
-            }
+            // The audit is the round trip before the judge, so the model loads during it.
+            true => match audit::gate(introduced) {
+                Some(refused) => {
+                    ollama::warm();
+                    Some(refused)
+                }
+                None => reviewed(&document, replaced, added, introduced),
+            },
         }
     })
 }
