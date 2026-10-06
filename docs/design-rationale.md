@@ -95,13 +95,17 @@ itself to the other one, and every line of the argument quotes the passage it is
 A judge that did not run must never look like one that passed. The context length is stated on
 every request rather than left to server configuration, where a short default truncates the
 prompt and the model answers confidently from the fragment that survived; an unreachable or
-unparseable reply allows the write and says on screen that no judgement was made.
+unparseable reply allows the write and says on the prompt itself that no judgement was made. The
+model starts loading when an edit is first refused, in a process outliving the hook, so a load
+the judge's timeout cuts short still finishes.
 
 ## The writer audits its own draft before any reviewer reads it
 
 Every judged passage is refused once, unread, carrying the authoring rules and no finding: the
 writer applies them to its own text only when asked to. The refusal is keyed on that text, never
-on the session — a session that read the rules earlier is not one still applying them.
+on the session — a session that read the rules earlier is not one still applying them. Ahead
+of that, an edit waits on a whole read of the file since the session last compacted: a draft
+written from headings and windows restates sections it never saw.
 
 ## A judged objection is overruled in one prompt
 
@@ -118,7 +122,8 @@ Approving is the review, and the write says so afterwards, because otherwise the
 and asks for a second one nobody owes. It is said after rather than on the prompt: a prompt's
 reason is addressed to whoever answers the prompt, so a refusal reaches the writer only because
 refusing is itself the answer, and the same words beside a question the reader is answering
-reach nobody. An edit too small to judge is prompted too, rather than landing unseen.
+reach nobody. An edit too small to judge is prompted too, rather than landing unseen. Every
+prompt names the section an edit lands in and the headings it adds, which the diff never shows.
 
 A file that does not exist yet skips every gate and goes straight to the permission prompt:
 every rule asking what a reader holding this repo would already know has nothing to check
