@@ -201,6 +201,10 @@ pub fn post_tool_use(input: &HookInput) -> Option<HookOutput> {
 const CLEAN: &str = "design-rationale.md — the judge raised nothing. Approve to write it, \
 reject to say what should change.";
 
+/// Said on the prompt itself: the system message carrying the failure scrolls past, and
+/// a prompt reading like a clean verdict is approved as one.
+const UNJUDGED_BY_MODEL: &str = "Nobody has reviewed this but you.";
+
 const BYPASSED: &str = "design-rationale.md — judged review waived for this edit, and the \
 waiver is now spent.";
 
@@ -283,6 +287,11 @@ fn reviewed(document: &str, replaced: &str, added: &str, introduced: &str) -> Op
                 questions.join("\n"),
                 answering()
             ),
+        )
+    } else if let Some(unreviewed) = &unreviewed {
+        HookOutput::ask(
+            "PreToolUse",
+            &format!("design-rationale.md — {unreviewed}. {UNJUDGED_BY_MODEL}"),
         )
     } else {
         HookOutput::ask("PreToolUse", CLEAN)

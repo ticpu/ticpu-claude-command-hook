@@ -594,6 +594,28 @@ committed.\n";
     assert_eq!(judged_edit(path, added).0, Ask);
 }
 
+#[test]
+fn a_judge_that_did_not_run_says_so_on_the_prompt() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    let added = "## The reader refuses a length above the cap\n\nThe reader takes the length \
+prefix before it reserves anything for the body, and refuses a length above the cap rather \
+than growing to meet it: a body sized from the wire lets the peer name the allocation.\n";
+    let issue = || {
+        feed_judged_by(
+            &edit_payload(path, added),
+            Some("http://[::1]:9/api/generate"),
+        )
+    };
+    let mut stdout = issue();
+    if reason(&stdout).starts_with("design-rationale.md — audit this passage") {
+        stdout = issue();
+    }
+    assert_eq!(decision(&stdout), Ask);
+    let reason = reason(&stdout);
+    assert!(reason.contains("did not run"), "{reason}");
+    assert!(!reason.contains("raised nothing"), "{reason}");
+}
+
 /// `Read` and `Grep` name their path in a field of their own, so the same rules
 /// have to be reachable without a command line.
 #[test]
@@ -657,12 +679,16 @@ fn reason(stdout: &str) -> String {
 }
 
 fn edit_stdout(file_path: &str, new_string: &str) -> String {
-    feed(&serde_json::json!({
+    feed(&edit_payload(file_path, new_string))
+}
+
+fn edit_payload(file_path: &str, new_string: &str) -> Value {
+    serde_json::json!({
         "hook_event_name": "PreToolUse",
         "tool_name": "Edit",
         "cwd": env!("CARGO_MANIFEST_DIR"),
         "tool_input": { "file_path": file_path, "old_string": "", "new_string": new_string },
-    }))
+    })
 }
 
 fn edit_verdict(file_path: &str, new_string: &str) -> Verdict<String> {
@@ -717,9 +743,18 @@ fn run_hook(command: &str, cwd: &str) -> String {
 }
 
 fn feed(payload: &Value) -> String {
+    feed_judged_by(payload, None)
+}
+
+/// `judge_url` stands in for the box's ollama, `None` leaving the hook to its own.
+fn feed_judged_by(payload: &Value, judge_url: Option<&str>) -> String {
     // The box's own markers would be read, and its waivers spent.
     landlock_test_confine::to_scratch_only(&landlock_test_confine::target_dir());
-    let mut child = Command::new(env!("CARGO_BIN_EXE_ticpu-claude-command-hook"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ticpu-claude-command-hook"));
+    if let Some(url) = judge_url {
+        command.env("CLAUDE_HOOK_JUDGE_URL", url);
+    }
+    let mut child = command
         .env("XDG_RUNTIME_DIR", env!("CARGO_TARGET_TMPDIR"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
