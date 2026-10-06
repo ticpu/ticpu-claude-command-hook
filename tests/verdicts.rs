@@ -614,6 +614,7 @@ than growing to meet it: a body sized from the wire lets the peer name the alloc
     let reason = reason(&stdout);
     assert!(reason.contains("did not run"), "{reason}");
     assert!(!reason.contains("raised nothing"), "{reason}");
+    assert!(reason.contains("Adds ## The reader refuses"), "{reason}");
 }
 
 /// `Read` and `Grep` name their path in a field of their own, so the same rules

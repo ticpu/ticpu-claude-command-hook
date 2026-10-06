@@ -9,6 +9,7 @@ mod judge;
 mod mechanical;
 pub mod ollama;
 mod overlap;
+mod placement;
 pub mod shell_write;
 #[cfg(test)]
 mod tests;
@@ -52,28 +53,57 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
     // countable rules still measure the whole replacement, since a section left over
     // the length bound is over it however much this edit trimmed.
     let introduced = introduced(replaced, added);
-    mechanical::check(added).or_else(|| {
-        match introduced
-            .trim()
-            .len()
-            >= FLOOR
-        {
-            false => Some(HookOutput::ask("PreToolUse", UNJUDGED)),
-            true if bypass::spend() => Some(HookOutput::ask("PreToolUse", BYPASSED)),
-            // Ahead of the reviewers, and unconditional: their findings are what a
-            // quoted sentence can carry, and the clauses that cut most of a padded
-            // section — what a future change would act on, what the reader already
-            // knows — are not among them. The writer applies those or nobody does.
-            // The audit is the round trip before the judge, so the model loads during it.
-            true => match audit::gate(introduced) {
-                Some(refused) => {
-                    ollama::warm();
-                    Some(refused)
-                }
-                None => reviewed(&document, replaced, added, introduced),
-            },
-        }
-    })
+    mechanical::check(added)
+        .or_else(|| {
+            match introduced
+                .trim()
+                .len()
+                >= FLOOR
+            {
+                false => Some(HookOutput::ask("PreToolUse", UNJUDGED)),
+                true if bypass::spend() => Some(HookOutput::ask("PreToolUse", BYPASSED)),
+                // Ahead of the reviewers, and unconditional: their findings are what a
+                // quoted sentence can carry, and the clauses that cut most of a padded
+                // section — what a future change would act on, what the reader already
+                // knows — are not among them. The writer applies those or nobody does.
+                // The audit is the round trip before the judge, so the model loads during it.
+                true => match audit::gate(introduced) {
+                    Some(refused) => {
+                        ollama::warm();
+                        Some(refused)
+                    }
+                    None => reviewed(&document, replaced, added, introduced),
+                },
+            }
+        })
+        .map(|decision| {
+            placed(
+                decision,
+                &placement::describe(&document, replaced, introduced),
+            )
+        })
+}
+
+/// An ask's reason is the one text the user reads beside the diff, so it says where the
+/// diff goes; a deny is addressed to the writer, which holds the file.
+fn placed(mut decision: HookOutput, placement: &str) -> HookOutput {
+    if let Some(specific) = decision
+        .hook_specific_output
+        .as_mut()
+        .filter(|specific| {
+            specific
+                .permission_decision
+                .as_deref()
+                == Some("ask")
+        })
+    {
+        let reason = specific
+            .permission_decision_reason
+            .get_or_insert_default();
+        reason.push_str("\n\n");
+        reason.push_str(placement);
+    }
+    decision
 }
 
 /// What the edit says that the document did not, which is nothing at all when it only
