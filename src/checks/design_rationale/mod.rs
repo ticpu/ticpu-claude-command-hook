@@ -10,6 +10,7 @@ mod mechanical;
 pub mod ollama;
 mod overlap;
 mod placement;
+pub mod read_whole;
 pub mod shell_write;
 #[cfg(test)]
 mod tests;
@@ -39,6 +40,9 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
     // A file that does not exist yet reaches no gate here: every rule asking what a
     // reader of this repo already knows has nothing to check against.
     let document = read_document(path)?;
+    if let Some(refused) = read_whole::gate(input) {
+        return Some(refused);
+    }
     // A `Write` replaces the whole file, so what it takes out is what is on disk.
     let (replaced, added) = match input
         .tool_name

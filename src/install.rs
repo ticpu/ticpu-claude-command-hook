@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 const ENTRIES: &[(&str, &str)] = &[
     ("PreToolUse", "Bash|Edit|Write|Read|Grep"),
     ("PostToolUse", "Edit|Write"),
+    ("SessionStart", "compact"),
 ];
 
 pub fn run() -> Result<()> {

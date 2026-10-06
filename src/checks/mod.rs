@@ -66,7 +66,10 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
         // Both hand file contents back as a tool result. Edit and Write do not, so
         // they are not asked here.
         "PreToolUse" if input.tool_name == "Read" || input.tool_name == "Grep" => {
-            secret_paths::tool(input)
+            secret_paths::tool(input).or_else(|| {
+                design_rationale::read_whole::record(input);
+                None
+            })
         }
         // MultiEdit is vestigial — Claude Code no longer emits it — so it is not matched.
         "PreToolUse" if input.tool_name == "Edit" || input.tool_name == "Write" => {
@@ -76,6 +79,10 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
         // it. A permission prompt's reason cannot: it is addressed to the reader.
         "PostToolUse" if input.tool_name == "Edit" || input.tool_name == "Write" => {
             design_rationale::post_tool_use(input)
+        }
+        "SessionStart" if input.source == "compact" => {
+            design_rationale::read_whole::forget(input);
+            None
         }
         _ => None,
     }

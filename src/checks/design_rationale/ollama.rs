@@ -43,6 +43,10 @@ pub(super) fn ask(prompt: &str) -> Result<String> {
 /// Starts `load` in a process of its own, so a cold load outlives this hook: ollama
 /// aborts a load whose client disconnects, and the judge's own timeout is that client.
 pub(super) fn warm() {
+    // A unit test binary given the verb would run its own suite, not the load.
+    if cfg!(test) {
+        return;
+    }
     let spawned = std::env::current_exe().and_then(|exe| {
         Command::new(exe)
             .arg(LOAD_VERB)

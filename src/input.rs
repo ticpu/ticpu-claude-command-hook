@@ -9,6 +9,9 @@ pub struct HookInput {
     pub hook_event_name: String,
     #[serde(default)]
     pub tool_name: String,
+    /// What started a `SessionStart`: `startup`, `resume`, `clear`, `compact`.
+    #[serde(default)]
+    pub source: String,
     #[serde(default)]
     pub cwd: String,
     /// Kept raw: a check that rewrites the call has to hand back every field the
