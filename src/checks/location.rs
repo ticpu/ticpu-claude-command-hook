@@ -1,4 +1,9 @@
 //! Where the command will run, and how its path arguments resolve there.
+//!
+//! A bare `cd` moves that for every segment behind it, so `dirs` hands each
+//! segment the directory the shell will really be in and every path check reads
+//! it from there: a deny keyed on the tool's own cwd reports a correctly spelled
+//! path as wrong the moment a chain starts with a `cd`.
 
 use std::path::{Path, PathBuf};
 

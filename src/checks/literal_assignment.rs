@@ -1,3 +1,18 @@
+//! Denies a bare `NAME=value` segment whose name a later segment expands, the
+//! deny naming the value so it can be written where it is used.
+//!
+//! Left alone:
+//! - `P=$(…)`: unwritable inline, and the shape `secret_paths` relies on to keep
+//!   a credential out of the transcript.
+//! - A value built from other variables, which varies with them.
+//! - An assignment nothing expands: shell state does not survive the call, so it
+//!   is dead and rides along as a `vouch` segment.
+//! - A name another segment sets again — a loop counter is a variable.
+//! - An environment prefix: one command word, not a segment.
+//!
+//! Single quotes are not tracked: a `$P` that does not expand leaves the
+//! assignment dead either way.
+
 use crate::checks::shell;
 use crate::output::HookOutput;
 

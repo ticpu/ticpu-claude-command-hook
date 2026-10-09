@@ -1,6 +1,16 @@
 //! The script that edits a source file by string substitution and never checks
 //! the substitution happened. Narrow by construction: the evidence is the whole
 //! read-modify-write trio in one interpreter body, not the interpreter itself.
+//!
+//! A substitution that matches nothing rewrites nothing and reports nothing; the
+//! deny names the Edit tool, whose `old_string` mismatch is the check the script
+//! omits. All three signals or nothing: a script that slurps and substitutes but
+//! prints, or that iterates a file line by line, is analysis.
+//!
+//! Only the heredoc shape is judged. `sed -i` and `perl -i` are out, being
+//! deliberate Unix idiom and not the habit this is aimed at, and Perl is off
+//! the interpreter list for the same reason. The waiver is spent only against a
+//! command this would refuse, so an unrelated call cannot consume one.
 
 use crate::output::HookOutput;
 

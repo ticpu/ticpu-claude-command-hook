@@ -1,3 +1,12 @@
+//! Denies a command whose every segment only passes time or hands back an exit
+//! status, an `echo` labelling the wait not counting as company.
+//!
+//! Nothing is waiting to be polled: background work re-invokes the model when it
+//! finishes, and a condition is what the Monitor tool is for, so an idle call
+//! buys a turn and its own tool result. It fires only where the whole chain
+//! idles: `sleep 2 && curl …` waits for something, and a poll loop names its
+//! condition in the segment before the `do`.
+
 use crate::checks::shell;
 use crate::output::HookOutput;
 

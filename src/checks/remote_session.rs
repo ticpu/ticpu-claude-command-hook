@@ -1,3 +1,13 @@
+//! Denies a session client — a remote shell, a database — bundled with anything
+//! else: no `;`, `&&`, `||`, `&`, no unquoted newline.
+//!
+//! A lone `echo` is not company, and a wrapper is read through. The client must
+//! lead its pipeline, a producer feeding it riding along on its approval; a
+//! consumer after it only reads what it printed. Chaining inside the quoted
+//! remote command or SQL body is the far end's. A heredoc is judged on the text
+//! before the marker, the body being data — at the cost of not seeing a chain
+//! past the terminator.
+
 use crate::checks::shell;
 use crate::output::HookOutput;
 

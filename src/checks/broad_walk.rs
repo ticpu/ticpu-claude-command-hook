@@ -1,3 +1,15 @@
+//! Denies a `find` walk of `/`, the home directory or the GIT repo parent; one
+//! scoped to a repo under it passes. A trailing glob is judged on its parent,
+//! `~/GIT/*` being the same walk under another spelling.
+//!
+//! An `ls` or `tree` of the GIT parent or the home directory is denied for a
+//! different reason: they hold hundreds of entries and a repo path is built from
+//! its name, so the listing is browsing to guess. `/` is off that half, printing
+//! two dozen names that answer a real question, and so is `ls -d`, which names
+//! the directory instead of listing it; `tree -d` still walks.
+//!
+//! A lister is a neutral segment to every allow, so this denies ahead of them.
+
 use crate::checks::shell;
 use crate::output::HookOutput;
 

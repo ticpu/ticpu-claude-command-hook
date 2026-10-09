@@ -1,6 +1,21 @@
+//! Routes a hook event to its checks. Each returns `Option<HookOutput>` and the
+//! first to object wins, so the order in `dispatch` is part of each decision.
+//!
+//! For a Bash call: `secret_paths` first, since everything after it can allow and
+//! a command printing a credential must never reach an allow; then the denies,
+//! each waiver's creation prompt ahead of the deny it overrules; then, last, the
+//! allows, so every objection gets first say. `forge_write` is called twice, its
+//! refusals early and its prompt after every other refusal.
+//!
+//! Every check that can allow sits behind one gate in `allows`: a command
+//! carrying a `$( )` or a backtick gets no allow from any of them, and neither
+//! does one `shell` cannot scan. The substitution runs before the program a check
+//! classified, so a read-only verb in front of it vouches for nothing, and telling
+//! an inert `$(pwd)` from a live one is the classification these checks exist to
+//! avoid needing. Only a check that denies looks inside a substitution.
+
 mod attribution;
 mod blind_edit;
-
 mod broad_walk;
 mod cargo_tools;
 mod comment_cap;

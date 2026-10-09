@@ -1,3 +1,14 @@
+//! The first `glab` of a session is denied, and a marker lets later calls
+//! through. Any pipeline stage of any segment counts, so a `cd`, a wrapper or an
+//! absolute path does not skip it.
+//!
+//! The denial carries the guidance instead of pointing at the skill: a deny
+//! reason reaches the model, so the round trip the gate already cost delivers
+//! it, and the retry is the corrected command. It is `TRAPS`, then the installed
+//! skill file with its frontmatter dropped. glab ships that file itself, which
+//! is why it is read and not embedded; the traps are the part it omits, and the
+//! half a missing skill file cannot take with it.
+
 use std::fs;
 use std::path::{Path, PathBuf};
 

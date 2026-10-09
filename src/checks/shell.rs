@@ -3,6 +3,12 @@
 //! operator inside either is never read as one — and it refuses to guess: a
 //! heredoc or an unbalanced quote comes back as `None` so callers fail open
 //! instead of mis-splitting.
+//!
+//! It is the only shell parser: one mask feeds chain splitting, pipeline
+//! splitting, redirect detection and unquoting, and a newline separates commands
+//! like `;` does. A check that grows its own notion of "is this git, glab, a
+//! search" grows an evasion with it — a redirect inside a search pattern read as
+//! a real one is what a second matcher looks like. Ask `program`.
 
 use std::ops::Range;
 use std::str::SplitWhitespace;

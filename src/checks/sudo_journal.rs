@@ -1,6 +1,12 @@
 //! `sudo journalctl` is refused outright: reading the journal comes from group
 //! membership, so the elevation buys nothing and costs a password prompt this
 //! shell cannot answer.
+//!
+//! `systemctl` is not covered: its writes do need root. A wrapper between the
+//! `sudo` and the program still counts. Over ssh the body is taken from the
+//! first `sudo` onwards and not from the destination, which saves an option
+//! table: a miss costs a prompt, `systemd_read` allowing nothing that carries a
+//! wrapper at either end.
 
 use crate::checks::shell;
 use crate::output::HookOutput;

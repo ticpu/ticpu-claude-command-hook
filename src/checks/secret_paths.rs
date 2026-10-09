@@ -1,5 +1,47 @@
 //! Credential files: refused where the shell would print one, left to the normal
-//! prompt where the value is captured instead.
+//! prompt where the value is captured instead. A transcript outlives its session,
+//! so a value printed into one is spent.
+//!
+//! It runs first in `dispatch`: later checks emit allows, and a `grep` of a
+//! secrets file must never reach one. Having no allow to withhold, it judges a
+//! command `shell` cannot split whole — being wrong costs a prompt.
+//!
+//! Not a print:
+//! - A path inside a `$( )`: a refusal that also blocks the credential's
+//!   legitimate use leaves nothing to retry with. Substitutions are lifted out
+//!   and the outer text decides, so a printer among the outer tokens is refused.
+//! - The value of a key flag (`ssh -i`, `--sslkey`), and a path named by a
+//!   command that opens nothing: a mode change, a rename, a `stat`, a `test`, a
+//!   `git log` with no patch flag.
+//! - A search's pattern and a `jq`-family filter, each the one argument a
+//!   command names and does not open. The filter is located by walking the
+//!   flags; an unknown long option reads as a switch, and `-f` moves the filter
+//!   into a file, leaving every positional a path.
+//! - The body of a quoted, terminated heredoc, and a printer's own words:
+//!   literal text nothing opens.
+//!
+//! A name is a credential by its basename — a word saying what it holds, a known
+//! dotfile, an `id_` key without `.pub`, a key or keystore extension — or by a
+//! directory component whose contents are credentials whatever the file is
+//! called. The name rules give way, the directory rule never:
+//! - A source or prose extension exempts the wording alone: a module about
+//!   credentials is not one.
+//! - A template word in the name, or a ciphertext extension: the values are
+//!   removed or encrypted before either file is committed.
+//! - A name that resolves and does not exist is a word, not a path. A glob or a
+//!   variable has nothing to stat and is judged on its wording.
+//! - A file git tracks: a committed credential was spent the day it landed, and
+//!   the ones this watches for live outside any repo.
+//!
+//! `Read` and `Grep` are matched on the path they name; `Edit` and `Write` are
+//! not, a write printing nothing. A name that reads like a credential and is not
+//! one is answered by a waiver, named with none of the words above so that
+//! creating it is not itself refused.
+//!
+//! Not caught: a recursive search rooted at a directory that merely contains
+//! one, a `Grep` `glob` (a repo-wide `*secret*` is ordinary), a value captured
+//! and later echoed, a path printed into a consumer that then reads it, and a
+//! quoted argument holding a space.
 
 use std::path::PathBuf;
 
