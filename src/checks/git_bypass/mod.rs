@@ -19,8 +19,9 @@ pub use crate::checks::git_bypass::add::is_explicit_add;
 pub use crate::checks::git_bypass::commit::is_stdin_commit;
 pub use crate::checks::git_bypass::read_only::is_read_only_segment;
 
-const NO_VERIFY: &str = "`--no-verify` is only allowed on a commit whose subject starts with \
-\"test\", \"build\" or \"docs\". CLAUDE.md forbids skipping git hooks otherwise.";
+const NO_VERIFY: &str = "`--no-verify` skips the pre-commit hook, the secret scan included. It \
+is accepted only on a commit whose subject starts with \"test\", \"build\" or \"docs\", where \
+the hook has nothing to check. Drop the flag and fix what the hook reports.";
 
 /// Commit types whose content the pre-commit hook has nothing to say about: a
 /// red TDD commit, a lockfile pin, prose. The subject has to *start* with one, so
@@ -28,12 +29,12 @@ const NO_VERIFY: &str = "`--no-verify` is only allowed on a commit whose subject
 const NO_VERIFY_TYPES: &[&str] = &["test", "build", "docs"];
 
 const NO_SIGN: &str = "Command bypasses git signing (--no-gpg-sign / commit.gpgsign=false). \
-CLAUDE.md forbids this unless explicitly requested. If GPG fails on the TTY, run the commit \
-manually with `! git commit ...` or fix GPG_TTY.";
+Commits here are signed unless the user asked for this one not to be. If GPG fails on the TTY, \
+say so and have them run the commit with `! git commit ...` or fix GPG_TTY.";
 
 const REDUNDANT_C: &str = "`git -C <path>` points at the current working directory — drop the \
-`-C` and run the plain `git` command so the normal per-command approval applies. CLAUDE.md: \
-avoid `git -C`; use `git <verb>` directly.";
+`-C` and run the plain `git` command so the normal per-command approval applies. A `-C` is \
+for a repo the shell is not in.";
 
 const CD_COMMIT: &str = "Don't `cd` to commit: a commit covers the whole repo, so plain \
 `git commit` from the directory you are already in does the same thing and takes the normal \
@@ -49,8 +50,8 @@ here with the paths spelled from here, or move first with a `cd` of its own — 
 auto-allowed and the working directory persists between calls.";
 
 const BLANKET_ADD: &str = "`git add -A` / `.` / `-u` / `*` sweeps untracked scratch into the \
-index — CLAUDE.md forbids it (it once staged real PII). Stage explicit paths; `git status` \
-first if unsure what is untracked.";
+index — snapshots, data dumps, once real PII that then had to be rewritten out of history. \
+Stage explicit paths; `git status` first if unsure what is untracked.";
 
 const MISROOTED_ADD: &str = "Pathspec spelled from the repo root, not from here: ";
 

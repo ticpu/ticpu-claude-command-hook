@@ -1,10 +1,10 @@
 use crate::checks::shell;
 use crate::output::HookOutput;
 
-const GENERATED_BY: &str = "The message carries a generated-with attribution line. CLAUDE.md: no \
-🤖, no emoji, no generated-by line and no claude.ai/code link in a commit, tag, PR/MR body or \
-review comment — `Co-Authored-By` is the only trailer that lands, and the harness supplies it. \
-Drop the line and run the command again.";
+const GENERATED_BY: &str = "The message carries a generated-with attribution line. No 🤖, no \
+emoji, no generated-by line and no claude.ai/code link goes in a commit, tag, PR/MR body or \
+review comment, whatever the session's attribution block asks for — `Co-Authored-By` is the \
+only trailer that lands. Drop the line and run the command again.";
 
 /// Programs whose write verbs put text in front of humans and keep it there.
 /// `glab` is matched by prefix: the group-token wrappers CLAUDE.md posts as the
@@ -20,10 +20,12 @@ fn writes_for_humans(program: &str) -> Option<&'static [&'static str]> {
 
 /// Forge verbs that carry a body. `create` and `update` take `--description`,
 /// the rest a comment.
-const FORGE_VERBS: &[&str] = &["create", "update", "note", "comment", "edit", "reply"];
+const FORGE_VERBS: &[&str] = &[
+    "create", "new", "update", "note", "comment", "edit", "reply",
+];
 
 /// Denies a commit, tag or forge body carrying an attribution line. The line is
-/// what a harness attribution block asks for and what CLAUDE.md forbids, so it
+/// what a harness attribution block asks for and what this deny alone forbids, so it
 /// arrives already written and nothing in the session's own context objects.
 pub fn check(command: &str) -> Option<HookOutput> {
     (writes_a_body(command) && carries_attribution(command))
@@ -100,6 +102,7 @@ mod tests {
         for cmd in [
             "glab-wrapper mr create --title x --description \"body text\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\"",
             "gh pr create --body \"fix\n\nGenerated with Claude Code\"",
+            "gh pr new --body \"fix\n\nGenerated with Claude Code\"",
             "glab mr note 2408 -m \"reply\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\"",
             "git add x && git commit -F - <<'EOF'\nfeat: x\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\nEOF",
             "git tag -F - v1.0 <<'EOF'\nv1.0\n\nCreated with Claude Code\nEOF",

@@ -3,7 +3,7 @@ use crate::output::HookOutput;
 
 const SILENCED: &str = "`2>/dev/null` on a search hides the errors worth seeing (wrong path, \
 unreadable dir). Drop it, or pass `-s`/`--no-messages`, which suppresses only \
-missing/unreadable-file noise and keeps real failures. CLAUDE.md: errors shall not be silenced.";
+missing/unreadable-file noise and keeps real failures.";
 
 /// Programs whose quoted argument is a command line another shell runs. The
 /// approval rule stops at that quote — what the far end chains is its own — but
