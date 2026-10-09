@@ -18,7 +18,7 @@ EOF
 
 It preflights (master, clean tree, `git pull --rebase`, `make -j check`), bumps `Cargo.toml`,
 commits `release: vX.Y.Z` with the force-added `Cargo.lock`, tags annotated, pushes, waits on
-the tag's `release.yml` run, signs and publishes the draft, verifies the published `.deb`, and
+the commit's `ci.yml` run and the tag's `release.yml` run, signs and publishes the draft, verifies the published `.deb`, and
 publishes it to apt.ticpu.net. Read `release.sh` before working around any of it.
 
 Every step asks whether it is already done, so an interrupted release is resumed by re-running

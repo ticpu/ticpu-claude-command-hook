@@ -120,7 +120,7 @@ answers the same question for one-off commands.
 ```
 
 Preflight, version bump, `release:` commit carrying the lockfile, annotated tag, push, then
-it waits on the tag's `release.yml` run, signs the draft the run created, and reads back the
+it waits on the commit's `ci.yml` run and the tag's `release.yml` run, signs the draft the run created, and reads back the
 published `.deb`: version, no `Depends`, no `DT_NEEDED`, and `rules` output matching
 `docs/allowed-commands.md`. The artifact is checked rather than the tree it was built from,
 a stale `dist/` being how the previous release gets packaged under the new number.
