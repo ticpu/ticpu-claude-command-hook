@@ -69,75 +69,6 @@ adds a position or filename prefix of its own makes every line unfoldable. Teach
 such a prefix is the wrong repair: those positions count the piped stream, so they name no line
 in any file, and folding around them would dress up output that is already wrong. Deny instead.
 
-## Countable rules are checked in code, judged rules in the model
-
-Every rule a program can decide stays in the program; the model is asked only what it can point
-at and quote. A small model flags textbook knowledge and narration reliably, and misses what it
-has to count just as reliably — a forbidden heading form and a section at twice the length bound
-survive the same review that catches the prose faults beside them.
-
-## The judge is trusted only where it was measured
-
-Its rule list is closed and deliberately shorter than the authoring rules: given every rule, the
-same model on the same edits rule-shops until something matches, and denies nearly everything. A
-rule joins that list only after it earns its place against labelled sections, and only if it
-holds up asked on its own: the list is read as a set, so a rule matching almost any passage stays
-quiet while a better match exists, and one that needs its neighbours to outbid it is deciding
-nothing. A finding is taken only where the quoted passage can carry it. Qualifying the rule's own text does not hold
-the model to it — under pressure to answer it reaches for whichever rule is nearest — so where a
-rule has a precondition a program can see, the finding is checked against its quote and dropped
-when it fails: a line naming no rule, a quote absent from the added text, or a quote carrying
-nothing the rule it names needs — no reference to the past under the rule against narrating a
-previous state, no value of any kind under the one against enumerating them. A line naming no
-rule is what a model does when it reasons in the open: it answers with the verdict, then argues
-itself to the other one, and every line of the argument quotes the passage it is weighing.
-
-A judge that did not run must never look like one that passed. The context length is stated on
-every request rather than left to server configuration, where a short default truncates the
-prompt and the model answers confidently from the fragment that survived; an unreachable or
-unparseable reply allows the write and says on the prompt itself that no judgement was made. The
-model starts loading when an edit is first refused, in a process outliving the hook, so a load
-the judge's timeout cuts short still finishes.
-
-## The writer audits its own draft before any reviewer reads it
-
-Every judged passage is refused once, unread, carrying the authoring rules and no finding: the
-writer applies them to its own text only when asked to. The refusal is keyed on that text, never
-on the session — a session that read the rules earlier is not one still applying them. Ahead
-of that, an edit waits on a whole read of the file since the session last compacted: a draft
-written from headings and windows restates sections it never saw.
-
-## A judged objection is overruled in one prompt
-
-An objection stops the edit, since an Edit's permission prompt renders the diff and nothing
-else — carried there, it is read by nobody before deciding. Stopping puts the finding in front
-of the model instead, which can revise or argue it. The overrule is the bypass marker's own
-prompt: the model states the finding and creates the marker, and approving that creation is the
-decision. Putting the question to the reader first and creating it afterwards asks the same
-thing twice, and the model is small enough to read domain behaviour a project depends on as
-textbook knowledge — so the second ask is the common case, not the rare one. A countable rule
-refuses outright, having nothing to weigh.
-
-Approving is the review, and the write says so afterwards, because otherwise the writer stops
-and asks for a second one nobody owes. It is said after rather than on the prompt: a prompt's
-reason is addressed to whoever answers the prompt, so a refusal reaches the writer only because
-refusing is itself the answer, and the same words beside a question the reader is answering
-reach nobody. An edit too small to judge is prompted too, rather than landing unseen. Every
-prompt names the section an edit lands in and the headings it adds, which the diff never shows.
-
-A file that does not exist yet skips every gate and goes straight to the permission prompt:
-every rule asking what a reader holding this repo would already know has nothing to check
-against. An empty document that does exist is still judged, and the objection then asks for the
-frame the file is missing rather than for a narrower passage.
-
-What is measured is what the edit introduces, with the whole lines it copies out of the document
-stripped from both ends — never part of one, since an insert lands before a heading and shares
-its marker, and a heading handed over with the marker gone is judged as the flat assertion it
-then reads as. An edit that removes a paragraph has to re-emit the section around it,
-and judged whole it draws findings against prose already in the file, which no revision can
-answer. A re-wrap introduces nothing at all. A section named as already owning the decision may
-not be one the edit is rewriting or deleting, for the same reason.
-
 ## A credential file is captured, never printed
 
 A path whose name or directory says it holds a credential is refused wherever the shell would
@@ -152,19 +83,6 @@ credentials is not one — or where git already tracks the file, a committed val
 whatever this session does with it. Neither exemption extends to a location or an extension
 that identifies a key. What is left is a name that reads like a credential and is not one, which no
 rule here can settle: the refusal names a one-shot waiver, spent as it is read.
-
-## A file printed into the transcript is refused, a file piped is not
-
-A shell print of a whole file is refused where its output reaches the transcript, the tool that
-reads files being named instead. The test is where the bytes go, not which program moves them —
-files joined into a pipe are the concatenation the command exists for, and a flag rendering the
-bytes themselves asks for what no tool result shows.
-
-The waiver over it is granted by this binary instead of prompted, alone among the waivers here.
-It answers a habit rather than a hazard — being wrong costs the same file read a second way —
-and the case it cannot settle, a read the harness records and the model does not hold, is no
-reader's to arbitrate. The credential gate is decided ahead of it and stays there: a waiver over
-a habit must not be the way a secret reaches the transcript.
 
 ## A bug here must not stop the tools
 
