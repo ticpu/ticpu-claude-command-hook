@@ -1,10 +1,34 @@
-//! One notion of a segment an allow can carry, and the allow built from it.
+//! One notion of a segment an allow can carry, and the allows built on it.
 //!
 //! An allow ends the permission decision for the *whole* call, so a chain is
-//! covered only when every segment in it is one that grants nothing on its own.
-//! Each check that allows a chain used to keep its own list of those, and the
-//! lists disagreed: a search beside a `git status` was refused by both, each for
-//! the segment the other vouches for.
+//! covered only when every segment in it grants nothing on its own: a bare `cd`,
+//! a bare `NAME=value`, a utility that only reads and prints, a provably
+//! read-only git pipeline, or a `git add` naming at least one path that exists as
+//! a file — a directory, glob or variable stages whatever is under it, the sweep
+//! the blanket forms are denied for. The list is kept once: checks keeping their
+//! own disagree on the segment the other was written for, and a chain mixing
+//! subjects is then refused by both.
+//!
+//! The allowlist cannot express these, Claude Code prompting on `cd <path> &&
+//! git …` and `git -C <path> …` for hooks in the target directory that neither a
+//! read-only verb nor a `git add` runs. A `cd` earns the allow on its own, the
+//! working directory persisting between calls; a pure reader does not, being
+//! allowlisted already — granting on one would make this a general utility allow.
+//!
+//! Any redirect forfeits it, `2>file` truncating what it names. A substitution is
+//! refused per segment, running before the program the segment was classified by.
+//! A consumer only has to add no side effect of its own, weaker than the fold's
+//! display-only test, which must also survive gf's folding: `wc`, a
+//! line-selecting `sed` and a search reading a pipe qualify here and not there.
+//!
+//! The commit and correction shapes are stated in `git_bypass::commit`. The commit
+//! one runs ahead of the substitution gate, everything else here failing open on a
+//! heredoc: a quoted delimiter makes the body literal, so the head is judged
+//! alone, and the terminator must be the last line or what follows is a command
+//! nothing judged.
+//!
+//! These run last in `dispatch`, so every objection gets first say and a `git
+//! grep` still reaches the fold.
 
 use crate::checks::git_bypass;
 use crate::checks::location::dirs;

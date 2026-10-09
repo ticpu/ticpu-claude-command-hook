@@ -1,3 +1,18 @@
+//! Denies a body carrying a generated-with line: `git commit`/`tag`, and the forge
+//! verbs that take a description or a comment, `gh`, `glab` and the token wrappers
+//! named after it.
+//!
+//! The harness attribution block asks for the line in so many words, so it is
+//! written by a session whose own context tells it to; nothing but a refusal
+//! stops one landing. It does not arrive as a trailer, nor from git alone, which
+//! is why it is apart from `git_bypass`'s `Claude-Session:` deny.
+//!
+//! Line-anchored, over `\n` escapes as well as real newlines, so prose naming the
+//! line is not one; `Co-Authored-By:` is untouched, being the trailer that is
+//! wanted. The verb is read from the whole text and not through `chain_segments`,
+//! which gives up on the heredoc a commit message arrives in — a body word that
+//! happens to spell a verb costs nothing, the anchored line being what decides.
+
 use crate::checks::shell;
 use crate::output::HookOutput;
 

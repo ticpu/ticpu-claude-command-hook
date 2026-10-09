@@ -1,3 +1,40 @@
+//! Denies, per chain segment, the git shapes that slip past a hook or sweep the
+//! tree. It allows nothing itself: read-only classification lives in `read_only`
+//! and `vouch` is what spends it.
+//!
+//! - `--no-verify`, in every spelling git accepts: the long flag, a wholly quoted
+//!   one, and the `-n` that means it on `commit` alone. Exempt is a commit whose
+//!   subject starts with a `NO_VERIFY_TYPES` word, where the pre-commit hook has
+//!   nothing to check — the subject only, those being words a body writes by
+//!   accident.
+//! - `--no-gpg-sign`, and `commit.gpgsign=` set to any of git's off values.
+//! - `git -C` pointing at the working directory, whatever the verb: a no-op that
+//!   only costs a prompt.
+//! - A blanket `git add`, quoted or not: a prefix allow rule for `git add` does
+//!   not stop one.
+//! - A `git add` pathspec resolving under the repo root but not under the working
+//!   directory: spelled from the wrong root, so the deny names the spelling that
+//!   works. One resolving nowhere is a deletion and keeps its prompt.
+//! - A `cd` before a `git commit`: a commit is repo-wide, so the move buys nothing
+//!   and would run the target repo's hooks. Landing in another repo, the deny
+//!   names `git -C <repo>`, the shell refusing to stay outside its working
+//!   directories. This one walks tokens before the heredoc marker instead of
+//!   asking `shell`, because the shape worth catching is `-m "$(cat <<EOF …)"`,
+//!   which that parser refuses.
+//! - A `cd` inside the current repo in front of a git command no allow carries:
+//!   it reaches no hook the command could not already run, so the prompt it costs
+//!   warns about nothing. A `cd` to a different repo does change which hooks run
+//!   and keeps its prompt.
+//! - A `Claude-Session:` trailer on a commit or tag message, line-anchored so
+//!   prose naming it passes.
+//!
+//! A bare `cd` earlier in the chain moves the directory each later segment is
+//! judged in, or a correctly spelled path reads as misrooted. Bypass flags count
+//! only where git reads options — whole tokens, outside quotes, before a heredoc
+//! marker — so a commit message may name a flag it is not using. `git` is
+//! recognized by `shell::program`, so a path, a wrapper or a brace group carries
+//! the same denies.
+
 mod add;
 mod commit;
 mod parse;
