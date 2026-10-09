@@ -13,6 +13,9 @@ cd <path> && git … inside the current repo: refused for every other verb; run 
 glab read pairs: mr view|list|diff|checks, issue view|list, ci view|list|status|trace|get, pipeline view|list|status, release view|list, repo view|list|contributors, snippet view|list, label list, milestone list, incident view|list, schedule list, auth status, glab version.
 glab api <path>: GET only, no body flag.
 First glab of a session: refused whatever it does, refusal carrying the guidance.
+Always prompted, every mode: gh pr|issue create|new|edit|comment, gh pr review, glab mr|issue create|new|update|note. Not glab-cauca, glab-ng911.
+gh pr|issue create only as, alone in its command: gh pr create --title '…' --body-file scratch/pr-body-<topic>.md (issue: issue-body-<topic>.md), path unquoted. --body --fill --editor --web --template --recover, stdin: refused.
+Write/Edit of pr-body*.md or issue-body*.md refused while it holds: generated-with line, emoji, [label]: url link definition, prose hard-wrapped at a column, and for pr-body no heading containing test.
 cargo build check clippy test bench doc rustdoc fmt tree metadata info search expand llvm-cov semver-checks, piped into display-only stages, 2>&1 included. Not run, add, update, clean.
 grep/rg rewritten to fold through gf and allowed while every other segment is a shape above. 2>/dev/null on a search refused, use -s.
 Folded output: a path prints once, base: names the prefix stripped from every path, a line starting :45: (match) or -45- (context) belongs to the last path printed above it.

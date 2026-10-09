@@ -1,9 +1,11 @@
 mod attribution;
 mod blind_edit;
+
 mod broad_walk;
 mod cargo_tools;
 pub mod design_rationale;
 mod edited;
+mod forge_write;
 mod git_bypass;
 mod glab_read_only;
 mod glab_skill;
@@ -41,6 +43,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
             secret_paths::waiver_requested(cmd)
                 .or_else(|| secret_paths::check(input))
                 .or_else(|| glab_skill::check(input))
+                .or_else(|| forge_write::deny(input))
                 .or_else(|| design_rationale::bypass::requested(cmd))
                 .or_else(|| design_rationale::disabled::requested(cmd))
                 .or_else(|| design_rationale::shell_write::waiver_requested(cmd))
@@ -56,6 +59,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| remote_session::check(cmd))
                 .or_else(|| search_stderr::check(cmd))
                 .or_else(|| search_flags::check(cmd))
+                .or_else(|| forge_write::ask(input))
                 // Last, in order: an allow ends the chain, so every objection gets
                 // first say — and a `git grep` still reaches the fold.
                 .or_else(|| allows(input))

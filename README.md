@@ -17,6 +17,12 @@ fail-open) so a bug in the hook never blocks your tools.
   `test`), `--no-gpg-sign`, and `-c commit.gpgsign=false`, in every spelling git accepts:
   quoted, short (`commit -n`), and the other off values. `git` is recognized behind a path,
   a wrapper or a brace group.
+- **forge write gate** — creating, editing or commenting on a PR, MR or issue through `gh`
+  or `glab` is always prompted, in every permission mode. A `gh` create must take its body
+  from a `pr-body*.md` / `issue-body*.md` file, re-checked as the command runs.
+- **PR body check** — a Write or Edit to such a file is refused while it carries a
+  generated-with line, an emoji, a reference-style link, hard-wrapped prose or, for a PR, no
+  testing section.
 - **broad find guard** — blocks `find` walks of `/`, `~`, `$HOME`, the bare home directory,
   or the parent directory holding all your repos; a `find` scoped to one repo is allowed.
 - **remote session guard** — denies `ssh`, `sshfs`, `psql`, `mysql`, `mariadb` or `mongosh`

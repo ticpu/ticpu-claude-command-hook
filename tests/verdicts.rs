@@ -252,6 +252,29 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("git commit --squash HEAD", Pass),
     ("git commit --fixup=amend:HEAD", Pass),
     ("rm -rf /zztest && git commit --fixup HEAD", Pass),
+    // Publishing under the user's name is prompted, and a create takes its body
+    // from a checked file — here one that does not exist, which the prompt says.
+    ("gh issue comment 3 -b hi", Ask),
+    ("gh pr review 3 --approve | cat", Ask),
+    ("gh pr view 3", Pass),
+    (
+        "gh pr create --title x --body-file scratch/pr-body-zz-missing.md",
+        Ask,
+    ),
+    ("gh pr create --title x --body y", Deny),
+    ("gh pr create --fill", Deny),
+    (
+        "gh pr create --title x --body-file scratch/issue-body-x.md",
+        Deny,
+    ),
+    (
+        "gh pr create --title x --body \"$(cat <<'EOF'\nbody\nEOF\n)\"",
+        Deny,
+    ),
+    (
+        "rm -rf /zztest && gh pr create --title x --body-file scratch/pr-body-x.md",
+        Deny,
+    ),
     // Another index, repo or hook set: the shape is a bare `git commit` or nothing.
     (
         "GIT_INDEX_FILE=/zztest/i git commit -F - <<'EOF'\nfix: x\nEOF",
