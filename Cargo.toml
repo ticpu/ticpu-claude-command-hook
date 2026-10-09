@@ -12,7 +12,6 @@ anyhow = "1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-ureq = { version = "3.4", default-features = false, features = ["json"] }
 
 [dev-dependencies]
 landlock-test-confine = "0.5"

@@ -1,6 +1,6 @@
 # Waivers
 
-Four checks refuse rather than prompt, and each names a one-shot waiver that overrules
+Three checks refuse rather than prompt, and each names a one-shot waiver that overrules
 it. One further marker, at the end, is a standing switch rather than a waiver. A waiver is a file you approve into existence; the binary deletes it as it reads it,
 before the decision it overrules, so a failed delete cannot leave a standing pass behind.
 
@@ -20,19 +20,6 @@ of this repo's source names the file without granting anything.
 
 The model is expected to run these itself after arguing why the objection is wrong, and
 you decide at the prompt. Running one by hand is the same thing without the argument.
-
-## `design-rationale-judge-bypass`
-
-Refused by: the judged reviews of a `design-rationale.md` edit — a rules finding, a
-duplicate section, or a question the reviewer could not resolve.
-
-```sh
-touch "$XDG_RUNTIME_DIR/claude-hooks/design-rationale-judge-bypass"
-```
-
-Spent by the next edit that reaches the judge, before it is judged. The mechanical rules
-(heading form, section length, a CLAUDE.md reference) are outside it — there is nothing
-to overrule in a count.
 
 ## `design-rationale-shell-write`
 
@@ -73,9 +60,8 @@ the contents go into the transcript either way.
 
 ## `design-rationale-gate-off` — a switch, not a waiver
 
-Turns the whole `Edit`/`Write` gate on `design-rationale.md` off: the countable rules and
-both judged reviews. For rewriting the file section by section, where a round trip per
-draft is the cost and not the point.
+Turns the whole `Edit`/`Write` gate on `design-rationale.md` off: the whole-read wait and
+the countable rules. For rewriting the file section by section.
 
 ```sh
 touch "$XDG_RUNTIME_DIR/claude-hooks/design-rationale-gate-off"
@@ -96,6 +82,5 @@ Neither is a waiver, and neither is prompted:
 
 - `glab-skill-<session-id>` — written by the binary after the first `glab` call of a
   session carries the guidance. Delete it to be handed the guidance again.
-- `design-rationale-judge-context` — answers to a reviewer's questions, written by the
-  model when the judge says what it was missing. Read into the next review of that file
-  and deleted as it is read. Writing it yourself works the same way.
+- `design-rationale-read-<session-id>-<hash>` — written when a session reads a rationale
+  whole, removed when it compacts.

@@ -36,12 +36,6 @@ impl Verdict<&str> {
 }
 
 const CASES: &[(&str, Verdict<&str>)] = &[
-    // The waiver for a judged objection: always prompted, so an allowlisted
-    // `touch` cannot hand one out unseen.
-    (
-        "touch \"$XDG_RUNTIME_DIR/claude-hooks/design-rationale-judge-bypass\"",
-        Ask,
-    ),
     ("touch \"$XDG_RUNTIME_DIR/claude-hooks/glab-skill-x\"", Pass),
     // The same shape for a refused credential path.
     (
@@ -531,9 +525,7 @@ fn verdicts_match() {
     }
 }
 
-/// Edits to a `design-rationale.md`, judged by the countable rules alone. Every row
-/// is decided before the model is consulted, so the table needs no ollama — the
-/// judge itself is covered by the ignored test beside it.
+/// Edits to a `design-rationale.md`: refused by a countable rule, or prompted.
 const EDIT_CASES: &[(&str, Verdict<&str>)] = &[
     (
         "## Why we split the parser\n\nA body long enough to clear the floor, with several \
@@ -573,62 +565,43 @@ fn edit_verdicts_match() {
     );
 }
 
-/// The judge itself, which needs ollama up with the model resident:
-/// `cargo test -- --ignored`. Only that it reaches a prompt carrying the objection
-/// is asserted — the judge is a model, so which rules it cites varies, and pinning
-/// that would buy a flaky test instead of a signal.
 #[test]
-#[ignore = "needs a local ollama with the judge model resident"]
-fn the_judge_objects_to_prose_the_rules_forbid() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
-    let added = "## Buffer sizing in the frame reader\n\nTCP guarantees ordered delivery but \
-not message framing, so a reader has to cope with partial reads and re-assemble frames \
-itself. Previously the reader used a fixed 4096-byte buffer, and an earlier version grew it \
-on demand. The consequence is that frames larger than the buffer were split across reads.\n";
-    let (verdict, reason) = judged_edit(path, added);
-    assert_eq!(verdict, Deny);
-    assert!(reason.contains("judge objects"), "{reason}");
-    assert!(reason.contains("Rule "), "{reason}");
-    // The deny has to carry the way past it, or the objection is unappealable.
-    assert!(reason.contains("design-rationale-judge-bypass"), "{reason}");
-}
-
-/// Ordering inside a design reads as before/after narration to a model matching the
-/// rule on its wording, and the passages that say when a thing happens are exactly
-/// the ones worth keeping. Same invocation as above.
-#[test]
-#[ignore = "needs a local ollama with the judge model resident"]
-fn stated_ordering_is_not_narration() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
-    let added = "## Frame length is read before the body is buffered\n\nThe reader takes the \
-length prefix before it reserves anything for the body, and refuses a length above the cap \
-rather than growing to meet it: a body sized from the wire lets the peer name the allocation. \
-Reserving first would need the same check one stage later, with the memory already \
-committed.\n";
-    assert_eq!(judged_edit(path, added).0, Ask);
-}
-
-#[test]
-fn a_judge_that_did_not_run_says_so_on_the_prompt() {
+fn a_rationale_prompt_says_where_the_edit_lands() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
     let added = "## The reader refuses a length above the cap\n\nThe reader takes the length \
 prefix before it reserves anything for the body, and refuses a length above the cap rather \
 than growing to meet it: a body sized from the wire lets the peer name the allocation.\n";
-    let issue = || {
-        feed_judged_by(
-            &edit_payload(path, added),
-            Some("http://[::1]:9/api/generate"),
-        )
-    };
-    let mut stdout = issue();
-    if reason(&stdout).starts_with("design-rationale.md — audit this passage") {
-        stdout = issue();
-    }
+    let stdout = edit_stdout(path, added);
     assert_eq!(decision(&stdout), Ask);
     let reason = reason(&stdout);
-    assert!(reason.contains("did not run"), "{reason}");
-    assert!(!reason.contains("raised nothing"), "{reason}");
     assert!(reason.contains("Adds ## The reader refuses"), "{reason}");
+}
+
+/// A Write of a PR body is judged whole, and an issue body needs no testing section.
+#[test]
+fn a_body_file_is_checked_as_it_is_written() {
+    let write = |path: &str, content: &str| {
+        decision(&feed(&serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Write",
+            "cwd": env!("CARGO_MANIFEST_DIR"),
+            "tool_input": { "file_path": path, "content": content },
+        })))
+    };
+    let body = "## What\n\nA change.\n";
+    assert_eq!(write("/x/scratch/pr-body-y.md", body), Deny);
+    assert_eq!(
+        write(
+            "/x/scratch/pr-body-y.md",
+            "## What\n\nA change.\n\n## Testing\n\nNone.\n"
+        ),
+        Pass
+    );
+    assert_eq!(write("/x/scratch/issue-body-y.md", body), Pass);
+    assert_eq!(
+        write("/x/notes.md", "🤖 Generated with Claude Code\n"),
+        Pass
+    );
 }
 
 /// `Read` and `Grep` name their path in a field of their own, so the same rules
@@ -673,16 +646,6 @@ fn tool_verdict(tool_name: &str, field: &str, path: &str) -> Verdict<String> {
         Some("ask") => Ask,
         _ => panic!("unexpected hook output: {stdout}"),
     }
-}
-
-/// The judge sits behind the audit, which refuses each draft once, so a draft it
-/// has not seen is issued a second time.
-fn judged_edit(file_path: &str, new_string: &str) -> (Verdict<String>, String) {
-    let mut stdout = edit_stdout(file_path, new_string);
-    if reason(&stdout).starts_with("design-rationale.md — audit this passage") {
-        stdout = edit_stdout(file_path, new_string);
-    }
-    (decision(&stdout), reason(&stdout))
 }
 
 fn reason(stdout: &str) -> String {
@@ -758,18 +721,9 @@ fn run_hook(command: &str, cwd: &str) -> String {
 }
 
 fn feed(payload: &Value) -> String {
-    feed_judged_by(payload, None)
-}
-
-/// `judge_url` stands in for the box's ollama, `None` leaving the hook to its own.
-fn feed_judged_by(payload: &Value, judge_url: Option<&str>) -> String {
     // The box's own markers would be read, and its waivers spent.
     landlock_test_confine::to_scratch_only(&landlock_test_confine::target_dir());
-    let mut command = Command::new(env!("CARGO_BIN_EXE_ticpu-claude-command-hook"));
-    if let Some(url) = judge_url {
-        command.env("CLAUDE_HOOK_JUDGE_URL", url);
-    }
-    let mut child = command
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ticpu-claude-command-hook"))
         .env("XDG_RUNTIME_DIR", env!("CARGO_TARGET_TMPDIR"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

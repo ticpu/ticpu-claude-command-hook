@@ -30,19 +30,11 @@ fail-open) so a bug in the hook never blocks your tools.
   (`cat dump.sql | mysql`). They must be the whole call, optionally piped into a viewer
   (`| jq`); a bare `echo` alongside is allowed, and chaining inside the quoted remote command
   or SQL body is the far end's business and passes through.
-- **design-rationale gate** — an edit to a `design-rationale.md` is reviewed before it lands.
-  The countable rules are decided in code (a `## Why …` heading, a section past the length
-  bound, a CLAUDE.md reference) and deny with the offending text quoted. The prose rules go to
-  a local model, which denies with the passage it objects to and the rule it cited — the model
-  is asked only for the rule's number, and the rule itself is named from the list afterwards.
-  A second, separate call asks whether a section already records the decision, and has to copy
-  out the sentence that says so — checked against that section before it can deny, since a model
-  asked only to name a section names one whenever the words overlap. Both calls run at once. Deletions and
-  one-line fixes are too small to carry prose and never reach the model; an unreachable model
-  allows the edit and says no judgement was made. Every other edit to the file prompts for your
-  approval whatever your permission rules say, so the review happens before the write rather than
-  after it. A judged objection you disagree with is overruled by approving the command the denial
-  hands you, which drops a marker the next edit consumes.
+- **design-rationale gate** — an edit to a `docs/design-rationale.md` waits on a whole read
+  of the file in the session. The countable rules are decided in code (a `## Why …` heading,
+  a section past the length bound, a CLAUDE.md reference) and deny with the offending text
+  quoted. Every other edit prompts for your approval whatever your permission rules say,
+  the prompt naming the section it lands in, so the review happens before the write.
 - **grep fold** — rewrites `grep`/`rg`/`git grep` commands to pipe through `gf`, so repeated
   file paths collapse instead of eating the model's context. Chains are handled per segment
   (`cd /x && grep …` folds the grep and leaves the `cd`), and a segment that cannot be
@@ -56,24 +48,6 @@ fail-open) so a bug in the hook never blocks your tools.
   its prompt instead. Writing `command grep` opts out entirely.
 - **search stderr guard** — denies `2>/dev/null` on a search: it hides wrong paths and
   unreadable dirs, and `-s`/`--no-messages` suppresses just the file noise instead.
-
-## The design-rationale judge
-
-The design-rationale gate asks a local [ollama](https://ollama.com) to review the prose being
-written. It needs a model pulled and the service tuned:
-
-```
-ollama pull gemma4:12b
-sudo cp docs/ollama-tuning.conf /etc/systemd/system/ollama.service.d/
-sudo systemd-analyze verify ollama.service    # must print nothing
-sudo systemctl daemon-reload && sudo systemctl restart ollama
-```
-
-Only `OLLAMA_CONTEXT_LENGTH` in that drop-in is required — ollama's default is short enough to
-truncate a prompt carrying a whole file, and a truncated prompt does not fail, it answers from
-whatever survived. The rest of the file is VRAM sizing for one card; recompute it for yours.
-Everything is overridable by environment variable, and if ollama is unreachable the edit is
-allowed with a message saying no judgement was made.
 
 ## gf
 

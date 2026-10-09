@@ -1,7 +1,6 @@
-//! The gate turned off for a while. A waiver answers one wrong finding; a session
-//! rewriting the file section by section is a different thing, and spending a round
-//! trip per draft to say so is the cost this removes. So this one is not spent: it
-//! stands until it is removed, and every edit it lets through says it was unread.
+//! The gate turned off for a while, for a session rewriting the file section by
+//! section. It is not spent: it stands until it is removed, and every edit it lets
+//! through says it was unread.
 
 use crate::checks::marker;
 use crate::output::HookOutput;
@@ -20,8 +19,8 @@ pub(super) fn notice() -> HookOutput {
     HookOutput::ask(
         "PreToolUse",
         &format!(
-            "design-rationale.md — the gate is off, so nothing has read this edit: not the \
-             countable rules, not the judge. Restore it with:\n  rm {}",
+            "design-rationale.md — the gate is off, so nothing has checked this edit: no whole \
+             read, no countable rule. Restore it with:\n  rm {}",
             marker::location(MARKER)
         ),
     )
@@ -31,8 +30,8 @@ pub(super) fn notice() -> HookOutput {
 /// addressed to whoever answers it. Without this the edit reads as reviewed —
 /// which is what an approved prompt on this file normally means.
 pub(super) const UNREVIEWED: &str = "The design-rationale gate is off: the edit you just made \
-was reviewed by nothing. Approving the prompt was permission, not a verdict. Hold the passage to \
-the CLAUDE.md authoring clauses yourself.";
+was checked by nothing. Approving the prompt was permission, not a verdict. Hold the passage to \
+the /design-rationale authoring rules yourself.";
 
 /// Creating it is prompted whatever the permission rules say. This one is not spent
 /// on use, so an allowlisted `touch` would otherwise take the gate off for the rest

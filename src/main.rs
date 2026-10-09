@@ -6,7 +6,6 @@ mod install;
 mod output;
 mod rules;
 
-use checks::design_rationale::ollama;
 use input::HookInput;
 
 fn main() {
@@ -28,16 +27,9 @@ fn main() {
             }
         }
         Some("rules") => rules::print(),
-        Some(ollama::LOAD_VERB) => {
-            if let Err(e) = ollama::load() {
-                eprintln!("{}: {e:#}", ollama::LOAD_VERB);
-                std::process::exit(1);
-            }
-        }
         Some(other) => {
             eprintln!(
-                "hook: unknown argument {other:?}; the hook JSON is read from stdin, and the verbs are `install`, `uninstall`, `rules` and `{}`",
-                ollama::LOAD_VERB
+                "hook: unknown argument {other:?}; the hook JSON is read from stdin, and the verbs are `install`, `uninstall` and `rules`"
             );
             std::process::exit(2);
         }

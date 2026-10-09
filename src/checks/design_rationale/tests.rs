@@ -1,8 +1,7 @@
 use serde_json::json;
 
-use super::judge::{headline, parse_for_test, questions_for_test};
 use super::mechanical::check;
-use super::{FLOOR, framing, introduced, is_rationale, new_text, post_tool_use, pre_tool_use};
+use super::{introduced, is_rationale, new_text, post_tool_use, pre_tool_use};
 use crate::input::HookInput;
 
 fn edit(file_path: &str) -> HookInput {
@@ -23,16 +22,6 @@ fn written(file_path: &str, content: &str) -> HookInput {
     }
 }
 
-/// Every finding is checked against the text it quotes, so a probe reply needs one
-/// the text really contains.
-const JUDGED: &str = "The cost of a single parser is one evasion instead of five, and an \
-earlier version keyed the map on the identifier alone. The rule 3 steps are enumerated, and \
-the retry cap is 5.";
-
-fn objection(reply: &str) -> String {
-    parse_for_test(reply, JUDGED).expect("findings")
-}
-
 fn denied(added: &str) -> bool {
     check(added).is_some()
 }
@@ -46,11 +35,15 @@ fn reason(added: &str) -> String {
 }
 
 #[test]
-fn fires_only_on_a_rationale_file() {
+fn fires_only_on_a_rationale_file_under_docs() {
     assert!(is_rationale("docs/design-rationale.md"));
     assert!(is_rationale("/abs/crate/docs/design-rationale.md"));
+    assert!(!is_rationale(
+        "/home/x/.claude/commands/design-rationale.md"
+    ));
+    assert!(!is_rationale("design-rationale.md"));
+    assert!(!is_rationale("docs/not-design-rationale.md"));
     assert!(!is_rationale("src/main.rs"));
-    assert!(!is_rationale("README.md"));
     assert!(!is_rationale(""));
 }
 
@@ -145,192 +138,14 @@ fn a_headless_body_is_measured_too() {
     assert!(!denied(&short));
 }
 
-/// A number with no rule behind it must annotate nothing rather than guess, and
-/// every number the list does carry has to resolve — the lookup reads `rules.md`,
-/// so a reformat of that file would otherwise silently stop naming anything.
-#[test]
-fn every_listed_rule_resolves_and_nothing_else_does() {
-    for number in 1..=5 {
-        let rule = headline(number).unwrap_or_else(|| panic!("rule {number} has no headline"));
-        assert!(!rule.is_empty());
-        assert!(!rule.contains('.'), "{rule}");
-    }
-    assert!(headline(0).is_none());
-    assert!(headline(6).is_none());
-}
-
-/// The model writes the finding line, so the citation is read tolerantly — but
-/// only where it opens the line, or the word inside a quoted passage would name a
-/// rule the passage has nothing to do with.
-#[test]
-fn a_cited_rule_is_named_beside_the_line_that_cited_it() {
-    let reason = objection("REVISE\nRule 5: \"the cost of a single parser is\"");
-    assert!(
-        reason.contains("Rule 5: \"the cost of a single parser is\""),
-        "{reason}"
-    );
-    assert!(reason.contains("NO SPEC RESTATEMENT"), "{reason}");
-
-    for line in [
-        "- **Rule 4**: \"the retry cap is 5\"",
-        "rule #4 — \"retry cap is 5\"",
-    ] {
-        let reason = objection(&format!("REVISE\n{line}"));
-        assert!(reason.contains("NO ENUMERATED VALUES"), "{line}: {reason}");
-    }
-
-    // The number belongs to the quoted text, so the line cites nothing and is not a
-    // finding at all — never a finding annotated with a rule it has nothing to do with.
-    assert_eq!(
-        parse_for_test(
-            "REVISE\nThis says the \"rule 3 steps\" are enumerated.",
-            JUDGED
-        ),
-        None
-    );
-}
-
-/// The verdict for a rule the model cannot decide from the passage. It carries the
-/// questions to the writer, so one naming nothing is not that verdict at all.
-#[test]
-fn a_question_stops_the_edit_only_when_it_asks_something() {
-    let asked = questions_for_test(
-        "CONTEXT\nIs `fsa-index@` a unit this project ships, or one it merely runs against?",
-        JUDGED,
-    )
-    .expect("a question");
-    assert!(asked.contains("fsa-index@"), "{asked}");
-
-    // At most the two the reply was allowed, whatever it sent.
-    let many = questions_for_test("CONTEXT\nFirst?\nSecond?\nThird?", JUDGED).expect("questions");
-    assert_eq!(
-        many.lines()
-            .count(),
-        2,
-        "{many}"
-    );
-
-    // A verdict with no question is a stop the writer cannot answer.
-    assert_eq!(questions_for_test("CONTEXT", JUDGED), None);
-    assert_eq!(questions_for_test("CONTEXT\n\n", JUDGED), None);
-
-    // The two stopping verdicts stay apart: findings are not questions.
-    assert_eq!(
-        questions_for_test("REVISE\nRule 4: \"the retry cap is 5\"", JUDGED),
-        None
-    );
-    assert_eq!(
-        parse_for_test("CONTEXT\nWhose component is this?", JUDGED),
-        None
-    );
-}
-
-/// A model that reasons in the open answers with a verdict and then argues itself to
-/// the other one, quoting the passage on every line. None of those lines cites a rule,
-/// and serving them back as an objection denies on the model's own deliberation.
-#[test]
-fn deliberation_is_not_a_finding() {
-    let added = "One unknown-key walk, one deprecated-key list and one permission check cover \
-both files.";
-    let deliberating = "REVISE\n\
-The text says: \"one deprecated-key list\".\n\
-Wait, I see a potential Rule 4 violation here.\n\
-I will pass because I cannot find a clear violation of the rules provided.";
-    assert_eq!(parse_for_test(deliberating, added), None);
-
-    // A line that does cite one is still a finding.
-    assert!(parse_for_test("REVISE\nRule 1: \"one deprecated-key list\"", added).is_some());
-}
-
-/// The judged rules are the model's call; these two are refusals of a finding the
-/// quoted passage cannot support at all.
-#[test]
-fn a_finding_its_quote_cannot_carry_is_dropped() {
-    let added = "The loop belongs to the binary because only there does a failed pass keep \
-its error chain and still leave the next pass scheduled.";
-
-    // Nothing in that sentence refers to a previous state, so rule 3 cannot be it —
-    // this is the shape the model reaches for whenever a passage orders or contrasts.
-    assert_eq!(
-        parse_for_test(
-            "REVISE\nRule 3: \"The loop belongs to the binary\" (compared to an alternative)",
-            added
-        ),
-        None
-    );
-    // Another rule against the same passage is untouched.
-    assert!(parse_for_test("REVISE\nRule 1: \"The loop belongs to the binary\"", added).is_some());
-    // A quote the text does not contain leaves nothing to rewrite.
-    assert_eq!(
-        parse_for_test(
-            "REVISE\nRule 1: \"a sentence from another document\"",
-            added
-        ),
-        None
-    );
-    // A finding quoting nothing cannot be checked or acted on.
-    assert_eq!(
-        parse_for_test("REVISE\nRule 1: the passage is generic", added),
-        None
-    );
-    // Every finding dropped is a pass, not an empty objection.
-    assert_eq!(
-        parse_for_test("REVISE\nRule 3: \"belongs to the binary\"", added),
-        None
-    );
-
-    // The rule still fires where the passage really does narrate one.
-    let narrated = "An earlier version keyed the map on the identifier alone.";
-    assert!(parse_for_test(&format!("REVISE\nRule 3: \"{narrated}\""), narrated).is_some());
-}
-
-/// The enumeration rule shares its vocabulary with the prose that names categories
-/// instead of members — "key", "list", "check" — so a finding against it has to quote
-/// a value. Each of these passages was approved into a rationale after being flagged.
-#[test]
-fn an_enumeration_finding_has_to_quote_a_value() {
-    for quote in [
-        "one deprecated-key list",
-        "one unknown-key walk, one deprecated-key list and one permission check",
-        "one file tunes every instance on that box",
-        "The loop lives in the binary, which is the only place that can keep going",
-    ] {
-        assert_eq!(
-            parse_for_test(&format!("REVISE\nRule 4: \"{quote}\""), quote),
-            None,
-            "{quote}"
-        );
-    }
-
-    for quote in [
-        "The timeout is 900 seconds and the retry cap is 5",
-        "a row holds `bucket_id`, `dirty` and `last_error`",
-        // Backticks lost in the quoting, the spelling not.
-        "a row holds bucket_id, dirty and last_error",
-    ] {
-        assert!(
-            parse_for_test(&format!("REVISE\nRule 4: \"{quote}\""), quote).is_some(),
-            "{quote}"
-        );
-    }
-}
-
-/// An edit is judged on what it introduces: a removal re-emits the text around what
-/// it takes out, and that text is already in the file and already approved. Whole
-/// lines strip away entirely; a line the edit rewrote is the most that survives, and
-/// never the section it sits in.
+/// The prompt names the headings an edit adds, so the text it copies back out of the
+/// document to place itself must not be counted as added.
 #[test]
 fn a_removal_introduces_at_most_the_line_it_rewrote() {
     let section = "## A decision\n\nA first sentence that stands.\nA second that goes away \
 because it repeated the first at greater length.\nA third that stays.\n";
     let shortened = "## A decision\n\nA first sentence that stands.\nA third that stays.\n";
     assert_eq!(new_text(section, shortened), "");
-    assert!(
-        new_text(section, shortened)
-            .trim()
-            .len()
-            < FLOOR
-    );
 
     // Cutting inside a line leaves that line, and nothing around it.
     let trimmed = "## A decision\n\nA first sentence.\nA second that goes away \
@@ -339,8 +154,7 @@ because it repeated the first at greater length.\nA third that stays.\n";
 }
 
 /// An insert lands before an existing heading and re-emits it, so the two texts share
-/// that heading's marker. Stripping inside the line takes the marker with it, and the
-/// new section's own heading then reaches the judge as a flat claim about the world.
+/// that heading's marker. Stripping inside the line takes the marker with it.
 #[test]
 fn an_insert_before_a_heading_keeps_its_own_marker() {
     let replaced = "## A link reason is evidence\n";
@@ -367,8 +181,6 @@ fn a_shared_line_is_stripped_only_as_a_whole() {
     assert_eq!(new_text("same", "same"), "");
 }
 
-/// Re-wrapping a paragraph rewrites every line of it and says nothing new, so the
-/// rules must not be applied afresh to prose that has already been through them.
 #[test]
 fn a_reflow_introduces_nothing() {
     let wrapped = "A section named as already owning the decision may not be one the edit is\n\
@@ -377,7 +189,6 @@ rewriting or deleting, for the same reason.";
 rewriting or deleting, for the same reason.";
     assert_eq!(introduced(wrapped, reflowed), "");
 
-    // A word added while re-wrapping is still an edit, and still judged.
     let with_a_change = "A section named as already owning the decision may never be one\nthe \
 edit is rewriting or deleting, for the same reason.";
     assert!(!introduced(wrapped, with_a_change).is_empty());
@@ -399,40 +210,40 @@ fn the_write_says_it_was_already_reviewed() {
     assert!(post_tool_use(&edit("src/main.rs")).is_none());
 }
 
+fn decision(output: crate::output::HookOutput) -> (String, String) {
+    let specific = output
+        .hook_specific_output
+        .expect("a decision");
+    (
+        specific
+            .permission_decision
+            .expect("a decision"),
+        specific
+            .permission_decision_reason
+            .expect("a reason"),
+    )
+}
+
 /// A rationale that does not exist yet is the reader's alone: the whole file is in
 /// front of them at the prompt, and no gate here has anything to read it against.
 #[test]
 fn a_document_that_does_not_exist_reaches_no_gate() {
-    let added = "## Why we split the parser\n\nA body long enough to clear the floor, with \
-several more words after it so nothing is skipped for being short.\n";
+    let added = "## Why we split the parser\n\nA body.\n";
     assert!(pre_tool_use(&written("/x/docs/design-rationale.md", added)).is_none());
     // The same text against a file that exists is the countable rules' business.
     let here = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
-    assert!(pre_tool_use(&written(here, added)).is_some());
+    let (verdict, _) = decision(pre_tool_use(&written(here, added)).expect("gated"));
+    assert_eq!(verdict, "deny");
 }
 
-/// A first section is judged with no document behind it, so the rules asking what a
-/// reader of the repo would already know have nothing to read. Narrowing the passage
-/// is then the one repair that cannot work, and the objection has to say so.
+/// Past the countable rules every edit is the user's to read, however small, and
+/// the prompt says where it lands.
 #[test]
-fn only_a_first_section_is_asked_for_its_frame() {
-    assert!(framing("").contains("is empty"));
-    assert!(framing("\n\n").contains("is empty"));
-    assert!(
-        framing("# Design rationale\n\n## A decision\n\nBody.\n").is_empty(),
-        "a document that exists reads against itself"
-    );
-}
-
-/// The floor exists to keep deletions and one-line fixes off the judge; it must
-/// not be so high that a real section skips review.
-#[test]
-fn the_floor_sits_between_a_tweak_and_a_section() {
-    let link_fix = "[EslEventType](event/event_type.rs)";
-    assert!(link_fix.len() < FLOOR);
-
-    let section = "## A link reason is evidence, recorded where it is observed\n\nA reason is \
-recorded by whatever observed it, at the point it was observed, rather than reconstructed \
-later from what happens to still be in scope.\n";
-    assert!(section.len() >= FLOOR);
+fn an_edit_is_prompted_with_its_placement() {
+    let here = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    let added = "# Design rationale\n\n## A decision\n\nBody.\n";
+    let (verdict, reason) = decision(pre_tool_use(&written(here, added)).expect("gated"));
+    assert_eq!(verdict, "ask");
+    assert!(reason.contains("Replaces the whole file"), "{reason}");
+    assert!(reason.contains("## A decision"), "{reason}");
 }

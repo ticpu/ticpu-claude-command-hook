@@ -1,14 +1,19 @@
-//! `design-rationale.md` gates. Countable rules are decided here; the rest go to a
-//! local model, which catches what it can quote and not what it has to count.
+//! The gate on `docs/design-rationale.md`: an edit is prompted, never judged.
+//!
+//! An edit waits on a whole read of the file since the session last compacted
+//! (`read_whole`). A rule a program can count refuses outright, having nothing to
+//! weigh (`mechanical`). Every other edit is forced to a prompt naming the section
+//! it lands in and the headings it adds, which an Edit's diff never shows
+//! (`placement`). Approving that prompt is the review, and the write says so
+//! afterwards: a prompt's reason is addressed to whoever answers it, and a writer
+//! not told stops to ask for a second review nobody owes.
+//!
+//! A file that does not exist yet reaches no gate and takes the normal prompt.
+//! Only a file under a `docs/` directory is matched, so a command or skill file
+//! of the same name is left alone.
 
-mod audit;
-pub mod bypass;
-mod context;
 pub mod disabled;
-mod judge;
 mod mechanical;
-pub mod ollama;
-mod overlap;
 mod placement;
 pub mod read_whole;
 pub mod shell_write;
@@ -17,15 +22,13 @@ mod tests;
 
 use std::fs;
 use std::io::ErrorKind;
+use std::path::Path;
 
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
-/// Below this the edit carries no prose to judge: a deletion, a link fix, a heading
-/// rename. Measured against real edits, which cluster well under it or well over.
-const FLOOR: usize = 200;
-
-const UNJUDGED: &str = "design-rationale.md — too small to judge, so nobody read it but you.";
+const REVIEW: &str = "design-rationale.md — approving this is the review. Reject to say what \
+should change.";
 
 pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
     let path = input.file_path();
@@ -37,8 +40,6 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
     if disabled::active() {
         return Some(disabled::notice());
     }
-    // A file that does not exist yet reaches no gate here: every rule asking what a
-    // reader of this repo already knows has nothing to check against.
     let document = read_document(path)?;
     if let Some(refused) = read_whole::gate(input) {
         return Some(refused);
@@ -51,69 +52,22 @@ pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
         "Write" => (document.as_str(), input.content()),
         _ => (input.old_string(), input.new_string()),
     };
-    // The judge sees what the edit introduces, never the text it copies back out of
-    // the document to place it: a removal re-emits the section around what it takes
-    // out, and prose already in the file draws findings no revision can answer. The
-    // countable rules still measure the whole replacement, since a section left over
-    // the length bound is over it however much this edit trimmed.
-    let introduced = introduced(replaced, added);
-    mechanical::check(added)
-        .or_else(|| {
-            match introduced
-                .trim()
-                .len()
-                >= FLOOR
-            {
-                false => Some(HookOutput::ask("PreToolUse", UNJUDGED)),
-                true if bypass::spend() => Some(HookOutput::ask("PreToolUse", BYPASSED)),
-                // Ahead of the reviewers, and unconditional: their findings are what a
-                // quoted sentence can carry, and the clauses that cut most of a padded
-                // section — what a future change would act on, what the reader already
-                // knows — are not among them. The writer applies those or nobody does.
-                // The audit is the round trip before the judge, so the model loads during it.
-                true => match audit::gate(introduced) {
-                    Some(refused) => {
-                        ollama::warm();
-                        Some(refused)
-                    }
-                    None => reviewed(&document, replaced, added, introduced),
-                },
-            }
-        })
-        .map(|decision| {
-            placed(
-                decision,
-                &placement::describe(&document, replaced, introduced),
-            )
-        })
-}
-
-/// An ask's reason is the one text the user reads beside the diff, so it says where the
-/// diff goes; a deny is addressed to the writer, which holds the file.
-fn placed(mut decision: HookOutput, placement: &str) -> HookOutput {
-    if let Some(specific) = decision
-        .hook_specific_output
-        .as_mut()
-        .filter(|specific| {
-            specific
-                .permission_decision
-                .as_deref()
-                == Some("ask")
-        })
-    {
-        let reason = specific
-            .permission_decision_reason
-            .get_or_insert_default();
-        reason.push_str("\n\n");
-        reason.push_str(placement);
+    // The countable rules measure the whole replacement: a section left over the
+    // length bound is over it however much this edit trimmed.
+    if let Some(refused) = mechanical::check(added) {
+        return Some(refused);
     }
-    decision
+    Some(HookOutput::ask(
+        "PreToolUse",
+        &format!(
+            "{REVIEW}\n\n{}",
+            placement::describe(&document, replaced, introduced(replaced, added))
+        ),
+    ))
 }
 
 /// What the edit says that the document did not, which is nothing at all when it only
-/// re-wrapped what was there: the file is hard-wrapped, so reflowing a paragraph
-/// rewrites every line of it without a word changing, and every rule would then be
-/// applied afresh to prose that has already been through them once.
+/// re-wrapped what was there.
 fn introduced<'a>(replaced: &str, added: &'a str) -> &'a str {
     match collapsed(replaced) == collapsed(added) {
         true => "",
@@ -125,11 +79,9 @@ fn introduced<'a>(replaced: &str, added: &'a str) -> &'a str {
 /// edit appending a section carries an anchor copied out of the document, and one
 /// editing a section in place carries whatever it leaves standing around the change.
 ///
-/// Whole lines only. An edit inserting a section before an existing one shares that
-/// heading's marker, and a strip that ran inside the line would take the marker with
-/// it and hand the judge a bare sentence the author never wrote — which then reads,
-/// correctly, as a flat assertion about the world rather than the name of a section.
-pub(super) fn new_text<'a>(replaced: &str, added: &'a str) -> &'a str {
+/// Whole lines only: an edit inserting a section before an existing one shares that
+/// heading's marker, and a strip running inside the line would take it.
+fn new_text<'a>(replaced: &str, added: &'a str) -> &'a str {
     let (old, new) = (lines(replaced), lines(added));
     let head: usize = common(old.iter(), new.iter());
     // Never past what the head already claimed, or a line counts at both ends.
@@ -164,67 +116,19 @@ fn common<'a>(a: impl Iterator<Item = &'a &'a str>, b: impl Iterator<Item = &'a 
         .count()
 }
 
-/// The document is hard-wrapped, so a sentence quoted back as one line is the same
-/// sentence as one broken across two.
-pub(super) fn collapsed(text: &str) -> String {
+/// The document is hard-wrapped, so a paragraph reflowed is the same paragraph.
+fn collapsed(text: &str) -> String {
     text.split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
 }
 
-/// A judged objection stops the edit rather than riding along on a permission
-/// prompt: an Edit's prompt renders the diff alone, so an objection carried there
-/// is one the user never reads before deciding. Stopping puts it in front of the
-/// model instead, which can act on it — and the user overrules it with `bypass`.
-const OBJECTION: &str = "The design-rationale judge objects. It is a small local model on a \
-short rule list, and its usual mistake is reading domain behaviour this project depends on as \
-textbook knowledge, so an objection quoting something specific to this codebase is likely wrong.
-
-Revise and re-issue if the objection is right. If it is wrong, do not water the passage down \
-until it passes, and do not ask the user whether to overrule: say what the finding is and why \
-the passage stands, then run the command below yourself and re-issue the edit unchanged. Its \
-permission prompt is where they decide, so putting the same question to them first only spends \
-a round trip — and never paste the command for them to run:";
-
-/// Carried by both stopping verdicts, because the finding is never the whole of what
-/// is wrong: the rules this judge holds are the ones a quoted passage can answer, and
-/// the clauses that cut hardest — does anything downstream act on this, could someone
-/// face the decision again — no quote reaches. A writer handed them re-reads its own
-/// draft against them and answers better than any verdict does, but only when told to:
-/// the draft and the rules sit in its context unread until something asks for the pass.
-const AUDIT: &str = "Before re-issuing, take the passage through the design-rationale clauses \
-in CLAUDE.md one at a time, including the ones no reviewer here checks: what future change each \
-sentence would inform, and what a reader holding this repo already knows. Cut what fails, and \
-say what you cut.";
-
-/// A stop the writer answers rather than rewrites. Naming the file keeps the answers
-/// out of the document: written into the passage to get past the gate, they would be
-/// the padding the gate exists to stop.
-const ASKED: &str = "The design-rationale judge could not decide, and says what it was missing. \
-These are questions about this project, not about the wording — a rule it holds turns on \
-something the passage cannot carry.";
-
-fn answering() -> String {
-    format!(
-        "Answer them for yourself first: the answer usually decides the passage, and a section \
-         that survives its own audit needs nothing from the judge. Re-issue the edit when it \
-         does. If the judge still has to know, write the answers — a few lines, no rewriting of \
-         the passage — to {} and re-issue; they are read into the next review of this file and \
-         deleted as they are read.",
-        context::location()
-    )
-}
-
-/// Approving the write was the review, said once the write has happened. A writer
-/// told this on the prompt is not told at all: that text is addressed to whoever
-/// answers the prompt, and the writer only ever reads a decision that refused it.
 const REVIEWED: &str = "The design-rationale edit you just made was reviewed at the gate — the \
 prompt you were shown was the review, and approving it was the verdict. Do not present the diff \
 and ask for another review of it. Commit it and carry on.";
 
 /// The write happened; the only thing left to say is who read it — which under the
-/// standing switch is nobody, and saying nothing there would leave the writer with
-/// the one meaning an approved prompt on this file otherwise carries.
+/// standing switch is nobody.
 pub fn post_tool_use(input: &HookInput) -> Option<HookOutput> {
     is_rationale(input.file_path()).then(|| {
         HookOutput::advise(
@@ -237,118 +141,19 @@ pub fn post_tool_use(input: &HookInput) -> Option<HookOutput> {
     })
 }
 
-const CLEAN: &str = "design-rationale.md — the judge raised nothing. Approve to write it, \
-reject to say what should change.";
-
-/// Said on the prompt itself: the system message carrying the failure scrolls past, and
-/// a prompt reading like a clean verdict is approved as one.
-const UNJUDGED_BY_MODEL: &str = "Nobody has reviewed this but you.";
-
-const BYPASSED: &str = "design-rationale.md — judged review waived for this edit, and the \
-waiver is now spent.";
-
-/// An empty file is judged with nothing around it, so the rules that ask what a
-/// reader of this repo would already know have nothing to read. The objection asks
-/// for the frame rather than a narrower passage: cutting the passage is the one
-/// repair that cannot work, since the context it is missing is the point.
-const NO_DOCUMENT: &str = "\n\nThis file is empty, so the passage was judged with no \
-document around it — every rule asking what a reader holding this repo would already know had \
-nothing to check against. Before narrowing anything, open the file with the frame it lacks: \
-what this component is, what it sits inside, and the boundary the decisions below turn on. Then \
-re-issue.";
-
-/// What an objection has to say beyond the finding. Only a first section gets this:
-/// once the file has any content, the rules have something to read it against.
-fn framing(document: &str) -> &'static str {
-    match document
-        .trim()
-        .is_empty()
-    {
-        true => NO_DOCUMENT,
-        false => "",
-    }
-}
-
-/// Two reviews of the same edit, run together: one asks what is wrong inside the new
-/// text, the other whether the document already says it. A model answers the second
-/// only when it is the whole question — beside rules met by quoting a bad passage, a
-/// fault that lives in the relation between two sections is never what it reaches for.
-///
-/// Neither can block on the other's failure, and an objection stands whatever the
-/// other review did: a review that did not happen is reported, never assumed to pass.
-fn reviewed(document: &str, replaced: &str, added: &str, introduced: &str) -> Option<HookOutput> {
-    let answers = context::spend();
-    let (rules, duplication) = std::thread::scope(|scope| {
-        let rules = scope.spawn(|| judge::review(document, replaced, introduced, &answers));
-        let duplication = overlap::review(document, replaced, added);
-        (rules.join(), duplication)
-    });
-
-    let mut objections = Vec::new();
-    let mut questions = Vec::new();
-    let mut failures = Vec::new();
-    match rules {
-        Ok(Ok(judge::Verdict::Findings(objection))) => objections.push(objection),
-        Ok(Ok(judge::Verdict::Questions(asked))) => questions.push(asked),
-        Ok(Ok(judge::Verdict::Pass)) => {}
-        Ok(Err(e)) => failures.push(format!("rules: {e:#}")),
-        Err(_) => failures.push("rules: the review panicked".to_string()),
-    }
-    match duplication {
-        Ok(Some(objection)) => objections.push(objection),
-        Ok(None) => {}
-        Err(e) => failures.push(format!("duplication: {e:#}")),
-    }
-
-    let unreviewed = (!failures.is_empty()).then(|| {
-        format!(
-            "design-rationale judge did not run: {}",
-            failures.join("; ")
-        )
-    });
-    let framing = framing(document);
-    // An objection outranks a question: the reviewer that could name a fault has more
-    // to act on than the one that could not decide.
-    let mut decision = if !objections.is_empty() {
-        HookOutput::deny(
-            "PreToolUse",
-            &format!(
-                "{OBJECTION}\n\n    {}\n\n{}\n\n{AUDIT}{framing}",
-                bypass::command(),
-                objections.join("\n")
-            ),
-        )
-    } else if !questions.is_empty() {
-        HookOutput::deny(
-            "PreToolUse",
-            &format!(
-                "{ASKED}\n\n{}\n\n{AUDIT}\n\n{}{framing}",
-                questions.join("\n"),
-                answering()
-            ),
-        )
-    } else if let Some(unreviewed) = &unreviewed {
-        HookOutput::ask(
-            "PreToolUse",
-            &format!("design-rationale.md — {unreviewed}. {UNJUDGED_BY_MODEL}"),
-        )
-    } else {
-        HookOutput::ask("PreToolUse", CLEAN)
-    };
-    // A review that did not happen is said out loud rather than assumed to pass,
-    // and never blocks: the edit is decided on whatever the reviewers managed.
-    decision.system_message = unreviewed;
-    Some(decision)
-}
-
 fn is_rationale(file_path: &str) -> bool {
-    file_path.ends_with("design-rationale.md")
+    let path = Path::new(file_path);
+    path.file_name()
+        .is_some_and(|name| name == "design-rationale.md")
+        && path
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|dir| dir == "docs")
 }
 
 /// The file the edit lands in, or `None` when it does not exist yet. Any other read
 /// failure is reported and answered with an empty document rather than the skip an
-/// absent file gets: the judge then misses every duplicate, which is worth saying
-/// out loud but not worth standing down the whole gate for.
+/// absent file gets.
 fn read_document(path: &str) -> Option<String> {
     match fs::read_to_string(path) {
         Ok(text) => Some(text),

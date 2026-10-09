@@ -1,5 +1,5 @@
 //! The route around the gate. The reviews below hang off the `Edit` and `Write`
-//! tools, so a shell command that rewrites the same document is judged by nobody —
+//! tools, so a shell command that rewrites the same document is read by nobody —
 //! it is refused here and told which tool the gate is on.
 
 use crate::checks::marker;
@@ -33,8 +33,8 @@ const REPLACES_FILES: &[&str] = &[
 fn reason() -> String {
     format!(
         "This rewrites a {DOCUMENT} from the shell. That document is reviewed on Edit and Write — \
-         the countable rules, then a judged read of the passage — and a shell write reaches \
-         neither, so whatever it adds lands unread.\n\n\
+         the countable rules, then the user's prompt — and a shell write reaches neither, so \
+         whatever it adds lands unread.\n\n\
          Use the Edit tool: it is the only route the gate is on, and its `old_string` mismatch is \
          also the check a read-modify-write pipeline does not do.\n\n\
          If the shell really is the tool here — a revert, a rename, a file generated whole — take \

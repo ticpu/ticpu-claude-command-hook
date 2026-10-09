@@ -7,7 +7,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::io::ErrorKind;
 
-use super::{is_rationale, ollama};
+use super::is_rationale;
 use crate::checks::marker;
 use crate::input::HookInput;
 use crate::output::HookOutput;
@@ -66,7 +66,6 @@ pub(super) fn gate(input: &HookInput) -> Option<HookOutput> {
     {
         return None;
     }
-    ollama::warm();
     Some(HookOutput::deny("PreToolUse", READ_FIRST))
 }
 
