@@ -1,6 +1,17 @@
 //! The route around the gate. The reviews below hang off the `Edit` and `Write`
 //! tools, so a shell command that rewrites the same document is read by nobody —
 //! it is refused here and told which tool the gate is on.
+//!
+//! Denied is the document as a redirect target, or named by a program that
+//! rewrites what it names. That list is a blacklist, where the allows keep
+//! fail-safe whitelists, because the cost of the two errors is reversed here: a
+//! miss is an unread section, and a false positive refuses a read of a file that
+//! has to stay readable. So a searcher, a pager and a checksum are absent, `sed`
+//! and `awk` count only in place, `cp` counts on its destination alone, and of
+//! git's verbs only those that replace a working-tree file — a commit message
+//! naming the document is most of what the shell says about it.
+//!
+//! The gate-off switch does not lift this: `Edit` stays the route, unreviewed.
 
 use crate::checks::marker;
 use crate::checks::shell;

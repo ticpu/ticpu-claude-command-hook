@@ -1,5 +1,5 @@
-//! The rules a program can decide. Anything countable belongs here rather than in
-//! the judge's prompt: the model reads prose well and counts badly.
+//! The rules a program can decide: a heading form, a section's length, a
+//! reference to CLAUDE.md. They refuse outright, a count leaving nothing to weigh.
 
 use crate::output::HookOutput;
 
