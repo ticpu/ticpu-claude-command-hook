@@ -233,6 +233,15 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("git commit -F - <<'EOF'\nfix: x\nEOF\nrm -rf /zztest", Pass),
     // Each of these commits something no `git add` named.
     ("git commit -a -F - <<'EOF'\nfix: x\nEOF", Pass),
+    // A body past the cap is prompted; trailers do not count toward it.
+    (
+        "git commit -F - <<'EOF'\nfix: x\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n16\n\nCo-Authored-By: A <a@b.c>\nEOF",
+        Ask,
+    ),
+    (
+        "git commit -F - <<'EOF'\nfix: x\n\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n\nCo-Authored-By: A <a@b.c>\nEOF",
+        Allow,
+    ),
     // Corrections. An amend turns on this checkout's push state, so it is
     // covered by the unit tests alone.
     ("git commit --fixup HEAD", Allow),

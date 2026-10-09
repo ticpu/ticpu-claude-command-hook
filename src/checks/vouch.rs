@@ -88,7 +88,32 @@ pub fn allow_heredoc_commit(input: &HookInput) -> Option<HookOutput> {
     }
     let (commit, here) = staged_then(&segments, &input.cwd)?;
     let needs = git_bypass::stdin_commit(commit)?;
-    git_bypass::holds(&needs, &here).then(|| HookOutput::allow("PreToolUse", ALLOW_COMMIT))
+    if !git_bypass::holds(&needs, &here) {
+        return None;
+    }
+    let message = input
+        .command()
+        .get(head.len()..)?
+        .split_once('\n')?
+        .1;
+    let body = git_bypass::body_lines(
+        message
+            .trim_end()
+            .rsplit_once('\n')
+            .map_or("", |(message, _terminator)| message),
+    );
+    Some(match body > git_bypass::BODY_CAP {
+        true => HookOutput::ask(
+            "PreToolUse",
+            &format!(
+                "The commit body is {body} lines. A body is a terse changelog — why, and what \
+                 a user sees — so past {} it is prompted: approve it as written, or reject and \
+                 have it cut.",
+                git_bypass::BODY_CAP
+            ),
+        ),
+        false => HookOutput::allow("PreToolUse", ALLOW_COMMIT),
+    })
 }
 
 /// A correction to a commit already made, behind the same explicit staging. No

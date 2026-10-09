@@ -12,6 +12,9 @@
 //!
 //! `--fixup=amend:`, `--fixup=reword:` and `--squash` are absent: each ends in an
 //! editor, at the commit or at the rebase.
+//!
+//! A body past `BODY_CAP` lines turns the allow into a prompt: a commit body is a
+//! changelog entry, and one that long is usually narrating the diff.
 
 use std::process::Command;
 
@@ -138,6 +141,52 @@ pub fn holds(needs: &Needs, here: &str) -> bool {
     }
 }
 
+/// Past this many body lines an allowed commit is prompted instead.
+pub const BODY_CAP: usize = 15;
+
+/// Non-blank lines of a commit message under its subject, a closing paragraph of
+/// trailers not counted.
+pub fn body_lines(message: &str) -> usize {
+    let mut paragraphs: Vec<Vec<&str>> = message
+        .trim()
+        .split("\n\n")
+        .map(|paragraph| {
+            paragraph
+                .lines()
+                .filter(|line| {
+                    !line
+                        .trim()
+                        .is_empty()
+                })
+                .collect()
+        })
+        .collect();
+    if paragraphs.len() > 1
+        && paragraphs
+            .last()
+            .is_some_and(|last| {
+                last.iter()
+                    .all(|line| is_trailer(line))
+            })
+    {
+        paragraphs.pop();
+    }
+    paragraphs
+        .concat()
+        .len()
+        .saturating_sub(1)
+}
+
+fn is_trailer(line: &str) -> bool {
+    line.split_once(": ")
+        .is_some_and(|(token, _)| {
+            !token.is_empty()
+                && token
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        })
+}
+
 /// The first stage of a pipeline that writes to no path and whose consumers add
 /// no side effect of their own.
 fn producer(segment: &str) -> Option<String> {
@@ -229,6 +278,13 @@ mod tests {
         ] {
             assert_eq!(correction(cmd), None, "{cmd}");
         }
+    }
+
+    #[test]
+    fn a_body_is_counted_without_its_subject_and_trailers() {
+        let message = "feat: x\n\nwhy\nwhat\n\nmore\n\nCo-Authored-By: A <a@b.c>\nRefs: #1";
+        assert_eq!(super::body_lines(message), 3);
+        assert_eq!(super::body_lines("feat: x"), 0);
     }
 
     #[test]
