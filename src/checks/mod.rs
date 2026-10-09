@@ -101,6 +101,7 @@ fn allows(input: &HookInput) -> Option<HookOutput> {
     }
     grep_fold::check(input)
         .or_else(|| vouch::allow_chain(input))
+        .or_else(|| vouch::allow_correction(input))
         .or_else(|| glab_read_only::allow(cmd))
         .or_else(|| systemd_read::allow(cmd))
         .or_else(|| cargo_tools::allow(cmd))

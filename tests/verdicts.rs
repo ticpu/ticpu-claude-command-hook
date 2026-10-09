@@ -233,7 +233,16 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("git commit -F - <<'EOF'\nfix: x\nEOF\nrm -rf /zztest", Pass),
     // Each of these commits something no `git add` named.
     ("git commit -a -F - <<'EOF'\nfix: x\nEOF", Pass),
-    ("git commit --amend -F - <<'EOF'\nfix: x\nEOF", Pass),
+    // Corrections. An amend turns on this checkout's push state, so it is
+    // covered by the unit tests alone.
+    ("git commit --fixup HEAD", Allow),
+    ("git add src/main.rs && git commit --fixup=HEAD~1", Allow),
+    ("git rebase --autosquash HEAD~1", Allow),
+    ("git rebase --autosquash zz-no-such-ref", Pass),
+    ("git rebase -i --autosquash HEAD~1", Pass),
+    ("git commit --squash HEAD", Pass),
+    ("git commit --fixup=amend:HEAD", Pass),
+    ("rm -rf /zztest && git commit --fixup HEAD", Pass),
     // Another index, repo or hook set: the shape is a bare `git commit` or nothing.
     (
         "GIT_INDEX_FILE=/zztest/i git commit -F - <<'EOF'\nfix: x\nEOF",

@@ -18,6 +18,9 @@ const ALLOW_SAFE: &str =
 const ALLOW_COMMIT: &str = "`git commit -F -` taking its message from a quoted heredoc, on paths \
 staged by name (auto-allowed by the hook)";
 
+const ALLOW_CORRECTION: &str = "an amend of an unpushed tip, a plain `--fixup`, or \
+`rebase --autosquash` onto an ancestor (auto-allowed by the hook)";
+
 /// A segment that adds no reach to whatever else the chain is allowed for: it
 /// moves the shell, names a variable, prints, or reads. `here` is the directory
 /// the segment runs in — `git add` is judged on the paths it names from there.
@@ -69,9 +72,9 @@ pub fn allow_chain(input: &HookInput) -> Option<HookOutput> {
 /// the body is literal text nothing expands, so the head in front of it is the
 /// whole of what runs and is scanned like any other chain.
 ///
-/// What the commit contains is what the caller staged by name — `-a`, `--amend`
-/// and a pathspec are all off the flag list — and the hooks it runs are this
-/// repo's own, which is what the prompt would have been protecting.
+/// What the commit contains is what the caller staged by name — `-a` and a
+/// pathspec are off the flag list — and the hooks it runs are this repo's own,
+/// which is what the prompt would have been protecting.
 pub fn allow_heredoc_commit(input: &HookInput) -> Option<HookOutput> {
     let (head, tail) = shell::inert_heredoc(input.command())?;
     let runs = format!("{head}{tail}");
@@ -83,15 +86,37 @@ pub fn allow_heredoc_commit(input: &HookInput) -> Option<HookOutput> {
     if shell::chain_segments(head)?.len() != segments.len() {
         return None;
     }
-    let here = dirs(&segments, &input.cwd);
-    let (commit, staging) = segments.split_last()?;
-    for (segment, here) in staging
+    let (commit, here) = staged_then(&segments, &input.cwd)?;
+    let needs = git_bypass::stdin_commit(commit)?;
+    git_bypass::holds(&needs, &here).then(|| HookOutput::allow("PreToolUse", ALLOW_COMMIT))
+}
+
+/// A correction to a commit already made, behind the same explicit staging. No
+/// `cd` in the chain: a rebase runs the hooks of the repo it lands in.
+pub fn allow_correction(input: &HookInput) -> Option<HookOutput> {
+    let segments = shell::chain_segments(input.command())?;
+    if segments
+        .iter()
+        .any(|segment| shell::is_bare_cd(segment))
+    {
+        return None;
+    }
+    let (last, here) = staged_then(&segments, &input.cwd)?;
+    let needs = git_bypass::correction(last)?;
+    git_bypass::holds(&needs, &here).then(|| HookOutput::allow("PreToolUse", ALLOW_CORRECTION))
+}
+
+/// The last segment and the directory it runs in, once every segment before it
+/// is one that grants nothing on its own.
+fn staged_then<'a>(segments: &[&'a str], cwd: &str) -> Option<(&'a str, String)> {
+    let mut here = dirs(segments, cwd);
+    let (last, staging) = segments.split_last()?;
+    let last_dir = here.pop()?;
+    staging
         .iter()
         .zip(&here)
-    {
-        if shell::redirects_anything(segment) || !is_harmless_segment(segment, here) {
-            return None;
-        }
-    }
-    git_bypass::is_stdin_commit(commit).then(|| HookOutput::allow("PreToolUse", ALLOW_COMMIT))
+        .all(|(segment, here)| {
+            !shell::redirects_anything(segment) && is_harmless_segment(segment, here)
+        })
+        .then_some((*last, last_dir))
 }
