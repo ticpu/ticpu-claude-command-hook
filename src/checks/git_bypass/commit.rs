@@ -42,7 +42,7 @@ pub enum Needs {
 /// Every other argument has to be on `COMMIT_FLAGS`, so an unrecognized flag
 /// falls through to the normal prompt rather than riding along.
 pub fn stdin_commit(segment: &str) -> Option<Needs> {
-    let stage = quotes_opaque(&producer(segment)?)?;
+    let stage = shell::quotes_opaque(&producer(segment)?)?;
     let mut from_stdin = false;
     let mut amends = false;
     let mut args = bare_git(&stage, "commit")?.into_iter();
@@ -214,19 +214,6 @@ fn is_rev(word: &str) -> bool {
         && word
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "._/~^@{}-".contains(c))
-}
-
-/// Each quoted span as one opaque word, so `--author="A B"` stays one argument and
-/// a quoted pathspec still reads as an argument nothing here accepts.
-fn quotes_opaque(stage: &str) -> Option<String> {
-    let mut out = stage.to_owned();
-    for span in shell::quoted_spans(stage)?
-        .into_iter()
-        .rev()
-    {
-        out.replace_range(span, "Q");
-    }
-    Some(out)
 }
 
 #[cfg(test)]

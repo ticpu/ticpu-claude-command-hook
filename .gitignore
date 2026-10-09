@@ -1,6 +1,7 @@
 /target
 /Cargo.lock
 /probes
+/scratch
 /packaging/dist/
 /packaging/*.deb
 /packaging/package.tmp/

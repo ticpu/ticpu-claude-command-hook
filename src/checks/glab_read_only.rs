@@ -100,33 +100,12 @@ fn is_read_only_glab(stage: &str) -> bool {
     let Some(args) = shell::program_args(stage) else {
         return false;
     };
-    match verb_words(&args).as_slice() {
+    match shell::verb_words(&args).as_slice() {
         [one, ..] if READ_WORDS.contains(one) => true,
         [one, ..] if *one == "api" => api_is_a_read(&args),
         [group, verb, ..] => READ_PAIRS.contains(&(*group, *verb)),
         _ => false,
     }
-}
-
-/// The words that name the subcommand, with global flags and their values dropped:
-/// `glab --repo x/y mr list` is `mr list`. A separated flag is assumed to take a
-/// value, so a boolean one swallows the verb and the pair stops matching — the miss
-/// costs a prompt, where reading the value as the verb would not.
-fn verb_words<'a>(args: &[&'a str]) -> Vec<&'a str> {
-    let mut words = Vec::new();
-    let mut skip_value = false;
-    for arg in args {
-        if arg.starts_with('-') {
-            skip_value = !arg.contains('=');
-            continue;
-        }
-        if skip_value {
-            skip_value = false;
-            continue;
-        }
-        words.push(*arg);
-    }
-    words
 }
 
 /// `glab api` reads unless a flag says otherwise. `-X GET` is still a read; any

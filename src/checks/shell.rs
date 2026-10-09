@@ -419,6 +419,39 @@ fn prints_line_ranges(stage: &str) -> bool {
     scripts > 0
 }
 
+/// The words that name a subcommand, with flags and their values dropped:
+/// `glab --repo x/y mr list` is `mr list`. A separated flag is assumed to take a
+/// value, so a boolean one swallows the verb and the pair stops matching.
+pub fn verb_words<'a>(args: &[&'a str]) -> Vec<&'a str> {
+    let mut words = Vec::new();
+    let mut skip_value = false;
+    for arg in args {
+        if arg.starts_with('-') {
+            skip_value = !arg.contains('=');
+            continue;
+        }
+        if skip_value {
+            skip_value = false;
+            continue;
+        }
+        words.push(*arg);
+    }
+    words
+}
+
+/// Each quoted span as one opaque word, so `--author="A B"` stays one argument and
+/// a quoted flag or path reads as an argument no flag list accepts.
+pub fn quotes_opaque(stage: &str) -> Option<String> {
+    let mut out = stage.to_owned();
+    for span in quoted_spans(stage)?
+        .into_iter()
+        .rev()
+    {
+        out.replace_range(span, "Q");
+    }
+    Some(out)
+}
+
 /// Everything before a heredoc marker. Past it is data — a commit message, a SQL
 /// body — not options, so a check reading flags must stop here.
 pub fn before_heredoc(cmd: &str) -> &str {

@@ -58,7 +58,7 @@ fn writes_a_body(command: &str) -> bool {
 /// deny's own commit message included — is not one. Leading quotes and list
 /// markers are stripped: the line arrives inside a quoted argument, sometimes as
 /// the first thing in it.
-fn carries_attribution(text: &str) -> bool {
+pub fn carries_attribution(text: &str) -> bool {
     // A body written with `\n` escapes reaches the forge as the same lines, so the
     // escape breaks a line here too.
     text.replace("\\n", "\n")
