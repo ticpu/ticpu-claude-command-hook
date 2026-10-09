@@ -1,6 +1,19 @@
 //! Read-only `journalctl` and `systemctl`, run here or handed to an `ssh` as the
 //! command line the far end runs. Fail-safe throughout: an unrecognized flag,
 //! verb or ssh option returns `None` and the call keeps its normal prompt.
+//!
+//! A prefix rule cannot do this: the writes share their program with the reads,
+//! and `ssh` shares its with every remote command there is. `-f` is off the list
+//! deliberately — it never returns, and a hang is the worst way for an auto-allow
+//! to be wrong.
+//!
+//! Over ssh the remote body is read as the command line it is. A `&&` or a `;`
+//! in it forfeits the allow, a pipe into a harmless consumer does not, and a
+//! substitution is re-checked there: quoted locally it never reached the gate in
+//! `dispatch`, and it is the remote shell that runs it. The client's own options
+//! are held to a list that cannot name a program or a config file, one `-o` being
+//! enough to hand the connection either. Neither end takes a wrapper: an allow
+//! covering `sudo` covers what sudo does with it.
 
 use crate::checks::shell;
 use crate::output::HookOutput;

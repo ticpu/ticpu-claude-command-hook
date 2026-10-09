@@ -1,3 +1,15 @@
+//! Allows a cargo build/report verb piped into display-only stages.
+//!
+//! The allowlist grants those verbs too, but a prefix rule matches text, and
+//! Claude Code refuses to evaluate a command holding `${PIPESTATUS[0]}`, a
+//! subscript being arith-evaluated. The status label after a chained build is
+//! therefore a confirmation per call, which only a hook allow — answering the
+//! whole command — removes.
+//!
+//! A search qualifies as a consumer here and not in `grep_fold`, nothing having
+//! folded the pipeline. `2>&1` is the point of the shape, so only a redirect
+//! naming a path disqualifies.
+
 use crate::checks::shell;
 use crate::output::HookOutput;
 

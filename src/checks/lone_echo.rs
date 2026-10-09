@@ -1,3 +1,8 @@
+//! Allows a command whose every segment is a lone `echo`: one stage, no redirect
+//! of any fd, and no substitution, which runs before echo sees its own arguments.
+//! What counts as lone is `shell::is_lone_echo`, shared with the checks where an
+//! echo is a neutral segment.
+
 use crate::checks::shell;
 use crate::output::HookOutput;
 

@@ -1,3 +1,17 @@
+//! Allows a glab invocation that only reads, with do-nothing segments around it
+//! and display-only consumers.
+//!
+//! glab is judged here and not by a `settings.json` prefix rule because `api` is
+//! one prefix covering both directions: the method lives in the flags, so only
+//! argument inspection separates a read from the same path with `-X DELETE`.
+//! Everything else is a verb *pair*, glab's writes sitting at the same depth as
+//! its reads. gh, whose read verbs share no prefix with a write, is left to the
+//! allowlist.
+//!
+//! A boolean flag ahead of the verb swallows it and the pair stops matching,
+//! which costs a prompt rather than an allow. `glab_skill` runs earlier in
+//! `dispatch`, so its first-call deny wins over this.
+
 use crate::checks::shell;
 use crate::output::HookOutput;
 

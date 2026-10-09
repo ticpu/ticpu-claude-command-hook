@@ -83,34 +83,6 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   (`repo archive` downloads). Refresh them when glab grows a subcommand for something the list
   still sends to `api`. A missing skill file degrades to the traps plus an install hint, since
   the traps are the half that cannot be recovered by loading anything.
-- `glab_read_only` — allows a glab invocation that only reads, with the usual do-nothing
-  segments around it and display-only consumers. glab is judged here rather than by a
-  `settings.json` prefix rule because `api` is one prefix covering both directions: the method
-  lives in the flags (`-X`, `--method`, a body flag), so only argument inspection separates
-  `glab api projects/:id` from the same path with `-X DELETE`. Everything else is a verb *pair*,
-  since glab's writes sit at the same depth as its reads (`mr merge` beside `mr view`) and a
-  bare `glab mr` would carry both — which is also why gh, whose read verbs share no prefix with
-  a write, is left to the allowlist. A separated flag is assumed to take a value, so
-  `--repo x/y mr list` reads as `mr list`; a boolean one swallows the verb instead and the pair
-  stops matching, which costs a prompt rather than an allow. `glab_skill` still gates the first
-  call of the session — it runs earlier in `dispatch`, so its deny wins and this allow only
-  applies once the marker exists.
-- `systemd_read` — allows a `journalctl` or a reporting `systemctl` verb, run here or handed
-  to an `ssh` as the command the far end runs. A prefix rule cannot: the writes share their
-  program with the reads (`journalctl --rotate`, `systemctl restart`), and `ssh` shares its
-  with every remote command there is. Both flag lists are closed and fail-safe — an
-  unrecognized one prompts, which is what keeps `--vacuum-*`, `--flush`, `--root=` and the
-  two options reading a journal this shell cannot see out without naming them. `-f` is off
-  the list deliberately: it never returns, and a hang is the worst way for an auto-allow to
-  be wrong. Over ssh the remote body is read as the command line it is — the deny in
-  `remote_session` leaves what the far end *chains* to the far end, which answers what to
-  approve and not what to grant, so a `&&` or a `;` in the body forfeits the allow and a
-  pipe into a harmless consumer does not. A substitution is re-checked there: quoted locally
-  it never reached the gate in `dispatch`, and it is the remote shell that runs it. The
-  client's own options are held to a list that cannot name a program or a config file, since
-  one `-o` is enough to hand the connection either. Neither end takes a wrapper —
-  `shell::leading_word`, not `shell::program`, because an allow covering `sudo` covers what
-  sudo does with it.
 - `sudo_journal` — denies a `journalctl` run under `sudo`, here or as the command an `ssh` hands
   the far end. Reading the journal comes from systemd-journal group membership, so the elevation
   changes nothing about what prints and asks for a password this shell cannot answer; the deny
@@ -121,22 +93,6 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   onwards rather than from the destination, which is what saves an option table this deny does
   not need — a miss costs a prompt, `systemd_read` allowing nothing that carries a wrapper at
   either end. Judged in front of a heredoc, so a commit message naming the refusal is prose.
-- `cargo_tools` — allows a cargo build/report verb piped into display-only stages. The
-  allowlist grants those verbs too, but a prefix rule can only match text, and Claude Code
-  refuses to evaluate a command holding `${PIPESTATUS[0]}`: a subscript is arith-evaluated, so
-  `${a[$(cmd)]}` would run something. The status label after a chained build is therefore a
-  confirmation per call, and only a hook allow — which answers the whole command instead of
-  matching it — removes it. The verb list is deliberately shorter than the allowlist's: `run`
-  executes what the crate names, `add`/`update` rewrite the manifest, `clean` deletes, and none
-  of them is what a label is chained to. Widening it is a permission decision, not a parsing
-  one. A search qualifies as a consumer here and not in `grep_fold`, nothing having folded the
-  pipeline; `2>&1` is the point of the shape, so only a redirect naming a path disqualifies.
-- `lone_echo` — allows a command whose every segment is a lone `echo`. `echo "rc=$?"` after a
-  chained command is the whole use of one, and an allowlist entry can only name the wording it
-  was written for, so every new label cost a prompt and left an entry behind. What counts as
-  lone is `shell::is_lone_echo`, shared with `git_bypass` (where an echo is a neutral segment)
-  and `remote_session` (where it is not company): one stage, no redirect of any fd, and no
-  substitution — that runs before echo sees its own arguments, so `echo "$(id)"` prompts.
 - `broad_walk` — denies `find` walks of `/`, `~`, `$HOME`, the bare home dir, or the GIT
   repo parent; a find scoped to one repo under GIT is allowed. A trailing glob is judged
   on its parent, `~/GIT/*` being that same walk under another spelling. An `ls`/`tree` of
