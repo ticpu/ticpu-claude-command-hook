@@ -1,4 +1,19 @@
-//! Two search flags that do not mean what a grep habit expects them to.
+//! Search flags that do not mean what a grep habit expects them to.
+//!
+//! - `rg -r` in any form is `--replace`: every hit prints rewritten, and the
+//!   damage reads as ordinary output. `--replace=` is the unambiguous spelling.
+//! - `rg -h` is `--help`: usage, exit 0, no search. `-h` alone is exempt, being
+//!   someone reading the usage.
+//! - A search filtering another search's output may not carry `-n`, `-b`, `-H` or
+//!   `--vimgrep`: that prefix counts the piped stream, so the numbers belong to no
+//!   file.
+//!
+//! A pattern beginning with `-` is not caught and need not be, rg rejecting it by
+//! name. Flag scanning is cluster-aware per tool: a short flag taking a value
+//! swallows the rest of its cluster, and the next word when nothing is glued on,
+//! so `rg -trust` is `--type rust` and not `-r ust`.
+//!
+//! `pattern_words` tells a search's pattern from its paths for `secret_paths`.
 
 use crate::checks::shell;
 use crate::output::HookOutput;

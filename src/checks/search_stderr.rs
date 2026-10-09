@@ -1,3 +1,13 @@
+//! Denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped
+//! alternative.
+//!
+//! A body handed to a shell — `ssh host '…'`, `sh -c '…'`, nested a couple deep —
+//! is read as a command line and judged by the same rule. What the far end chains
+//! is the far end's where an approval is concerned, but an error hidden there is
+//! hidden from this transcript exactly as one hidden here is. Only a stage that
+//! runs a shell is descended into, so a quoted pattern and a document naming the
+//! redirect stay text.
+
 use crate::checks::shell;
 use crate::output::HookOutput;
 

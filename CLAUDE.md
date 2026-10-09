@@ -189,44 +189,6 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   Perl is absent from the interpreter list for the same reason. An intended substitution is
   answered by a waiver over the shared `marker.rs`, spent only against a command this would
   otherwise refuse so an unrelated call cannot consume one.
-- `grep_fold` — rewrites searches to pipe through the sibling `gf`, per chain segment, so a
-  chained or `cd`-prefixed grep still folds. `gf` lands after the *last* search stage, since a
-  later `grep`/`rg` filters lines and its pattern can match the prefix gf strips; everything
-  past that point must only display (a path-consuming `xargs`/`awk` would get truncated
-  paths). Refuses a segment whose flags change the output shape gf parses, that runs a program
-  of its own (`--pre`, `git grep -O`), or that redirects
-  stdout — a stderr-only redirect (`2>&1`, `2>file`) still folds, gf passes the error lines
-  through.
-  When gf ends the pipeline it would swallow the search's exit status, so `PIPESTATUS` puts it
-  back, brace-grouped so it stays attached to that segment.
-  A rewrite is only honoured next to an `allow`, and that allow covers the *whole* call — so
-  the fold is emitted only when every segment is one it can vouch for: a segment it folded, or
-  one `vouch` carries. A chain holding anything else
-  keeps its prompt and forfeits the fold, rather than having the fold grant it permission. The
-  assignment on that list is there because naming a long path once and reusing it is how a
-  chained search arrives; it runs nothing, and a value that would is a substitution, refused
-  ahead of every allow. Its name is matched strictly rather than by the loose `contains('=')` a
-  command word's env prefix is skipped by — that one only has to step over a word, this one
-  grants the allow.
-- `search_stderr` — denies `2>/dev/null` on a search; `-s`/`--no-messages` is the scoped
-  alternative. A body handed to a shell — `ssh host '…'`, `sh -c '…'`, nested a couple deep —
-  is read as a command line and judged by the same rule. `remote_session` leaves what the far
-  end *chains* to the far end, and that stays right for an approval, but an error hidden there
-  is hidden from this transcript exactly as one hidden here is. Only a stage that runs a shell
-  is descended into, so a quoted pattern and a document naming the redirect stay text; the
-  quoted spans come from `shell::quoted_spans`, `program_args` being whitespace-split.
-- `search_flags` — three denies for flags a grep habit reads wrong. `rg -r` in any form is
-  `--replace`, so `rg -rn PAT dir` prints every hit rewritten to `n` and the damage reads as
-  ordinary output; `--replace=` is the unambiguous spelling. `rg -h` is `--help`, which prints
-  usage and exits 0, so `rg -ohN PAT .` never searches and the usage text lands where the matches
-  should be — `-h` alone is exempt, being someone reading the usage, and anything else on the line
-  means the search was the point. A pattern beginning with an unescaped `-` is not caught and does
-  not need to be: rg rejects it by name and exits 2. And a search filtering another
-  search's output may not carry `-n`/`-b`/`-H`/`--vimgrep`: that prefix counts the piped stream,
-  so the numbers belong to no file. Flag scanning is cluster-aware per tool — a short flag that
-  takes a value swallows the rest of its cluster (`rg -trust` is `--type rust`, not `-r ust`),
-  and the next word too when nothing is glued on.
-
 Four of the denies above are overruled by a one-shot waiver, and `disabled` is a standing
 switch over the same `marker.rs`. Every creation is forced to a prompt.
 `docs/waivers.md` lists them with the command that creates each — it is written for the user running one by hand, so a new marker goes in it as well as

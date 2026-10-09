@@ -1,3 +1,21 @@
+//! Rewrites searches to pipe through the sibling `gf`, per chain segment, so a
+//! chained or `cd`-prefixed grep still folds.
+//!
+//! `gf` lands after the *last* search stage: a later `grep`/`rg` filters lines,
+//! and its pattern can match the prefix gf strips. Everything past that point
+//! must only display, a path-consuming `xargs` or `awk` getting truncated paths
+//! otherwise. When gf ends the pipeline it would swallow the search's exit
+//! status, so `PIPESTATUS` puts it back, brace-grouped to stay with its segment.
+//!
+//! Not folded: a segment whose flags change the output shape gf parses, one that
+//! runs a program of its own (`--pre`, `git grep -O`), one that redirects stdout.
+//! A stderr-only redirect still folds, gf passing the error lines through.
+//!
+//! A rewrite is honoured only next to an allow, and that allow covers the whole
+//! call. So the fold is emitted only when every other segment is one `vouch`
+//! carries; a chain holding anything else keeps its prompt and forfeits the fold,
+//! rather than the fold granting it permission.
+
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
