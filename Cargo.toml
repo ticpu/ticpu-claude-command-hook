@@ -12,6 +12,7 @@ anyhow = "1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml_ng = "0.10"
 
 [dev-dependencies]
 landlock-test-confine = "0.5"

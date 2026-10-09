@@ -3,6 +3,7 @@ mod blind_edit;
 
 mod broad_walk;
 mod cargo_tools;
+mod comment_cap;
 pub mod design_rationale;
 mod edited;
 mod forge_write;
@@ -73,7 +74,9 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
         }
         // MultiEdit is vestigial — Claude Code no longer emits it — so it is not matched.
         "PreToolUse" if input.tool_name == "Edit" || input.tool_name == "Write" => {
-            design_rationale::pre_tool_use(input).or_else(|| pr_body::pre_tool_use(input))
+            design_rationale::pre_tool_use(input)
+                .or_else(|| pr_body::pre_tool_use(input))
+                .or_else(|| comment_cap::pre_tool_use(input))
         }
         // The gate already reviewed it; this only says so, where the writer can read
         // it. A permission prompt's reason cannot: it is addressed to the reader.

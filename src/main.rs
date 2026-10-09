@@ -1,6 +1,7 @@
 use std::io::Read;
 
 mod checks;
+mod config;
 mod input;
 mod install;
 mod output;
@@ -27,9 +28,19 @@ fn main() {
             }
         }
         Some("rules") => rules::print(),
+        Some("comment-ignore") => {
+            let Some(repo) = std::env::args().nth(2) else {
+                eprintln!("comment-ignore: name the repo directory to turn the comment cap off in");
+                std::process::exit(2);
+            };
+            if let Err(e) = config::ignore_comment_cap(&repo) {
+                eprintln!("comment-ignore: {e:#}");
+                std::process::exit(1);
+            }
+        }
         Some(other) => {
             eprintln!(
-                "hook: unknown argument {other:?}; the hook JSON is read from stdin, and the verbs are `install`, `uninstall` and `rules`"
+                "hook: unknown argument {other:?}; the hook JSON is read from stdin, and the verbs are `install`, `uninstall`, `rules` and `comment-ignore <repo-name>`"
             );
             std::process::exit(2);
         }

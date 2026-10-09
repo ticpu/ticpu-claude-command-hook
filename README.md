@@ -23,6 +23,11 @@ fail-open) so a bug in the hook never blocks your tools.
 - **PR body check** — a Write or Edit to such a file is refused while it carries a
   generated-with line, an emoji, a reference-style link, hard-wrapped prose or, for a PR, no
   testing section.
+- **comment cap** — an Edit or Write that adds or changes a run of more than two whole-line
+  `//` or `#` comments is refused. Doc comments, the block opening a file and a block carrying
+  `comment-cap-exempt: <reason>` are left alone. `ticpu-claude-command-hook comment-ignore
+  <repo-name>` turns it off for one repo, recorded in
+  `$XDG_CONFIG_HOME/ticpu-claude-command-hook/config.yaml`.
 - **broad find guard** — blocks `find` walks of `/`, `~`, `$HOME`, the bare home directory,
   or the parent directory holding all your repos; a `find` scoped to one repo is allowed.
 - **remote session guard** — denies `ssh`, `sshfs`, `psql`, `mysql`, `mariadb` or `mongosh`

@@ -577,6 +577,32 @@ than growing to meet it: a body sized from the wire lets the peer name the alloc
     assert!(reason.contains("Adds ## The reader refuses"), "{reason}");
 }
 
+/// A comment block past two lines is refused where the edit adds it, and left
+/// alone as doc comments, as the file's opening block, or marked exempt.
+#[test]
+fn a_long_comment_is_refused_where_an_edit_adds_it() {
+    let rs = "/x/zz-no-such-repo/src/a.rs";
+    assert_eq!(edit_verdict(rs, "fn a() {}\n// a\n// b\n// c\n"), Deny);
+    assert_eq!(edit_verdict(rs, "fn a() {}\n// a\n// b\n"), Pass);
+    assert_eq!(edit_verdict(rs, "// a\n// b\n// c\nfn a() {}\n"), Pass);
+    assert_eq!(edit_verdict(rs, "fn a() {}\n/// a\n/// b\n/// c\n"), Pass);
+    assert_eq!(
+        edit_verdict(
+            rs,
+            "fn a() {}\n// comment-cap-exempt: a table\n// a\n// b\n"
+        ),
+        Pass
+    );
+    assert_eq!(
+        edit_verdict("/x/zz-no-such-repo/run.sh", "x=1\n# a\n# b\n# c\n"),
+        Deny
+    );
+    assert_eq!(
+        edit_verdict("/x/zz-no-such-repo/notes.md", "x\n# a\n# b\n# c\n"),
+        Pass
+    );
+}
+
 /// A Write of a PR body is judged whole, and an issue body needs no testing section.
 #[test]
 fn a_body_file_is_checked_as_it_is_written() {
@@ -725,6 +751,7 @@ fn feed(payload: &Value) -> String {
     landlock_test_confine::to_scratch_only(&landlock_test_confine::target_dir());
     let mut child = Command::new(env!("CARGO_BIN_EXE_ticpu-claude-command-hook"))
         .env("XDG_RUNTIME_DIR", env!("CARGO_TARGET_TMPDIR"))
+        .env("XDG_CONFIG_HOME", env!("CARGO_TARGET_TMPDIR"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
