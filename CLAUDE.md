@@ -370,24 +370,6 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   Perl is absent from the interpreter list for the same reason. An intended substitution is
   answered by a waiver over the shared `marker.rs`, spent only against a command this would
   otherwise refuse so an unrelated call cannot consume one.
-- `cat_read` — denies a `cat` that opens a file where the shell's output *is* the read: the
-  last stage of a pipeline with stdout free, which puts the file in the transcript, or a single
-  file handed to a pipe the next program could have opened itself. Several files joined is the
-  concatenation the command exists for and passes, as does any flag — `-A`, `-v`, `-T`, `-E`,
-  `-n` ask for bytes a tool result renders away, which is the one read no tool does — and so
-  does `cat a b > merged`, a copy rather than a read. A path under `/proc`, `/sys` or `/dev` is
-  not counted as a file at all: those are generated at read time and report no size, so the Read
-  tool is not the alternative and this check has nothing to offer. It is judged on where the bytes go and not
-  on the program, so a `cd` in front, a `sudo`, a path and the loop-body spelling
-  (`for i in …; do cat $i; done`) all reach it through `shell::program`. It runs last among the
-  denies: every other objection names something this one cannot, and `secret_paths` deciding
-  first is what keeps its waiver away from a credential — neither read nor spent there, and only
-  the prompted `transcript-read-waiver` opens that gate. Its own waiver is the only one this
-  binary grants outright, over `marker::creation_only`, which is stricter than
-  `creation_requested` because an allow ends the decision for the whole call: one segment, one
-  stage, a bare `touch` naming the marker and nothing else. Granting it rather than prompting is
-  the point — the refusal answers a habit, and the case it cannot settle, the harness reporting
-  a read the model does not hold, is nobody's to rule on at a prompt.
 - `grep_fold` — rewrites searches to pipe through the sibling `gf`, per chain segment, so a
   chained or `cd`-prefixed grep still folds. `gf` lands after the *last* search stage, since a
   later `grep`/`rg` filters lines and its pattern can match the prefix gf strips; everything
@@ -426,8 +408,8 @@ user's tools. Checks never silence their own IO errors — they log and allow.
   takes a value swallows the rest of its cluster (`rg -trust` is `--type rust`, not `-r ust`),
   and the next word too when nothing is glued on.
 
-Five of the denies above are overruled by a one-shot waiver, and `disabled` is a standing
-switch over the same `marker.rs`. Every creation but `cat_read`'s is forced to a prompt.
+Four of the denies above are overruled by a one-shot waiver, and `disabled` is a standing
+switch over the same `marker.rs`. Every creation is forced to a prompt.
 `docs/waivers.md` lists them with the command that creates each — it is written for the user running one by hand, so a new marker goes in it as well as
 in its check.
 
