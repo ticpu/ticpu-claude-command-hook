@@ -234,6 +234,16 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // Each of these commits something no `git add` named.
     ("git commit -a -F - <<'EOF'\nfix: x\nEOF", Pass),
     ("git commit --amend -F - <<'EOF'\nfix: x\nEOF", Pass),
+    // Another index, repo or hook set: the shape is a bare `git commit` or nothing.
+    (
+        "GIT_INDEX_FILE=/zztest/i git commit -F - <<'EOF'\nfix: x\nEOF",
+        Pass,
+    ),
+    (
+        "git --git-dir=/zztest/.git commit -F - <<'EOF'\nfix: x\nEOF",
+        Pass,
+    ),
+    ("sudo git commit -F - <<'EOF'\nfix: x\nEOF", Pass),
     ("git commit -F - src/main.rs <<'EOF'\nfix: x\nEOF", Pass),
     ("git commit -F msg.txt <<'EOF'\nfix: x\nEOF", Pass),
     ("git add . && git commit -F - <<'EOF'\nfix: x\nEOF", Deny),

@@ -1,7 +1,6 @@
 //! `git commit` reading its message from stdin: the one commit shape whose file
 //! set is entirely what a previous `git add` staged.
 
-use crate::checks::git_bypass::parse::{is_git, parse};
 use crate::checks::shell;
 
 /// Flags that change neither the files that land in the commit nor the hooks that
@@ -27,29 +26,20 @@ pub fn is_stdin_commit(segment: &str) -> bool {
     let (stage, consumers) = stages
         .split_first()
         .expect("pipeline_stages never yields an empty list");
-    if !is_git(stage)
-        || !consumers
-            .iter()
-            .all(|stage| shell::is_harmless_consumer(stage))
+    if !consumers
+        .iter()
+        .all(|stage| shell::is_harmless_consumer(stage))
     {
         return false;
     }
     let Some(stage) = quotes_opaque(stage) else {
         return false;
     };
-    let p = parse(&stage);
-    if p.subcommand != Some("commit")
-        || p.sets_config
-        || p.c_path
-            .is_some()
-    {
+    let Some(args) = bare_git(&stage, "commit") else {
         return false;
-    }
+    };
     let mut from_stdin = false;
-    let mut args = p
-        .args
-        .iter()
-        .copied();
+    let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         if COMMIT_FLAGS.contains(&arg) {
             continue;
@@ -80,6 +70,13 @@ pub fn is_stdin_commit(segment: &str) -> bool {
         from_stdin = true;
     }
     from_stdin
+}
+
+/// The words after `git <verb>` when the stage is exactly that: an env prefix, a
+/// wrapper or a global option can point git at another index, repo or hook set.
+fn bare_git<'a>(stage: &'a str, verb: &str) -> Option<Vec<&'a str>> {
+    let mut words = stage.split_whitespace();
+    (words.next() == Some("git") && words.next() == Some(verb)).then(|| words.collect())
 }
 
 /// Each quoted span as one opaque word, so `--author="A B"` stays one argument and
