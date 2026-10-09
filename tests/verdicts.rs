@@ -240,7 +240,8 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // covered by the unit tests alone.
     ("git commit --fixup HEAD", Allow),
     ("git add src/main.rs && git commit --fixup=HEAD~1", Allow),
-    ("git rebase --autosquash HEAD~1", Allow),
+    // `HEAD` and not a parent: a shallow CI clone has no `HEAD~1` to be an ancestor.
+    ("git rebase --autosquash HEAD", Allow),
     ("git rebase --autosquash zz-no-such-ref", Pass),
     ("git rebase -i --autosquash HEAD~1", Pass),
     ("git commit --squash HEAD", Pass),
