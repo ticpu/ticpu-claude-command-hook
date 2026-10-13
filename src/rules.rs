@@ -37,7 +37,7 @@ Write/Edit of pr-body*.md or issue-body*.md refused while it holds: generated-wi
 cargo build check clippy test bench doc rustdoc fmt tree metadata info search expand llvm-cov semver-checks, piped into display-only stages, 2>&1 included. Not run, add, update, clean.
 grep/rg rewritten to fold through gf and allowed while every other segment is a shape above. 2>/dev/null on a search refused, use -s.
 Folded output: a path prints once, base: names the prefix stripped from every path, a line starting :45: (match) or -45- (context) belongs to the last path printed above it.
-Rides along free: bare cd <path>, echo, bare NAME=value, read-and-print utility (ls stat wc head tail cat nl file basename dirname realpath readlink date uname id printf). Any other command forfeits the allow, so does $(…) in any segment.
+Rides along free: bare cd <path>, echo, bare NAME=value, read-and-print utility (ls stat wc head tail cat nl file basename dirname realpath readlink date uname id printf test [). Any other command forfeits the allow, so does $(…) in any segment.
 NAME=value counts only while nothing expands it: P=/some/path; cmd $P refused, write the value where it is used. P=$(…) keeps its normal prompt.
 Edit/Write refused while it adds or changes a run of more than 2 whole-line // or # comments. Not counted: /// and //!, the comment block opening the file, a block containing comment-cap-exempt: <reason>.
 Waivers live in $XDG_RUNTIME_DIR/claude-hooks/. waiver:<name> means touch "$XDG_RUNTIME_DIR/claude-hooks/<name>", the command each refusal prints, spent by the next refusal it answers. Creating one is prompted.

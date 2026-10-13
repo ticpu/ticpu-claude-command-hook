@@ -34,9 +34,9 @@ const DISPLAY_ONLY: [&str; 5] = ["head", "tail", "less", "cat", "nl"];
 /// Commands that read and print and cannot write a file or run a program. Used
 /// where one decision covers a whole chain: such a segment can ride along on an
 /// auto-allow without widening what it permits.
-const READ_ONLY_UTILS: [&str; 13] = [
+const READ_ONLY_UTILS: [&str; 15] = [
     "ls", "pwd", "file", "stat", "wc", "basename", "dirname", "realpath", "readlink", "date",
-    "uname", "id", "printf",
+    "uname", "id", "printf", "test", "[",
 ];
 
 /// Tokens that introduce a command without being one. Stepping over them is what

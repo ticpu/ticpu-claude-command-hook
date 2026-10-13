@@ -106,6 +106,14 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "ls -l /x; grep -rn bar src",
         Fold("ls -l /x ; { grep -rn bar src | {gf}; (exit ${PIPESTATUS[0]}); }"),
     ),
+    (
+        "rg -n X --type py | cut -c1-200; test -f docs/a.md && echo HAS",
+        Fold("rg -n X --type py | {gf} | cut -c1-200 ; test -f docs/a.md && echo HAS"),
+    ),
+    (
+        "[ -d /x ] && grep -rn foo /x",
+        Fold("[ -d /x ] && { grep -rn foo /x | {gf}; (exit ${PIPESTATUS[0]}); }"),
+    ),
     // Naming a long path once and reusing it: refused, the value being one that can
     // be written where it is used.
     (
