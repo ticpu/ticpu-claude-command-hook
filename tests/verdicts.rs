@@ -362,6 +362,15 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Allow,
     ),
     ("git show HEAD:a.c | sed -i '1d'", Pass),
+    // The same sed reading a file carries a chain; a script that writes does not,
+    // and an `-e` makes every positional a file rather than a script to check.
+    (
+        "sed -n 210,225p a.css; grep -rn x .",
+        Fold("sed -n 210,225p a.css ; { grep -rn x . | {gf}; (exit ${PIPESTATUS[0]}); }"),
+    ),
+    ("sed -n 1p -e 'w out' a.css; grep -rn x .", Pass),
+    ("sed -n 's/a/b/w out' a.css; grep -rn x .", Pass),
+    ("sed -n a.css; grep -rn x .", Pass),
     // The working directory persists between calls, so moving it is the work.
     ("cd /x", Allow),
     ("cd /x && ./deploy.sh", Pass),

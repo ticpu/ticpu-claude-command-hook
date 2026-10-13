@@ -329,6 +329,7 @@ pub fn is_read_only_util(segment: &str) -> bool {
                         READ_ONLY_UTILS.contains(&word)
                             || DISPLAY_ONLY.contains(&word)
                             || word == "echo"
+                            || (word == "sed" && sed_line_files(stage).is_some())
                     })
                 })
         })
@@ -394,35 +395,47 @@ pub fn is_harmless_consumer(stage: &str) -> bool {
     }
     match command_word(stage) {
         Some("wc") => true,
-        Some("sed") => prints_line_ranges(stage),
+        // Naming a file, sed reads it instead of the pipe and is no consumer.
+        Some("sed") => sed_line_files(stage) == Some(0),
         _ => false,
     }
 }
 
-/// `sed` restricted to selecting lines: every argument is the quiet flag, a bare
-/// `-e`, or a script built only from line numbers and `p`/`q`/`d`. That leaves out
-/// `-i`, an `s///w` or `w` command and GNU's `e`, so nothing is written or run. A
-/// glued `-e<script>`/`--expression=` is not accepted, since the script would ride
-/// along unchecked.
-fn prints_line_ranges(stage: &str) -> bool {
-    let mut args = stage.split_whitespace();
-    let _ = args.next(); // "sed"
-    let mut scripts = 0;
-    for arg in args {
-        if matches!(arg, "-n" | "--quiet" | "--silent" | "-e") {
-            continue;
-        }
+/// The file operands of a `sed` restricted to selecting lines, `None` for any
+/// other sed: every option is the quiet flag or a bare `-e`, and every script is
+/// built only from line numbers and `p`/`q`/`d`. That leaves out `-i`, an `s///w`
+/// or `w` command and GNU's `e`, so nothing is written or run. A glued
+/// `-e<script>`/`--expression=` is not accepted, since the script would ride along
+/// unchecked. The first positional is read as a script until an `-e` is seen, so
+/// a script is never mistaken for a file operand.
+fn sed_line_files(stage: &str) -> Option<usize> {
+    let selects_lines = |arg: &str| {
         let script = unquote_token(arg);
-        if script.is_empty()
-            || !script
+        !script.is_empty()
+            && script
                 .chars()
                 .all(|c| c.is_ascii_digit() || ",;p$qd".contains(c))
-        {
-            return false;
+    };
+    let mut args = stage
+        .split_whitespace()
+        .skip(1);
+    let (mut scripts, mut files) = (0, 0);
+    while let Some(arg) = args.next() {
+        match arg {
+            "-n" | "--quiet" | "--silent" => {}
+            "-e" if args
+                .next()
+                .is_some_and(selects_lines) =>
+            {
+                scripts += 1
+            }
+            _ if arg.starts_with('-') => return None,
+            _ if scripts == 0 && !selects_lines(arg) => return None,
+            _ if scripts == 0 => scripts += 1,
+            _ => files += 1,
         }
-        scripts += 1;
     }
-    scripts > 0
+    (scripts > 0).then_some(files)
 }
 
 /// The words that name a subcommand, with flags and their values dropped:
