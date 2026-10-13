@@ -2,7 +2,9 @@
 //! chained or `cd`-prefixed grep still folds.
 //!
 //! `gf` lands after the *last* search stage: a later `grep`/`rg` filters lines,
-//! and its pattern can match the prefix gf strips. Everything past that point
+//! and its pattern can match the prefix gf strips. A `sort` or `uniq` moves it
+//! too, since reordering folded output would part a line from the path above
+//! it, while gf after them still sees whole lines. Everything past that point
 //! must only display, a path-consuming `xargs` or `awk` getting truncated paths
 //! otherwise. When gf ends the pipeline it would swallow the search's exit
 //! status, so `PIPESTATUS` puts it back, brace-grouped to stay with its segment.
@@ -143,6 +145,10 @@ fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
         .iter()
         .enumerate()
     {
+        if shell::is_line_filter(stage) {
+            at = i + 1;
+            continue;
+        }
         if !shell::is_searcher(stage) {
             continue;
         }
@@ -358,8 +364,45 @@ mod tests {
         for cmd in [
             "grep -rl foo . | xargs sed -i s/a/b/",
             "grep -rn foo . | awk -F: '{print $1}'",
-            "grep -rn foo . | sort",
             "grep -c foo *.rs | wc -l",
+        ] {
+            assert_eq!(rewrite(cmd, GF), None, "{cmd}");
+        }
+    }
+
+    /// Reordering folded lines would part them from their path, so gf goes after.
+    #[test]
+    fn gf_goes_after_a_sort_or_uniq() {
+        for (cmd, folded) in [
+            (
+                "rg -n -o x /x | sort -u -t: -k3 | head -20",
+                "rg -n -o x /x | sort -u -t: -k3 | /opt/hook/gf | head -20",
+            ),
+            (
+                "grep -rn foo . | sort -t : -k 2,2n --reverse | uniq -d",
+                "grep -rn foo . | sort -t : -k 2,2n --reverse | uniq -d | /opt/hook/gf",
+            ),
+            (
+                "grep -rn foo . | sort | grep -v bar",
+                "grep -rn foo . | sort | grep -v bar | /opt/hook/gf",
+            ),
+        ] {
+            assert!(
+                rewrite(cmd, GF).is_some_and(|r| r.starts_with(folded)),
+                "{cmd}"
+            );
+        }
+        for cmd in [
+            // Writes a file, runs a program, or reads a file instead of the pipe.
+            "grep -rn foo . | sort -o out",
+            "grep -rn foo . | sort --output=out",
+            "grep -rn foo . | sort --compress-program=sh",
+            "grep -rn foo . | sort other.txt",
+            "grep -rn foo . | uniq - out",
+            // Changes the lines gf parses.
+            "grep -rn foo . | uniq -c",
+            "grep -rn foo . | sort -z",
+            "grep -rn foo . | sort -k",
         ] {
             assert_eq!(rewrite(cmd, GF), None, "{cmd}");
         }

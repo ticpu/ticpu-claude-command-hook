@@ -128,6 +128,15 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         "rg -n --no-heading 'a|b' /x/ | rg -v 'public.xml|internal.xml' | head",
         Fold("rg -n --no-heading 'a|b' /x/ | rg -v 'public.xml|internal.xml' | {gf} | head"),
     ),
+    // A sort reorders lines, so gf goes after it rather than before.
+    (
+        "rg -n -s 'a' x/ | head -20; echo ---; rg -n -o 'b' /x | sort -u -t: -k3 | head -20",
+        Fold(
+            "rg -n -s 'a' x/ | {gf} | head -20 ; echo --- ; \
+             rg -n -o 'b' /x | sort -u -t: -k3 | {gf} | head -20",
+        ),
+    ),
+    ("rg -n 'b' /x | sort -o /x/out", Pass),
     // Merged stderr is not a stdout redirect, so the fold still applies.
     (
         "ls /x/; grep -rn \"a\\|b\" /x/f.xml 2>&1 | head",

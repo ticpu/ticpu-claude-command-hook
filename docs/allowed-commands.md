@@ -17,7 +17,7 @@ Always prompted, every mode: gh pr|issue create|new|edit|comment, gh pr review, 
 gh pr|issue create only as, alone in its command: gh pr create --title '…' --body-file scratch/pr-body-<topic>.md (issue: issue-body-<topic>.md), path unquoted. --body --fill --editor --web --template --recover, stdin: refused.
 Write/Edit of pr-body*.md or issue-body*.md refused while it holds: generated-with line, emoji, [label]: url link definition, prose hard-wrapped at a column, and for pr-body no heading containing test.
 cargo build check clippy test bench doc rustdoc fmt tree metadata info search expand llvm-cov semver-checks, piped into display-only stages, 2>&1 included. Not run, add, update, clean.
-grep/rg rewritten to fold through gf and allowed while every other segment is a shape above. 2>/dev/null on a search refused, use -s.
+grep/rg rewritten to fold through gf and allowed while every other segment is a shape above. After the search: another search, sort or uniq (no -o, -z, -c, file operand), then display-only stages. 2>/dev/null on a search refused, use -s.
 Folded output: a path prints once, base: names the prefix stripped from every path, a line starting :45: (match) or -45- (context) belongs to the last path printed above it.
 Rides along free: bare cd <path>, echo, bare NAME=value, read-and-print utility (ls stat wc head tail cat nl file basename dirname realpath readlink date uname id printf test [), sed -n 10,20p <file> (line numbers and p q d only). Any other command forfeits the allow, so does $(…) in any segment.
 NAME=value counts only while nothing expands it: P=/some/path; cmd $P refused, write the value where it is used. P=$(…) keeps its normal prompt.

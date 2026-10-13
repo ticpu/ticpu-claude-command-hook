@@ -386,6 +386,88 @@ fn cuts_columns(stage: &str) -> bool {
     lists > 0
 }
 
+/// A `sort` or `uniq` that reorders or drops whole lines read from the pipe and
+/// changes none of them. Flags are a whitelist, so `-o`, `--compress-program`,
+/// `-z` and `uniq -c` are out; a positional is out too, being a file read instead
+/// of the pipe or, for `uniq`, the file it writes.
+pub fn is_line_filter(stage: &str) -> bool {
+    let (switches, valued, long): (&str, &str, &[&str]) = match command_word(stage) {
+        Some("sort") => (
+            "bdfghiMnRrsuV",
+            "tk",
+            &[
+                "ignore-leading-blanks",
+                "dictionary-order",
+                "ignore-case",
+                "general-numeric-sort",
+                "human-numeric-sort",
+                "ignore-nonprinting",
+                "month-sort",
+                "numeric-sort",
+                "random-sort",
+                "reverse",
+                "stable",
+                "unique",
+                "version-sort",
+                "field-separator",
+                "key",
+            ],
+        ),
+        Some("uniq") => (
+            "diu",
+            "fsw",
+            &[
+                "repeated",
+                "ignore-case",
+                "unique",
+                "skip-fields",
+                "skip-chars",
+                "check-chars",
+            ],
+        ),
+        _ => return false,
+    };
+    let mut args = stage
+        .split_whitespace()
+        .skip(1);
+    while let Some(arg) = args.next() {
+        if let Some(name) = arg.strip_prefix("--") {
+            if !long.contains(
+                &name
+                    .split('=')
+                    .next()
+                    .unwrap_or(name),
+            ) {
+                return false;
+            }
+            continue;
+        }
+        let Some(cluster) = arg
+            .strip_prefix('-')
+            .filter(|c| !c.is_empty())
+        else {
+            return false;
+        };
+        for (i, c) in cluster.char_indices() {
+            if valued.contains(c) {
+                // The rest of the cluster is the value, or the next word is.
+                if i + 1 == cluster.len()
+                    && args
+                        .next()
+                        .is_none()
+                {
+                    return false;
+                }
+                break;
+            }
+            if !switches.contains(c) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 /// A later stage that writes nothing and runs nothing. Weaker than `grep_fold`'s
 /// display-only test, which additionally has to survive gf's folding — here the
 /// only question is whether the stage adds a side effect to the producer's.
