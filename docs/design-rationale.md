@@ -1,11 +1,5 @@
 # Design rationale
 
-## One list of the segments an allow can carry
-
-Every check that can allow a chain reads the same list of segments that grant nothing on their
-own. Kept per check, those lists diverge along each check's own subject, and a chain mixing
-subjects is then refused by both — each for the segment the other was written for.
-
 ## A literal named by a variable is refused, a computed one is not
 
 Every permission rule, here and in the harness, matches command text, so an assignment in front
