@@ -1,18 +1,5 @@
 # Design rationale
 
-## A session client shares its approval with nothing
-
-One approval covers a whole Bash call, so a client opening a session outside the working tree
-— a remote shell, a database — carries whatever is chained to it on the strength of its own
-name. Such a call is denied rather than split: it has to be readable as the one thing it does.
-
-The pipeline is asymmetric on purpose. A stage after the client only reads what it printed and
-is approved on its own terms; a stage before it produces what the client then acts on, and
-rides along. Operators inside the quoted remote command or SQL body belong to the far end and
-must not count — the rule is about what this shell runs. Only that rule stops there: what a
-command may hide from the transcript binds wherever it runs, so a search silencing stderr is
-refused inside the body too, and an auto-allow reads the body as the command line it is.
-
 ## A location-dependent deny states the location
 
 A deny that turns on where the command runs names the working directory and its repo root; the

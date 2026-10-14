@@ -1,6 +1,9 @@
 //! Denies a session client — a remote shell, a database — bundled with anything
 //! else: no `;`, `&&`, `||`, `&`, no unquoted newline.
 //!
+//! One approval covers the whole call, so a client chained to anything carries it
+//! on the strength of its own name; it has to be readable as the one thing it does.
+//!
 //! A lone `echo` is not company, and a wrapper is read through. The client must
 //! lead its pipeline, a producer feeding it riding along on its approval; a
 //! consumer after it only reads what it printed. Chaining inside the quoted
