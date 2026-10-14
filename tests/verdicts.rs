@@ -572,7 +572,10 @@ const EDIT_CASES: &[(&str, Verdict<&str>)] = &[
 
 #[test]
 fn edit_verdicts_match() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/docs/design-rationale.md"
+    );
     for (added, expected) in EDIT_CASES {
         assert_eq!(
             edit_verdict(path, added),
@@ -594,7 +597,10 @@ fn edit_verdicts_match() {
 
 #[test]
 fn a_rationale_prompt_says_where_the_edit_lands() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/docs/design-rationale.md"
+    );
     let added = "## The reader refuses a length above the cap\n\nThe reader takes the length \
 prefix before it reserves anything for the body, and refuses a length above the cap rather \
 than growing to meet it: a body sized from the wire lets the peer name the allocation.\n";

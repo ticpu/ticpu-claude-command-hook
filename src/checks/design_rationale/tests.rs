@@ -231,7 +231,10 @@ fn a_document_that_does_not_exist_reaches_no_gate() {
     let added = "## Why we split the parser\n\nA body.\n";
     assert!(pre_tool_use(&written("/x/docs/design-rationale.md", added)).is_none());
     // The same text against a file that exists is the countable rules' business.
-    let here = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    let here = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/docs/design-rationale.md"
+    );
     let (verdict, _) = decision(pre_tool_use(&written(here, added)).expect("gated"));
     assert_eq!(verdict, "deny");
 }
@@ -240,7 +243,10 @@ fn a_document_that_does_not_exist_reaches_no_gate() {
 /// the prompt says where it lands.
 #[test]
 fn an_edit_is_prompted_with_its_placement() {
-    let here = concat!(env!("CARGO_MANIFEST_DIR"), "/docs/design-rationale.md");
+    let here = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/docs/design-rationale.md"
+    );
     let added = "# Design rationale\n\n## A decision\n\nBody.\n";
     let (verdict, reason) = decision(pre_tool_use(&written(here, added)).expect("gated"));
     assert_eq!(verdict, "ask");
