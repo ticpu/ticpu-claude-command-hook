@@ -1,3 +1,13 @@
+//! Folds grep-style output: a path repeated on consecutive lines prints once, and
+//! known prefixes are stripped.
+//!
+//! A candidate reaches the filesystem only once it is path-shaped: source lines
+//! open with text that names a file in the tree, and accepting one eats that
+//! text, the one failure the fold must not have. A wrong rejection only prints
+//! the path in full, so the test stays conservative. A slash is sufficient but
+//! not required, matches in the working directory having none. The fast path
+//! reusing the previous line's path goes through the same test.
+
 use std::collections::HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
