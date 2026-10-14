@@ -19,9 +19,8 @@ Output is the documented hook JSON on stdout (`src/output.rs`):
   binary does not model (`description`, `timeout`, …) untouched.
 - PostToolUse advisory → `systemMessage` + `hookSpecificOutput.additionalContext`.
 
-Exit code is always 0 except on an internal error (bad stdin, serialize failure), which
-exits 1 with context on stderr. Fail-open is deliberate: a bug here must never block the
-user's tools. Checks never silence their own IO errors — they log and allow.
+A check that cannot decide logs the error and allows; why the binary fails open is in
+`main.rs`.
 
 What each check does, what it exempts and why is in the notes at the top of its own file.
 `checks/mod.rs` states the order they run in and the gate every allow sits behind;

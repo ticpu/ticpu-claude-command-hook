@@ -1,3 +1,15 @@
+//! The hook binary and its maintenance verbs. On the hook path it reads the hook
+//! JSON on stdin and prints the first objection `checks::dispatch` returns, or
+//! nothing.
+//!
+//! It fails open. Bad stdin, a serialize error or a panic exits non-zero with no
+//! decision, which Claude Code treats as a non-blocking error, sending the call
+//! through its normal permission rules. This binary fronts every tool call in
+//! every session, so a refusal emitted by accident takes the whole toolset down
+//! until settings.json is edited, while failing open costs only the verdict the
+//! failing check owed. Exit 2 blocks, so the hook path never uses it, and
+//! `install` must not set `onFailure: "block"`, which would fail closed.
+
 use std::io::Read;
 
 mod checks;
