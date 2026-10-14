@@ -1,14 +1,5 @@
 # Design rationale
 
-## A literal named by a variable is refused, a computed one is not
-
-Every permission rule, here and in the harness, matches command text, so an assignment in front
-of the work makes the call match none of them and spends an approval on a string holding that
-one value. A value the shell does not have to compute is therefore refused, the deny naming it:
-the ground for refusing is that it can be written where it is used. One that must be computed
-cannot be, and is the shape that keeps a credential out of the transcript, so it keeps its
-normal prompt.
-
 ## A credential file is captured, never printed
 
 A path whose name or directory says it holds a credential is refused wherever the shell would

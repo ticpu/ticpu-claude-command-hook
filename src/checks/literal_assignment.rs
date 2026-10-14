@@ -1,6 +1,10 @@
 //! Denies a bare `NAME=value` segment whose name a later segment expands, the
 //! deny naming the value so it can be written where it is used.
 //!
+//! Every permission rule, here and in the harness, matches command text: an
+//! assignment in front of the work matches none of them, and the approval it
+//! costs is spent on a string holding that one value.
+//!
 //! Left alone:
 //! - `P=$(…)`: unwritable inline, and the shape `secret_paths` relies on to keep
 //!   a credential out of the transcript.
