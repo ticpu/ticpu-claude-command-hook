@@ -658,7 +658,7 @@ mod tests {
     }
 
     const CFG: &str =
-        "/mnt/GIT/ng911/rust/test-data/deploy-configs/localhost/noans-worker-lab/config.yaml";
+        "/mnt/GIT/proj/rust/test-data/deploy-configs/localhost/noans-worker-lab/config.yaml";
 
     #[test]
     fn folds_context_lines_and_strips_base() {
@@ -674,7 +674,7 @@ mod tests {
         assert_eq!(
             fold(&lines, &["/mnt/GIT"], &[CFG]),
             "base: /mnt/GIT/\n\
-             ng911/rust/test-data/deploy-configs/localhost/noans-worker-lab/config.yaml:44:  notify_command:\n\
+             proj/rust/test-data/deploy-configs/localhost/noans-worker-lab/config.yaml:44:  notify_command:\n\
              -45-    endpoint:\n\
              -46-      loopback:\n"
         );

@@ -91,6 +91,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
         "PreToolUse" if input.tool_name == "Edit" || input.tool_name == "Write" => {
             design_rationale::pre_tool_use(input)
                 .or_else(|| pr_body::pre_tool_use(input))
+                .or_else(|| attribution::write(input))
                 .or_else(|| comment_cap::pre_tool_use(input))
         }
         // The gate already reviewed it; this only says so, where the writer can read

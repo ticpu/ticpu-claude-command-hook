@@ -1,16 +1,18 @@
-//! The file a public PR or issue body is written to, checked as it is written so
-//! its author corrects it before the user reads it.
+//! A Markdown file under `scratch/`, where a PR, MR or issue body is drafted,
+//! checked as it is written so its author corrects it before the user reads it.
+//! Its name says nothing: a body is drafted under whatever name the topic gives.
 //!
 //! Only what a program can count is checked: a generated-with line, an emoji, a
 //! reference-style link (an unmatched label degrades silently to brackets, and a
-//! body posts once), prose hard-wrapped at a column (the forge reflows it, and
-//! fixed wrapping breaks badly on a phone), and for a PR a heading saying how the
-//! change was tested. The file is judged as the call would leave it, every fault
-//! in one refusal, since a fragment cannot show a wrapped paragraph or a missing
-//! section.
+//! body posts once), and prose hard-wrapped at a column (the forge reflows it, and
+//! fixed wrapping breaks badly on a phone). The file is judged as the call would
+//! leave it, every fault in one refusal, since a fragment cannot show a wrapped
+//! paragraph.
 //!
 //! `forge_write` reads the same faults when the create command runs, which is
-//! what covers a file written through the shell or edited by hand.
+//! what covers a file written through the shell or edited by hand. Only there is
+//! a PR known to be one, so only there is a heading saying how the change was
+//! tested required.
 
 use std::sync::LazyLock;
 
@@ -31,31 +33,21 @@ static LIST_ITEM: LazyLock<Regex> =
 /// Below this a line followed by another is a stacked pair, not a wrapped one.
 const WRAPPED_FROM: usize = 40;
 
-#[derive(Clone, Copy, PartialEq)]
-pub enum Kind {
-    Pr,
-    Issue,
-}
-
-/// `pr-body*.md` or `issue-body*.md`, wherever it sits.
-pub fn kind(path: &str) -> Option<Kind> {
-    let name = path
-        .rsplit('/')
-        .next()?
-        .strip_suffix(".md")?;
-    if name.starts_with("pr-body") {
-        Some(Kind::Pr)
-    } else if name.starts_with("issue-body") {
-        Some(Kind::Issue)
-    } else {
-        None
-    }
+/// A `.md` file directly or deeper under a `scratch` directory.
+fn is_draft(path: &str) -> bool {
+    let mut parts = path.split('/');
+    parts
+        .next_back()
+        .is_some_and(|name| name.ends_with(".md"))
+        && parts.any(|dir| dir == "scratch")
 }
 
 pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
-    let kind = kind(input.file_path())?;
+    if !is_draft(input.file_path()) {
+        return None;
+    }
     let text = edited::after(input, &edited::before(input));
-    let faults = faults(&text, kind);
+    let faults = faults(&text, false);
     (!faults.is_empty()).then(|| HookOutput::deny("PreToolUse", &refusal(&faults)))
 }
 
@@ -66,7 +58,7 @@ pub fn refusal(faults: &[String]) -> String {
     )
 }
 
-pub fn faults(text: &str, kind: Kind) -> Vec<String> {
+pub fn faults(text: &str, needs_testing: bool) -> Vec<String> {
     let mut faults = Vec::new();
     let mut fenced = false;
     let mut tested = false;
@@ -117,7 +109,7 @@ pub fn faults(text: &str, kind: Kind) -> Vec<String> {
             ));
         }
     }
-    if kind == Kind::Pr && !tested {
+    if needs_testing && !tested {
         faults.push(
             "no testing section — add a heading saying how the change was tested, or that it \
              was not"
@@ -158,28 +150,27 @@ fn is_structural(trimmed: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::Kind::{Issue, Pr};
-    use super::{faults, kind};
+    use super::{faults, is_draft};
 
     #[test]
-    fn body_files_are_recognized_by_name() {
-        assert!(kind("scratch/pr-body-fold.md") == Some(Pr));
-        assert!(kind("/x/pr-body.md") == Some(Pr));
-        assert!(kind("scratch/issue-body-fold.md") == Some(Issue));
-        assert!(kind("docs/body.md").is_none());
-        assert!(kind("pr-body.txt").is_none());
+    fn drafts_are_markdown_under_scratch() {
+        assert!(is_draft("scratch/fold.md"));
+        assert!(is_draft("/x/scratch/mr/fold.md"));
+        assert!(!is_draft("/x/docs/fold.md"));
+        assert!(!is_draft("/x/scratch/fold.txt"));
+        assert!(!is_draft("scratch.md"));
     }
 
     #[test]
     fn a_clean_body_has_no_fault() {
         let text = "## What\n\nOne paragraph on one line, however long it runs past any column anyone would wrap at.\n\n- an item that is long enough to have been wrapped but was not, and stays on its line\n- another\n\n```\na code line\nanother code line that is long enough to look like wrapped prose to a careless check\n```\n\n## Testing\n\ncargo test.\n\nCloses #1\nRefs #2\n";
-        assert_eq!(faults(text, Pr), Vec::<String>::new());
+        assert_eq!(faults(text, true), Vec::<String>::new());
     }
 
     #[test]
     fn every_fault_is_reported_with_its_line() {
         let text = "## What\n\nA paragraph that was wrapped at a fixed column by\nwhoever wrote it.\n\nSee [the doc][doc] ✅\n\n[doc]: https://example.test/doc\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n";
-        let found = faults(text, Pr);
+        let found = faults(text, true);
         for expected in [
             "line 3: paragraph hard-wrapped",
             "line 6: emoji",
@@ -199,7 +190,7 @@ mod tests {
     #[test]
     fn an_issue_needs_no_testing_section() {
         assert_eq!(
-            faults("## Problem\n\nIt breaks.\n", Issue),
+            faults("## Problem\n\nIt breaks.\n", false),
             Vec::<String>::new()
         );
     }
@@ -208,6 +199,6 @@ mod tests {
     fn a_wrapped_paragraph_is_reported_once() {
         let line = "a line of prose long enough to count as wrapped text";
         let text = format!("{line}\n{line}\n{line}\n\n## Tests\n");
-        assert_eq!(faults(&text, Pr).len(), 1);
+        assert_eq!(faults(&text, true).len(), 1);
     }
 }

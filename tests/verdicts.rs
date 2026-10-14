@@ -270,21 +270,17 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     ("gh pr review 3 --approve | cat", Ask),
     ("gh pr view 3", Pass),
     (
-        "gh pr create --title x --body-file scratch/pr-body-zz-missing.md",
+        "gh pr create --title x --body-file scratch/zz-missing.md",
         Ask,
     ),
     ("gh pr create --title x --body y", Deny),
     ("gh pr create --fill", Deny),
     (
-        "gh pr create --title x --body-file scratch/issue-body-x.md",
-        Deny,
-    ),
-    (
         "gh pr create --title x --body \"$(cat <<'EOF'\nbody\nEOF\n)\"",
         Deny,
     ),
     (
-        "rm -rf /zztest && gh pr create --title x --body-file scratch/pr-body-x.md",
+        "rm -rf /zztest && gh pr create --title x --body-file scratch/x.md",
         Deny,
     ),
     // Another index, repo or hook set: the shape is a bare `git commit` or nothing.
@@ -636,7 +632,8 @@ fn a_long_comment_is_refused_where_an_edit_adds_it() {
     );
 }
 
-/// A Write of a PR body is judged whole, and an issue body needs no testing section.
+/// Markdown under scratch/ is judged as a body whatever its name; a file ending on a
+/// robot line is refused wherever it sits.
 #[test]
 fn a_body_file_is_checked_as_it_is_written() {
     let write = |path: &str, content: &str| {
@@ -647,20 +644,19 @@ fn a_body_file_is_checked_as_it_is_written() {
             "tool_input": { "file_path": path, "content": content },
         })))
     };
-    let body = "## What\n\nA change.\n";
-    assert_eq!(write("/x/scratch/pr-body-y.md", body), Deny);
+    let wrapped =
+        "## What\n\nA paragraph that was wrapped at a fixed column by\nwhoever wrote it.\n";
+    assert_eq!(write("/x/scratch/topic.md", wrapped), Deny);
+    assert_eq!(write("/x/docs/topic.md", wrapped), Pass);
+    assert_eq!(write("/x/scratch/topic.md", "## What\n\nA change.\n"), Pass);
     assert_eq!(
         write(
-            "/x/scratch/pr-body-y.md",
-            "## What\n\nA change.\n\n## Testing\n\nNone.\n"
+            "/x/notes.md",
+            "A change.\n\n🤖 Generated with Claude Code\n"
         ),
-        Pass
+        Deny
     );
-    assert_eq!(write("/x/scratch/issue-body-y.md", body), Pass);
-    assert_eq!(
-        write("/x/notes.md", "🤖 Generated with Claude Code\n"),
-        Pass
-    );
+    assert_eq!(write("/x/notes.md", "🤖 heading\n\nbody\n"), Pass);
 }
 
 /// `Read` and `Grep` name their path in a field of their own, so the same rules

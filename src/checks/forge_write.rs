@@ -2,11 +2,11 @@
 //! commenting on a PR, MR or issue through `gh` or `glab` is forced to a prompt,
 //! which a hook `ask` gets in every permission mode, auto mode included.
 //!
-//! The group-token wrappers (`glab-cauca`, `glab-ng911`) are exempt by being other
-//! programs: they post as a bot, so it is not the user's name that is spent.
+//! Group-token wrappers named `glab-<suffix>` are exempt by being other programs:
+//! they post as a bot, so it is not the user's name that is spent.
 //!
-//! A `gh` create must also take its body from a `pr-body*.md` / `issue-body*.md`
-//! file, re-read here when the command runs, so what the user read is what posts
+//! A `gh` create must also take its body from a file, whatever its name, re-read
+//! here when the command runs, so what the user read is what posts
 //! and a file written around the Edit/Write gate is still checked. For the same
 //! reason nothing else may run beside it: a segment in front could rewrite the
 //! file after this read. `glab` has no body-file flag and gets the prompt alone.
@@ -17,18 +17,17 @@
 use std::fs;
 
 use crate::checks::location::{dirs, resolve};
-use crate::checks::pr_body::{self, Kind};
+use crate::checks::pr_body;
 use crate::checks::shell;
 use crate::checks::vouch;
 use crate::input::HookInput;
 use crate::output::HookOutput;
 
 const FORM: &str = "A public PR or issue is opened from a file the user has read. Write the body \
-to scratch/pr-body-<topic>.md (scratch/issue-body-<topic>.md for an issue), give them the title, \
-and on their go run it alone:
-  gh pr create --title '…' --body-file scratch/pr-body-<topic>.md
+to scratch/<topic>.md, give them the title, and on their go run it alone:
+  gh pr create --title '…' --body-file scratch/<topic>.md
 Not accepted: --body, --fill, --editor, --web, --template, --recover, stdin, a second body flag, \
-a quoted or differently named file, a pipe into gh, or anything chained beside it other than a \
+a quoted file, a pipe into gh, or anything chained beside it other than a \
 `cd`, an `echo` or a `git add`.";
 
 const BODY_FLAGS: &[&str] = &[
@@ -169,16 +168,9 @@ fn create(write: &Write, stage: &str, here: &str) -> HookOutput {
     else {
         return form();
     };
-    let wanted = match write.group {
-        "pr" => Kind::Pr,
-        _ => Kind::Issue,
-    };
-    if pr_body::kind(path) != Some(wanted) {
-        return form();
-    }
     match fs::read_to_string(resolve(path, here)) {
         Ok(text) => {
-            let faults = pr_body::faults(&text, wanted);
+            let faults = pr_body::faults(&text, write.group == "pr");
             match faults.is_empty() {
                 true => write.prompt(&format!(
                     ", body from {path} ({} lines)",
@@ -317,8 +309,8 @@ mod tests {
             "gh pr list --search create",
             "gh issue list",
             "glab mr list",
-            "glab-cauca mr create -t x -d y",
-            "glab-ng911 mr note 3 -m hi",
+            "glab-wrapper mr create -t x -d y",
+            "glab-other mr note 3 -m hi",
             "git commit -m 'gh pr create'",
         ] {
             assert!(!publishes(stage), "{stage}");

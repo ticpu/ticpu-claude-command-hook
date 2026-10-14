@@ -61,6 +61,10 @@ Leave nothing uncommitted at the end of a session: every finished step gets its 
 before the next one starts, and the last one gets pushed. Formatting churn counts — commit it
 on its own (`style:`) rather than folding it into a behaviour change.
 
+No site-specific name — an organisation, a host, a project, a private wrapper command —
+goes in code, tests, docs or commit messages; write a placeholder (`glab-wrapper`,
+`~/GIT/proj`) where an example needs one.
+
 ## Build / test
 
 `make -j check` (clippy `-D warnings` + `cargo test`) then `make release`. The hook entries

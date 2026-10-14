@@ -19,10 +19,10 @@ fail-open) so a bug in the hook never blocks your tools.
   a wrapper or a brace group.
 - **forge write gate** — creating, editing or commenting on a PR, MR or issue through `gh`
   or `glab` is always prompted, in every permission mode. A `gh` create must take its body
-  from a `pr-body*.md` / `issue-body*.md` file, re-checked as the command runs.
-- **PR body check** — a Write or Edit to such a file is refused while it carries a
-  generated-with line, an emoji, a reference-style link, hard-wrapped prose or, for a PR, no
-  testing section.
+  from a file, re-checked as the command runs; a PR body needs a testing section.
+- **body check** — a Write or Edit to a `.md` file under `scratch/` is refused while it
+  carries a generated-with line, an emoji, a reference-style link or hard-wrapped prose. A
+  Write of any file ending on a 🤖 line is refused.
 - **comment cap** — an Edit or Write that adds or changes a run of more than two whole-line
   `//` or `#` comments is refused. Doc comments, the block opening a file and a block carrying
   `comment-cap-exempt: <reason>` are left alone. `ticpu-claude-command-hook comment-ignore
@@ -60,9 +60,9 @@ The second binary in this crate. It reads grep-style output and prints a file pa
 per run of consecutive lines from the same file, dropping configured directory prefixes:
 
 ```
-$ grep -rn notify_command -A 2 ~/GIT/ng911/rust/test-data/ | gf
+$ grep -rn notify_command -A 2 ~/GIT/proj/rust/test-data/ | gf
 base: /home/jerome.poulin/GIT/
-ng911/rust/test-data/deploy-configs/localhost/noans-worker-lab/config.yaml:44:  notify_command:
+proj/rust/test-data/deploy-configs/localhost/noans-worker-lab/config.yaml:44:  notify_command:
 -45-    endpoint:
 -46-      loopback:
 ```

@@ -12,14 +12,22 @@
 //! wanted. The verb is read from the whole text and not through `chain_segments`,
 //! which gives up on the heredoc a commit message arrives in — a body word that
 //! happens to spell a verb costs nothing, the anchored line being what decides.
+//!
+//! A `Write` whose last non-blank line carries a 🤖 is refused too, whatever the
+//! file: a body drafted for a forge lands in a file first, under any name, and
+//! the permission prompt is where the user would otherwise have to catch it.
 
 use crate::checks::shell;
+use crate::input::HookInput;
 use crate::output::HookOutput;
 
 const GENERATED_BY: &str = "The message carries a generated-with attribution line. No 🤖, no \
 emoji, no generated-by line and no claude.ai/code link goes in a commit, tag, PR/MR body or \
 review comment, whatever the session's attribution block asks for — `Co-Authored-By` is the \
 only trailer that lands. Drop the line and run the command again.";
+
+const WRITTEN_BY: &str = "The file ends on a 🤖 line. No generated-with line goes in a file \
+either, whatever the session's attribution block asks for. Drop it and write the file again.";
 
 /// Programs whose write verbs put text in front of humans and keep it there.
 /// `glab` is matched by prefix: the group-token wrappers CLAUDE.md posts as the
@@ -45,6 +53,23 @@ const FORGE_VERBS: &[&str] = &[
 pub fn check(command: &str) -> Option<HookOutput> {
     (writes_a_body(command) && carries_attribution(command))
         .then(|| HookOutput::deny("PreToolUse", GENERATED_BY))
+}
+
+/// Denies a `Write` whose last non-blank line carries a 🤖.
+pub fn write(input: &HookInput) -> Option<HookOutput> {
+    (input.tool_name == "Write" && ends_on_robot(input.content()))
+        .then(|| HookOutput::deny("PreToolUse", WRITTEN_BY))
+}
+
+fn ends_on_robot(text: &str) -> bool {
+    text.lines()
+        .rev()
+        .find(|line| {
+            !line
+                .trim()
+                .is_empty()
+        })
+        .is_some_and(|line| line.contains('🤖'))
 }
 
 /// A write verb belonging to one of the programs above. Read from the whole text
@@ -106,10 +131,20 @@ fn basename(word: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use super::check;
+    use super::{check, ends_on_robot};
 
     fn denied(command: &str) -> bool {
         check(command).is_some()
+    }
+
+    #[test]
+    fn a_file_ending_on_a_robot_line_is_caught() {
+        assert!(ends_on_robot(
+            "## What\n\nA change.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n"
+        ));
+        assert!(ends_on_robot("text\n  - made by 🤖"));
+        assert!(!ends_on_robot("🤖 in a heading\n\nthe body ends here\n"));
+        assert!(!ends_on_robot(""));
     }
 
     #[test]
