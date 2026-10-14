@@ -4,6 +4,10 @@
 //! segment the directory the shell will really be in and every path check reads
 //! it from there: a deny keyed on the tool's own cwd reports a correctly spelled
 //! path as wrong the moment a chain starts with a `cd`.
+//!
+//! `hint` is appended to a deny that turns on where the command runs, and to no
+//! other: neither the cwd nor the repo root reaches the caller in a tool result,
+//! so a bare refusal buys a `pwd` round trip before it can be acted on.
 
 use std::path::{Path, PathBuf};
 

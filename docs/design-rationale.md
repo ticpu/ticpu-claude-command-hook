@@ -1,20 +1,5 @@
 # Design rationale
 
-## A location-dependent deny states the location
-
-A deny that turns on where the command runs names the working directory and its repo root; the
-rest say nothing about either. Neither reaches the caller in a tool result, so a bare refusal
-buys a `pwd` round trip before it can even be acted on.
-
-A `git add` pathspec resolving under the repo root but not the working directory is denied on
-the same grounds — wrong root, and the deny can name the right spelling. Only then: a pathspec
-that resolves nowhere is a deletion, which keeps the normal prompt.
-
-A move into the repo the shell is already in is refused for the same reason. The prompt it would
-otherwise take warns about hooks the move cannot reach, while the refusal can name the command
-spelled from here and the bare move, which needs no approval. A move into a different repo keeps
-that prompt: there the warning is true.
-
 ## One list of the segments an allow can carry
 
 Every check that can allow a chain reads the same list of segments that grant nothing on their
