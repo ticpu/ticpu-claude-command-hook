@@ -6,7 +6,7 @@
 //!   someone reading the usage.
 //! - A search filtering another search's output may not carry `-n`, `-b`, `-H` or
 //!   `--vimgrep`: that prefix counts the piped stream, so the numbers belong to no
-//!   file.
+//!   file, and gf is not taught to fold around output that is already wrong.
 //!
 //! A pattern beginning with `-` is not caught and need not be, rg rejecting it by
 //! name. Flag scanning is cluster-aware per tool: a short flag taking a value
