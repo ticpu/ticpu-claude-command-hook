@@ -37,4 +37,14 @@ while [ -z "$run_id" ]; do
 done
 
 echo "watching $workflow run $run_id for $ref ($sha)"
-gh run watch --exit-status "$run_id"
+if [ -t 1 ]; then
+	gh run watch --exit-status "$run_id"
+	exit
+fi
+
+# Off a terminal, gh reprints the whole job tree on every refresh instead of
+# redrawing it; only the final state is worth reading.
+status=0
+gh run watch --exit-status "$run_id" >/dev/null || status=$?
+gh run view "$run_id"
+exit "$status"
