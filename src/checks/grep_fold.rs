@@ -141,6 +141,7 @@ fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
     // gf goes after the last stage that still needs whole paths: a later search is
     // a line filter, and its pattern can match the prefix gf would strip.
     let mut at = 0;
+    let mut git = false;
     for (i, stage) in stages
         .iter()
         .enumerate()
@@ -158,6 +159,7 @@ fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
         {
             return None;
         }
+        git |= shell::program(stage) == Some("git");
         at = i + 1;
     }
     if !stages[at..]
@@ -167,7 +169,9 @@ fn fold_segment(segment: &str, gf: &str, chained: bool) -> Option<String> {
         return None;
     }
 
-    let piped = format!("{} | {gf}", stages[..at].join(" | "));
+    // A `git grep <rev>` path names no file on disk; `--git` lets gf check it in git.
+    let flag = if git { " --git" } else { "" };
+    let piped = format!("{} | {gf}{flag}", stages[..at].join(" | "));
     if at < stages.len() {
         return Some(format!("{piped} | {}", stages[at..].join(" | ")));
     }
@@ -271,9 +275,22 @@ mod tests {
 
     #[test]
     fn rewrites_the_other_searchers() {
-        for cmd in ["rg -n foo src", "ugrep -rn foo src", "git grep -n foo"] {
+        for cmd in ["rg -n foo src", "ugrep -rn foo src"] {
             assert!(rewrite(cmd, GF).is_some(), "{cmd}");
         }
+    }
+
+    /// Its paths may carry a `<rev>:` prefix only git can check.
+    #[test]
+    fn git_grep_asks_gf_for_git_mode() {
+        assert_eq!(
+            rewrite("git grep -n foo FETCH_HEAD -- src | head", GF).unwrap(),
+            "git grep -n foo FETCH_HEAD -- src | /opt/hook/gf --git | head"
+        );
+        assert_eq!(
+            rewrite("rg -n foo src | grep -v bar", GF).unwrap(),
+            "rg -n foo src | grep -v bar | /opt/hook/gf; (exit ${PIPESTATUS[1]})"
+        );
     }
 
     #[test]

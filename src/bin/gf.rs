@@ -7,15 +7,21 @@
 //! the path in full, so the test stays conservative. A slash is sufficient but
 //! not required, matches in the working directory having none. The fast path
 //! reusing the previous line's path goes through the same test.
+//!
+//! Under `--git`, a candidate missing from disk may be `git grep`'s `<rev>:path`.
+//! It is split at its first colon and accepted only when `git cat-file` finds a
+//! blob there, the path resolved from the working directory as git grep prints
+//! it; the `<rev>:` part is then stripped and announced like a base. A rev with
+//! a colon of its own (`HEAD:dir`) is never split right and prints in full.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{self, BufRead, BufReader, BufWriter, IsTerminal, LineWriter, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
-use std::process::{Command, ExitCode, Stdio};
+use std::process::{ChildStdin, ChildStdout, Command, ExitCode, Stdio};
 
 const ESC: u8 = 0x1b;
 const HELP: &str = "\
@@ -27,6 +33,7 @@ once, and configured directory prefixes are removed from the paths shown.
 
   --strip PREFIX   drop PREFIX from paths (repeatable; also GF_STRIP, ':'-separated)
   --no-base        do not print the 'base: PREFIX' line announcing a strip
+  --git            also fold git grep's REV:PATH, checked with git cat-file
   --cmd PROG       child to run instead of grep (also GF_CMD)
   --stdin          filter stdin even if arguments follow
   --               end gf options; everything after goes to the child
@@ -129,13 +136,15 @@ enum Detected {
     New { strip_len: usize },
 }
 
+/// Finds a candidate path: `Some(0)` on disk, `Some(n)` in git under an
+/// `n`-byte `<rev>:` prefix.
 struct Folder<F> {
-    exists: F,
+    lookup: F,
     strips: Vec<Vec<u8>>,
     show_base: bool,
     bases_shown: Vec<Vec<u8>>,
     last_path: Option<Vec<u8>>,
-    known: HashSet<Vec<u8>>,
+    known: HashMap<Vec<u8>, usize>,
     misses: HashSet<Vec<u8>>,
     /// Once a `path:12:` line has been seen, lines without a line number are
     /// content, so guessing paths on them only wastes stat() calls.
@@ -144,16 +153,16 @@ struct Folder<F> {
     seps: Vec<usize>,
 }
 
-impl<F: FnMut(&[u8]) -> bool> Folder<F> {
-    fn new(mut strips: Vec<Vec<u8>>, show_base: bool, exists: F) -> Self {
+impl<F: FnMut(&[u8]) -> Option<usize>> Folder<F> {
+    fn new(mut strips: Vec<Vec<u8>>, show_base: bool, lookup: F) -> Self {
         strips.sort_by_key(|p| std::cmp::Reverse(p.len()));
         Self {
-            exists,
+            lookup,
             strips,
             show_base,
             bases_shown: Vec::new(),
             last_path: None,
-            known: HashSet::new(),
+            known: HashMap::new(),
             misses: HashSet::new(),
             lineno_mode: false,
             logical: Vec::new(),
@@ -215,18 +224,21 @@ impl<F: FnMut(&[u8]) -> bool> Folder<F> {
         seps.clear();
         seps.extend(separators(logical));
 
-        let mut end = None;
+        let mut found = None;
         for &i in seps
             .iter()
             .rev()
         {
-            if lineno_follows(logical, i) && self.is_path(&logical[..i]) {
+            if !lineno_follows(logical, i) {
+                continue;
+            }
+            if let Some(rev_len) = self.is_path(&logical[..i]) {
                 self.lineno_mode = true;
-                end = Some(i);
+                found = Some((i, rev_len));
                 break;
             }
         }
-        if end.is_none() && !self.lineno_mode {
+        if found.is_none() && !self.lineno_mode {
             // `grep -l`, `grep -c` and match lines without -n have no line
             // number to anchor on; under -l the whole line is the path, and a
             // space rules out the content lines a slash lets past the shape test.
@@ -235,45 +247,51 @@ impl<F: FnMut(&[u8]) -> bool> Folder<F> {
                     .rev()
                     .copied(),
             ) {
-                if !logical[..i].contains(&b' ') && self.is_path(&logical[..i]) {
-                    end = Some(i);
+                if logical[..i].contains(&b' ') {
+                    continue;
+                }
+                if let Some(rev_len) = self.is_path(&logical[..i]) {
+                    found = Some((i, rev_len));
                     break;
                 }
             }
         }
         self.seps = seps;
-        let end = end?;
+        let (end, rev_len) = found?;
 
         let path = &logical[..end];
-        let strip_len = self
-            .strips
-            .iter()
-            .find(|p| path.starts_with(p) && path.len() > p.len())
-            .map_or(0, |p| p.len());
+        let strip_len = if rev_len > 0 {
+            rev_len
+        } else {
+            self.strips
+                .iter()
+                .find(|p| path.starts_with(p) && path.len() > p.len())
+                .map_or(0, |p| p.len())
+        };
         self.last_path = Some(path.to_vec());
         Some(Detected::New { strip_len })
     }
 
-    fn is_path(&mut self, cand: &[u8]) -> bool {
+    fn is_path(&mut self, cand: &[u8]) -> Option<usize> {
         if !is_path_shaped(cand) {
-            return false;
+            return None;
         }
-        if self
+        if let Some(&rev_len) = self
             .known
-            .contains(cand)
+            .get(cand)
         {
-            return true;
+            return Some(rev_len);
         }
         if self
             .misses
             .contains(cand)
         {
-            return false;
+            return None;
         }
-        if (self.exists)(cand) {
+        if let Some(rev_len) = (self.lookup)(cand) {
             self.known
-                .insert(cand.to_vec());
-            true
+                .insert(cand.to_vec(), rev_len);
+            Some(rev_len)
         } else {
             if self
                 .misses
@@ -285,8 +303,101 @@ impl<F: FnMut(&[u8]) -> bool> Folder<F> {
             }
             self.misses
                 .insert(cand.to_vec());
-            false
+            None
         }
+    }
+}
+
+/// The `Folder` lookup: on disk first, then in git when `--git` gave a `CatFile`.
+fn find(cand: &[u8], cat_file: Option<&mut CatFile>) -> Option<usize> {
+    if Path::new(OsStr::from_bytes(cand)).exists() {
+        return Some(0);
+    }
+    cat_file?.lookup(cand)
+}
+
+/// Splits git grep's `<rev>:path` at its first colon. An absolute path cannot
+/// name a tree entry, so it is never split.
+fn split_rev(cand: &[u8]) -> Option<(&[u8], &[u8])> {
+    let colon = cand
+        .iter()
+        .position(|b| *b == b':')?;
+    let (rev, path) = (&cand[..colon], &cand[colon + 1..]);
+    (!rev.is_empty() && !path.is_empty() && !path.starts_with(b"/")).then_some((rev, path))
+}
+
+/// One `git cat-file --batch-check` for the whole run, so a path costs a pipe
+/// round trip instead of a process. Started on first use; once it fails, the
+/// failure is reported and every later lookup misses.
+#[derive(Default)]
+struct CatFile {
+    pipe: Option<(ChildStdin, BufReader<ChildStdout>)>,
+    failed: bool,
+}
+
+impl CatFile {
+    /// The `<rev>:` length when `cand` is a blob in git.
+    fn lookup(&mut self, cand: &[u8]) -> Option<usize> {
+        let (rev, path) = split_rev(cand)?;
+        if self.failed {
+            return None;
+        }
+        match self.is_blob(rev, path) {
+            Ok(true) => Some(rev.len() + 1),
+            Ok(false) => None,
+            Err(e) => {
+                eprintln!("gf: git cat-file: {e}; <rev>:path lines print in full");
+                self.failed = true;
+                None
+            }
+        }
+    }
+
+    fn is_blob(&mut self, rev: &[u8], path: &[u8]) -> io::Result<bool> {
+        if self
+            .pipe
+            .is_none()
+        {
+            let mut child = Command::new("git")
+                .args(["cat-file", "--batch-check=%(objecttype)"])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()?;
+            let stdin = child
+                .stdin
+                .take()
+                .expect("piped");
+            let stdout = child
+                .stdout
+                .take()
+                .expect("piped");
+            self.pipe = Some((stdin, BufReader::new(stdout)));
+        }
+        let (stdin, stdout) = self
+            .pipe
+            .as_mut()
+            .expect("set above");
+
+        // git grep prints paths relative to the working directory, and only a
+        // leading ./ or ../ makes `<rev>:` resolve them from there.
+        let mut query = rev.to_vec();
+        query.push(b':');
+        if !path.starts_with(b"./") && !path.starts_with(b"../") {
+            query.extend_from_slice(b"./");
+        }
+        query.extend_from_slice(path);
+        query.push(b'\n');
+        stdin.write_all(&query)?;
+        stdin.flush()?;
+
+        let mut answer = Vec::new();
+        if stdout.read_until(b'\n', &mut answer)? == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "exited before answering",
+            ));
+        }
+        Ok(answer == b"blob\n")
     }
 }
 
@@ -391,6 +502,7 @@ fn write_trimmed(raw: &[u8], drop: usize, out: &mut dyn Write) -> io::Result<()>
 struct Opts {
     strips: Vec<Vec<u8>>,
     show_base: bool,
+    git: bool,
     cmd: OsString,
     stdin: bool,
     child_args: Vec<OsString>,
@@ -399,6 +511,7 @@ struct Opts {
 fn parse_args() -> Result<Option<Opts>, String> {
     let mut strips: Vec<Vec<u8>> = Vec::new();
     let mut show_base = true;
+    let mut git = false;
     let mut stdin = false;
     let mut cmd = env::var_os("GF_CMD").unwrap_or_else(|| OsString::from("grep"));
     let mut child_args = Vec::new();
@@ -423,6 +536,7 @@ fn parse_args() -> Result<Option<Opts>, String> {
                 return Ok(None);
             }
             "--no-base" => show_base = false,
+            "--git" => git = true,
             "--stdin" => stdin = true,
             "--strip" | "--cmd" => {
                 let value = match inline {
@@ -469,6 +583,7 @@ fn parse_args() -> Result<Option<Opts>, String> {
     Ok(Some(Opts {
         strips,
         show_base,
+        git,
         cmd,
         stdin,
         child_args,
@@ -486,7 +601,7 @@ fn with_slash(prefix: &[u8]) -> Vec<u8> {
 fn pump(
     mut input: impl BufRead,
     out: &mut dyn Write,
-    folder: &mut Folder<impl FnMut(&[u8]) -> bool>,
+    folder: &mut Folder<impl FnMut(&[u8]) -> Option<usize>>,
 ) -> io::Result<()> {
     let mut line = Vec::new();
     loop {
@@ -511,8 +626,11 @@ fn main() -> ExitCode {
         }
     };
 
+    let mut cat_file = opts
+        .git
+        .then(CatFile::default);
     let mut folder = Folder::new(opts.strips, opts.show_base, |p: &[u8]| {
-        Path::new(OsStr::from_bytes(p)).exists()
+        find(p, cat_file.as_mut())
     });
     let stdout = io::stdout();
     let mut out: Box<dyn Write> = if stdout.is_terminal() {
@@ -646,7 +764,11 @@ mod tests {
                 .map(|s| with_slash(s.as_bytes()))
                 .collect(),
             true,
-            move |p: &[u8]| known.contains(p),
+            move |p: &[u8]| {
+                known
+                    .contains(p)
+                    .then_some(0)
+            },
         );
         let mut out = Vec::new();
         for line in lines {
@@ -860,6 +982,55 @@ mod tests {
             out,
             "rg: error parsing flag --nope\nsome unstructured warning\n"
         );
+    }
+
+    fn fold_git(lines: &[&str], git: bool) -> String {
+        let mut cat_file = git.then(CatFile::default);
+        let mut folder = Folder::new(Vec::new(), true, |p: &[u8]| find(p, cat_file.as_mut()));
+        let mut out = Vec::new();
+        for line in lines {
+            folder
+                .line(line.as_bytes(), &mut out)
+                .unwrap();
+        }
+        String::from_utf8(out).unwrap()
+    }
+
+    /// Runs the real `git cat-file` against this checkout, cargo starting tests in
+    /// the package root: it needs a git checkout, not a source tarball.
+    #[test]
+    fn git_grep_rev_prefix_folds_under_git() {
+        let lines = [
+            "HEAD:Cargo.toml:4:edition = \"2021\"",
+            "HEAD:Cargo.toml-5-next",
+            "HEAD:src/bin/gf.rs:1:a:12:b",
+            "HEAD:src:3:a tree, not a file",
+            "HEAD:nope.rs:3:missing",
+            "HEAD^{commit}:Cargo.toml:4:x",
+        ];
+        assert_eq!(
+            fold_git(&lines, true),
+            "base: HEAD:\n\
+             Cargo.toml:4:edition = \"2021\"\n\
+             -5-next\n\
+             src/bin/gf.rs:1:a:12:b\n\
+             HEAD:src:3:a tree, not a file\n\
+             HEAD:nope.rs:3:missing\n\
+             base: HEAD^{commit}:\n\
+             Cargo.toml:4:x\n"
+        );
+        assert_eq!(fold_git(&lines, false), lines.join("\n") + "\n");
+    }
+
+    #[test]
+    fn split_rev_needs_both_halves_and_a_relative_path() {
+        assert_eq!(
+            split_rev(b"origin/main:a/b.rs"),
+            Some((&b"origin/main"[..], &b"a/b.rs"[..]))
+        );
+        for cand in ["nocolon", ":a.rs", "HEAD:", "HEAD:/etc/passwd"] {
+            assert_eq!(split_rev(cand.as_bytes()), None, "{cand}");
+        }
     }
 
     #[test]

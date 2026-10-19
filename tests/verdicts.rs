@@ -461,7 +461,7 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // A read-only git still reaches the fold, so the allow runs after grep_fold.
     (
         "cd /x && git grep -n foo",
-        Fold("cd /x && { git grep -n foo | {gf}; (exit ${PIPESTATUS[0]}); }"),
+        Fold("cd /x && { git grep -n foo | {gf} --git; (exit ${PIPESTATUS[0]}); }"),
     ),
     // A credential file: refused where the shell prints it, prompted where the
     // value is captured. Spelled with `$HOME`/`~` so no row turns on this box
