@@ -6,6 +6,10 @@
 //! notes go in a language without doc comments; and a block carrying
 //! `comment-cap-exempt: <reason>`, for the site that really needs more.
 //!
+//! Only source files are read. Markdown, YAML and TOML are left out: a comment
+//! there documents a config or a page rather than code, and a long one is no
+//! missing name.
+//!
 //! Only a block the edit adds or changes is judged — one already on disk is left
 //! to the edit that touches it, so old code is not a wall of refusals. Block
 //! comments and docstrings are not read.
@@ -33,7 +37,7 @@ const SLASHES: &[&str] = &[
     "zig",
 ];
 const HASHES: &[&str] = &[
-    "sh", "bash", "zsh", "py", "toml", "yaml", "yml", "pp", "rb", "pl", "mk",
+    "sh", "bash", "zsh", "py", "pp", "rb", "pl", "mk",
 ];
 
 pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
@@ -227,6 +231,9 @@ mod tests {
         assert_eq!(leader("/x/run.sh"), Some("#"));
         assert_eq!(leader("/x/Makefile"), Some("#"));
         assert_eq!(leader("/x/README.md"), None);
+        assert_eq!(leader("/x/ci.yaml"), None);
+        assert_eq!(leader("/x/ci.yml"), None);
+        assert_eq!(leader("/x/Cargo.toml"), None);
         assert_eq!(leader("/x/noext"), None);
     }
 }
