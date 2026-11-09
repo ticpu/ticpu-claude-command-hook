@@ -36,9 +36,7 @@ const SLASHES: &[&str] = &[
     "rs", "c", "h", "cc", "cpp", "hpp", "go", "js", "jsx", "ts", "tsx", "java", "kt", "swift",
     "zig",
 ];
-const HASHES: &[&str] = &[
-    "sh", "bash", "zsh", "py", "pp", "rb", "pl", "mk",
-];
+const HASHES: &[&str] = &["sh", "bash", "zsh", "py", "pp", "rb", "pl", "mk"];
 
 pub fn pre_tool_use(input: &HookInput) -> Option<HookOutput> {
     let path = input.file_path();
