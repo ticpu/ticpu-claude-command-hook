@@ -8,8 +8,18 @@
 //! two dozen names that answer a real question, and so is `ls -d`, which names
 //! the directory instead of listing it; `tree -d` still walks.
 //!
+//! A path is judged where it lands, not as spelled: `..`, `.` and a lister with
+//! no operand resolve from the directory the segment runs in, a `cd` earlier in
+//! the chain included, so `cd ~/GIT/x && ls ..` is the GIT parent. A `~` or `$`
+//! path is judged as spelled, the hook not expanding either.
+//!
 //! A lister is a neutral segment to every allow, so this denies ahead of them.
 
+use std::path::PathBuf;
+
+use path_clean::PathClean;
+
+use crate::checks::location;
 use crate::checks::shell;
 use crate::output::HookOutput;
 
@@ -23,82 +33,137 @@ folders, so a listing is browsing to guess at a name rather than reading an answ
 are ~/GIT/<repository-name> verbatim — build the path from the repo name and use it, or ask \
 which repo. Listing one repo (e.g. ~/GIT/eido) is fine, and so is `ls -d`.";
 
-pub fn check(command: &str) -> Option<HookOutput> {
-    if has_broad_find(command) {
-        return Some(HookOutput::deny("PreToolUse", FIND_REASON));
+#[derive(Debug, PartialEq)]
+enum Walk {
+    Find,
+    List,
+}
+
+pub fn check(command: &str, cwd: &str) -> Option<HookOutput> {
+    match broad_walk(command, cwd)? {
+        Walk::Find => Some(HookOutput::deny("PreToolUse", FIND_REASON)),
+        Walk::List => Some(HookOutput::deny("PreToolUse", LIST_REASON)),
     }
-    lists_a_broad_dir(command).then(|| HookOutput::deny("PreToolUse", LIST_REASON))
 }
 
-fn is_find_token(tok: &str) -> bool {
-    tok == "find" || tok.ends_with("/find")
-}
-
-fn has_broad_find(command: &str) -> bool {
-    let tokens: Vec<&str> = command
-        .split_whitespace()
-        .collect();
-    for (i, tok) in tokens
+/// The broadest walk in the command, a `find` outranking a listing.
+fn broad_walk(command: &str, cwd: &str) -> Option<Walk> {
+    let segments = shell::chain_segments(command)?;
+    let dirs = location::dirs(&segments, cwd);
+    let walks: Vec<Walk> = segments
         .iter()
-        .enumerate()
-    {
-        if !is_find_token(tok) {
-            continue;
-        }
-        // The first non-option token after `find` is its leading path argument.
-        let path = tokens[i + 1..]
-            .iter()
-            .find(|t| !t.starts_with('-'));
-        if let Some(p) = path {
-            if is_broad_target(p) {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-fn is_lister(word: &str) -> bool {
-    matches!(word, "ls" | "ll" | "tree")
-}
-
-/// A directory lister pointed at the GIT parent or the home dir. `/` is not on the
-/// list: it prints a couple of dozen names and answers a real question, where the
-/// two below only hand back a guess.
-fn lists_a_broad_dir(command: &str) -> bool {
-    let Some(segments) = shell::chain_segments(command) else {
-        return false;
-    };
-    segments
-        .iter()
-        .filter_map(|seg| shell::pipeline_stages(seg))
-        .flatten()
-        .any(|stage| {
-            let Some(word) = shell::program(stage) else {
-                return false;
-            };
-            if !is_lister(word) {
-                return false;
-            }
-            let Some(args) = shell::program_args(stage) else {
-                return false;
-            };
-            // `ls -d` names the directory instead of listing it, which is not a
-            // browse. `tree -d` still walks the tree, so it does not qualify.
-            if word != "tree"
-                && args
-                    .iter()
-                    .any(|a| {
-                        *a == "--directory"
-                            || (a.starts_with('-') && !a.starts_with("--") && a.contains('d'))
-                    })
-            {
-                return false;
-            }
-            args.iter()
-                .filter(|a| !a.starts_with('-'))
-                .any(|a| is_browse_target(shell::unquote_token(a)))
+        .zip(&dirs)
+        .flat_map(|(segment, dir)| {
+            shell::pipeline_stages(segment)
+                .into_iter()
+                .flatten()
+                .filter_map(move |stage| stage_walk(stage, dir))
         })
+        .collect();
+    if walks.contains(&Walk::Find) {
+        return Some(Walk::Find);
+    }
+    walks
+        .into_iter()
+        .next()
+}
+
+fn stage_walk(stage: &str, dir: &str) -> Option<Walk> {
+    let word = shell::program(stage)?;
+    let args = shell::program_args(stage)?;
+    if word == "find" {
+        return find_paths(&args)
+            .into_iter()
+            .any(|p| is_broad_target(&landing(p, dir)))
+            .then_some(Walk::Find);
+    }
+    if !matches!(word, "ls" | "ll" | "tree") {
+        return None;
+    }
+    // `ls -d` names the directory instead of listing it, which is not a browse.
+    // `tree -d` still walks the tree, so it does not qualify.
+    if word != "tree"
+        && args
+            .iter()
+            .any(|a| {
+                *a == "--directory"
+                    || (a.starts_with('-') && !a.starts_with("--") && a.contains('d'))
+            })
+    {
+        return None;
+    }
+    let value_options: &[&str] = if word == "tree" {
+        &[
+            "-L",
+            "-P",
+            "-I",
+            "-o",
+            "-H",
+            "-T",
+            "--filelimit",
+            "--timefmt",
+            "--compress",
+        ]
+    } else {
+        &[
+            "-I",
+            "-T",
+            "-w",
+            "--hide",
+            "--ignore",
+            "--block-size",
+            "--format",
+            "--sort",
+        ]
+    };
+    let mut operands = Vec::new();
+    let mut tokens = args.into_iter();
+    while let Some(arg) = tokens.next() {
+        if value_options.contains(&arg) {
+            tokens.next();
+        } else if !arg.starts_with('-') {
+            operands.push(arg);
+        }
+    }
+    if operands.is_empty() {
+        operands.push(".");
+    }
+    operands
+        .into_iter()
+        .any(|p| is_browse_target(&landing(p, dir)))
+        .then_some(Walk::List)
+}
+
+/// find's starting points: the operands between its leading options and the
+/// first expression token, `.` when there are none.
+fn find_paths<'a>(args: &[&'a str]) -> Vec<&'a str> {
+    let mut i = 0;
+    while let Some(arg) = args.get(i) {
+        match *arg {
+            "-H" | "-L" | "-P" => i += 1,
+            "-D" => i += 2,
+            a if a.starts_with("-O") => i += 1,
+            _ => break,
+        }
+    }
+    let paths: Vec<&str> = args[i.min(args.len())..]
+        .iter()
+        .take_while(|a| !a.starts_with(['-', '(', '!']))
+        .copied()
+        .collect();
+    if paths.is_empty() { vec!["."] } else { paths }
+}
+
+/// Where an operand lands once the shell has resolved it from `dir`.
+fn landing(operand: &str, dir: &str) -> String {
+    let spelled = normalize(shell::unquote_token(operand));
+    if spelled.starts_with(['~', '$']) {
+        return spelled.to_string();
+    }
+    let landed: PathBuf = location::resolve(spelled, dir).clean();
+    landed
+        .display()
+        .to_string()
 }
 
 /// The bare home dir, in any spelling.
@@ -143,23 +208,33 @@ fn normalize(path: &str) -> &str {
         .rsplit('/')
         .next()
         .unwrap_or(t);
-    if last.contains('*') || last.contains('?') {
-        return t
-            .strip_suffix(last)
-            .and_then(|p| p.strip_suffix('/'))
-            .unwrap_or(t);
+    if !last.contains(['*', '?']) {
+        return t;
     }
-    t
+    match &t[..t.len() - last.len()] {
+        "" => ".",
+        "/" => "/",
+        parent => parent
+            .strip_suffix('/')
+            .unwrap_or(parent),
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{has_broad_find, lists_a_broad_dir};
+    use super::{Walk, broad_walk};
+
+    const REPO: &str = "/home/u/GIT/eido";
+
+    fn walk(cmd: &str) -> Option<Walk> {
+        broad_walk(cmd, "")
+    }
 
     #[test]
     fn blocks_broad_roots() {
         for cmd in [
             "find / -name foo",
+            "find /*",
             "find ~",
             "find ~/",
             "find ~/GIT",
@@ -171,10 +246,11 @@ mod tests {
             "find /home/jerome.poulin/GIT",
             "find /mnt/bcachefs/@home/jerome.poulin/GIT -type f",
             "find -L ~/GIT -name x",
+            "find src ~/GIT -name x",
             "rg --files | find / -name y",
             "/usr/bin/find / -name z",
         ] {
-            assert!(has_broad_find(cmd), "should block: {cmd}");
+            assert_eq!(walk(cmd), Some(Walk::Find), "should block: {cmd}");
         }
     }
 
@@ -192,7 +268,7 @@ mod tests {
             "git log --find-renames",
             "echo find more stuff",
         ] {
-            assert!(!has_broad_find(cmd), "should allow: {cmd}");
+            assert_eq!(walk(cmd), None, "should allow: {cmd}");
         }
     }
 
@@ -211,7 +287,7 @@ mod tests {
             "cd /tmp && ls ~/GIT",
             "ls src; ls ~/GIT",
         ] {
-            assert!(lists_a_broad_dir(cmd), "should block: {cmd}");
+            assert_eq!(walk(cmd), Some(Walk::List), "should block: {cmd}");
         }
     }
 
@@ -228,7 +304,37 @@ mod tests {
             "echo ls ~/GIT",
             "find ~/GIT/eido -name x",
         ] {
-            assert!(!lists_a_broad_dir(cmd), "should allow: {cmd}");
+            assert_eq!(walk(cmd), None, "should allow: {cmd}");
+        }
+    }
+
+    #[test]
+    fn judges_a_relative_path_where_it_lands() {
+        for (cmd, cwd, expected) in [
+            (
+                "cd /home/u/GIT/odf && test -f docs/x.md; echo r=$?; ls docs scripts ..",
+                "/srv",
+                Some(Walk::List),
+            ),
+            ("ls ..", REPO, Some(Walk::List)),
+            ("ls ../", REPO, Some(Walk::List)),
+            ("ls ../*", REPO, Some(Walk::List)),
+            ("ls src/../..", REPO, Some(Walk::List)),
+            ("ls ../..", REPO, Some(Walk::List)),
+            ("ls", "/home/u/GIT", Some(Walk::List)),
+            ("cd .. && ls", REPO, Some(Walk::List)),
+            ("cd .. && tree -L 1", REPO, Some(Walk::List)),
+            ("find .. -name x", REPO, Some(Walk::Find)),
+            ("cd / && find . -name x", REPO, Some(Walk::Find)),
+            ("find -name x", "/home/u/GIT", Some(Walk::Find)),
+            ("ls ../eido-other", REPO, None),
+            ("cd .. && ls eido", REPO, None),
+            ("ls -d ..", REPO, None),
+            ("ls", REPO, None),
+            ("find . -name x", REPO, None),
+            ("cd /home/u/GIT/odf && ls docs", "/srv", None),
+        ] {
+            assert_eq!(broad_walk(cmd, cwd), expected, "{cmd} from {cwd}");
         }
     }
 }

@@ -177,6 +177,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
         Deny,
     ),
     ("ls -d ~/GIT", Pass),
+    (
+        "cd /home/u/GIT/proj && test -f docs/x.md; echo r=$?; ls docs scripts ..",
+        Deny,
+    ),
     // Passing time is not work: an echo labelling the wait is not company either.
     ("sleep 60", Deny),
     ("sleep 60; echo waited", Deny),
