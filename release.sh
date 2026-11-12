@@ -117,9 +117,9 @@ if ! have_remote_tag; then
 	git push --follow-tags origin master
 fi
 
-# release.yml only packages; the tests run in ci.yml on the same commit, and a
-# draft is not signed over a red one.
-./watch-ci.sh "$TAG" ci.yml
+# Tests run in ci.yml on the branch push, so by SHA: a tag looks for a tag run.
+# release.yml only packages, and its draft is not signed over a red ci.yml.
+./watch-ci.sh "$(git rev-parse "$TAG^{commit}")" ci.yml
 ./watch-ci.sh "$TAG" release.yml
 
 state="$(release_state)"
