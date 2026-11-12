@@ -10,9 +10,9 @@
 //! - A path inside a `$( )`: a refusal that also blocks the credential's
 //!   legitimate use leaves nothing to retry with. Substitutions are lifted out
 //!   and the outer text decides, so a printer among the outer tokens is refused.
-//! - The value of a key flag (`ssh -i`, `--sslkey`), and a path named by a
-//!   command that opens nothing: a mode change, a rename, a `stat`, a `test`, a
-//!   `git log` with no patch flag.
+//! - The value of a key flag (`--sslkey`, and `-i` of the ssh family only),
+//!   and a path named by a command that opens nothing: a mode change, a
+//!   rename, a `stat`, a `test`, a `git log` with no patch flag.
 //! - A search's pattern and a `jq`-family filter, each the one argument a
 //!   command names and does not open. The filter is located by walking the
 //!   flags; an unknown long option reads as a switch, and `-f` moves the filter
@@ -136,9 +136,12 @@ const PATCH_FLAGS: &[&str] = &[
     "--patch-with-raw",
 ];
 
-/// Flags whose value is a key the program opens for itself.
+/// Programs whose `-i` names an identity file. Anywhere else `-i` is a switch
+/// (`grep -i`), and the path after it is read and printed.
+const IDENTITY_PROGRAMS: &[&str] = &["ssh", "scp", "sftp", "ssh-copy-id"];
+
+/// Flags whose value is a key the program opens for itself, whatever the program.
 const KEY_FLAGS: &[&str] = &[
-    "-i",
     "--identity-file",
     "--identity",
     "--key",
@@ -268,6 +271,8 @@ fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
     // A printer opens nothing: an argument of its own is text on its way to the
     // screen, and only a substitution inside it can have read a file.
     let prints = shell::program(&outer).is_some_and(|program| PRINTERS.contains(&program));
+    let identity_program =
+        shell::program(&outer).is_some_and(|program| IDENTITY_PROGRAMS.contains(&program));
     let mut captured = None;
     let all = tokens(stage);
     for (i, (at, token)) in all
@@ -277,7 +282,7 @@ fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
         let Some(path) = secret_path(token, cwd) else {
             continue;
         };
-        if handed_over(&all, i) || patterns.contains(&i) || filter == Some(i) {
+        if handed_over(&all, i, identity_program) || patterns.contains(&i) || filter == Some(i) {
             continue;
         }
         if !spans
@@ -455,13 +460,10 @@ fn prints_a_patch(arg: &str) -> bool {
 /// The path is the value of a flag naming a key for the program to open itself —
 /// `ssh -i`, a client's `--sslkey`. The file is read by that program, not by the
 /// shell, so nothing of it reaches the output.
-fn handed_over(tokens: &[(usize, &str)], i: usize) -> bool {
+fn handed_over(tokens: &[(usize, &str)], i: usize, identity_program: bool) -> bool {
     let flag = |token: &str| {
-        KEY_FLAGS.contains(
-            &bare(token)
-                .to_ascii_lowercase()
-                .as_str(),
-        )
+        let token = bare(token).to_ascii_lowercase();
+        KEY_FLAGS.contains(&token.as_str()) || (identity_program && token == "-i")
     };
     if let Some((_, token)) = tokens.get(i) {
         if let Some((lhs, _)) = bare(token).split_once('=') {
@@ -791,6 +793,8 @@ mod tests {
             "wg pubkey < wg.key 2> err.log",
             "sed -n p ~/.ssh/authorized_keys",
             "sed -e 's/x/y/' --in-place ~/.ssh/authorized_keys",
+            "grep -rn foo -i ~/.ssh/id_rsa",
+            "sed -e 's/x/y/' -i ~/.ssh/authorized_keys",
             // Only the pattern is exempt; the paths after it are still read.
             "rg -n 'uri' ~/.ssh/id_rsa",
             "rg -e 'uri' -n ~/.ssh/id_rsa",
@@ -825,6 +829,8 @@ mod tests {
             "rg -n foo src/read_secret_management.rs",
             // Handed to a program that opens it, or named without being opened.
             "ssh -i ~/.ssh/id_ed25519 host uptime",
+            "scp -i ~/.ssh/id_ed25519 notes.md host:",
+            "timeout 45 ssh -i ~/.ssh/id_ed25519 host uptime",
             "ssh -o BatchMode=yes -i ~/.ssh/id_rsa host 'run-probe'",
             "curl --key ~/.ssh/id_rsa https://example.test/",
             "chmod 600 ~/.ssh/id_ed25519",
