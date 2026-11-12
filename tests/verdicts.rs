@@ -472,6 +472,10 @@ const CASES: &[(&str, Verdict<&str>)] = &[
     // having the file.
     ("cat ~/.ssh/id_ed25519", Deny),
     ("mv $HOME/vault/id_rsa $HOME/vault/host-key.pem", Pass),
+    ("wg pubkey < $HOME/.ssh/wg.key > ~/wg.pub", Pass),
+    ("wg pubkey < $HOME/.ssh/wg.key", Deny),
+    ("sed -i '/old/d' $HOME/.ssh/authorized_keys", Pass),
+    ("wc -l $HOME/.ssh/authorized_keys", Pass),
     ("rg -n uri -A2 $HOME/.config/fsa-secrets.yaml", Deny),
     (
         "yq '.eido.uri' $HOME/.config/fsa-secrets.yaml | head -1",

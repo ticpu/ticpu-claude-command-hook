@@ -19,6 +19,11 @@
 //!   into a file, leaving every positional a path.
 //! - The body of a quoted, terminated heredoc, and a printer's own words:
 //!   literal text nothing opens.
+//! - Any path in a stage whose stdout ends in a file: what it read lands
+//!   there. The last stdout redirect decides; its target, symlinks followed,
+//!   is a regular file, `/dev/null` or a new name, never `>&N`, a device, a
+//!   fifo or a variable. stderr is not weighed.
+//! - A path read by `wc`, `install` or `sed -i`, which print none of it.
 //!
 //! A name is a credential by its basename — a word saying what it holds, a known
 //! dotfile, an `id_` key without `.pub`, a key or keystore extension — or by a
@@ -43,7 +48,8 @@
 //! and later echoed, a path printed into a consumer that then reads it, and a
 //! quoted argument holding a space.
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::checks::location::resolve;
 use crate::checks::{marker, search_flags, shell};
@@ -114,6 +120,10 @@ const OPENS_NOTHING: &[&str] = &[
     "ls", "stat", "test", "[", "chmod", "chown", "chgrp", "touch", "rm", "mkdir", "realpath",
     "dirname", "basename", "mv", "ln",
 ];
+
+/// Programs that open a file and print none of its contents: a count, or a copy
+/// written elsewhere.
+const PRINTS_NONE_OF_IT: &[&str] = &["wc", "install"];
 
 /// What turns `git log` into a printer of the file it names.
 const PATCH_FLAGS: &[&str] = &[
@@ -243,7 +253,11 @@ fn leaked_by(segment: &str, cwd: &str) -> Option<String> {
 
 fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
     let spans = shell::substitution_spans(stage).unwrap_or_default();
-    if opens_nothing(stage) {
+    if opens_nothing(stage) || reads_without_printing(stage) {
+        return None;
+    }
+    let outer = outside_substitutions(stage, &spans);
+    if stdout_lands_in_a_file(&outer, cwd) {
         return None;
     }
     let patterns = shell::is_searcher(stage)
@@ -251,7 +265,6 @@ fn leaked_by_stage(stage: &str, cwd: &str) -> Option<String> {
         .flatten()
         .unwrap_or_default();
     let filter = filter_word(stage);
-    let outer = outside_substitutions(stage, &spans);
     // A printer opens nothing: an argument of its own is text on its way to the
     // screen, and only a substitution inside it can have read a file.
     let prints = shell::program(&outer).is_some_and(|program| PRINTERS.contains(&program));
@@ -360,6 +373,75 @@ fn opens_nothing(stage: &str) -> bool {
         }
         Some(program) => OPENS_NOTHING.contains(&program),
         None => false,
+    }
+}
+
+/// The stage opens a file and prints none of it. `sed` only as `sed -i…` first:
+/// any other spelling may print, and its script is not parsed.
+fn reads_without_printing(stage: &str) -> bool {
+    match shell::program(stage) {
+        Some("sed") => shell::program_args(stage)
+            .and_then(|args| {
+                args.first()
+                    .copied()
+            })
+            .is_some_and(|first| first.starts_with("-i") || first.starts_with("--in-place")),
+        Some(program) => PRINTS_NONE_OF_IT.contains(&program),
+        None => false,
+    }
+}
+
+/// Where stdout ends up after the last redirect that moves it: a file, or a
+/// stream that reaches the transcript. A `>` inside quotes is text, and a stage
+/// whose quotes do not balance prints.
+fn stdout_lands_in_a_file(outer: &str, cwd: &str) -> bool {
+    let Some(quoted) = shell::quoted_spans(outer) else {
+        return false;
+    };
+    let words = tokens(outer);
+    let mut lands = false;
+    for (i, (offset, word)) in words
+        .iter()
+        .enumerate()
+    {
+        let Some(at) = word.find('>') else {
+            continue;
+        };
+        if !matches!(&word[..at], "" | "1" | "&")
+            || quoted
+                .iter()
+                .any(|span| span.contains(&(offset + at)))
+        {
+            continue;
+        }
+        let glued = word[at..].trim_start_matches(['>', '|']);
+        let target = match glued {
+            "" => words
+                .get(i + 1)
+                .map_or("", |(_, next)| *next),
+            _ => glued,
+        };
+        lands = is_file_target(shell::unquote_token(target), cwd);
+    }
+    lands
+}
+
+/// The redirect target, symlinks followed, is a regular file, `/dev/null`, or
+/// a name not there yet. A device, a fifo, `/proc/self/fd/1` behind a link, or a
+/// variable with nothing to stat can carry the bytes back to the transcript.
+fn is_file_target(target: &str, cwd: &str) -> bool {
+    if target.is_empty() || target.starts_with('&') {
+        return false;
+    }
+    let Some(path) = resolvable(target, cwd) else {
+        return false;
+    };
+    match fs::metadata(&path) {
+        Ok(meta) => {
+            meta.is_file()
+                || fs::canonicalize(&path).is_ok_and(|real| real == Path::new("/dev/null"))
+        }
+        Err(e) => e.kind() == std::io::ErrorKind::NotFound,
     }
 }
 
@@ -638,8 +720,16 @@ mod tests {
             ".env.example",
             "notes.md",
             "src/read_secret_management.rs",
+            "wg.key",
         ] {
             fs::write(dir.join(name), "x\n").unwrap();
+        }
+        let link = dir.join("out-link");
+        if link
+            .symlink_metadata()
+            .is_err()
+        {
+            std::os::unix::fs::symlink("/proc/self/fd/1", &link).unwrap();
         }
         dir
     }
@@ -689,7 +779,18 @@ mod tests {
             "ls -l && head -5 fsa-secrets.yaml",
             "sed -n 's/.*uri: //p' fsa-secrets.yaml | head -1",
             "echo \"$(cat fsa-secrets.yaml)\"",
-            "cat fsa-secrets.yaml > /dev/shm/x",
+            // stdout sent back to a stream, or a `>` that is quoted text.
+            "cat wg.key >&2",
+            "cat wg.key 1>&2",
+            "cat wg.key > /dev/stdout",
+            "cat wg.key > out-link",
+            "cat wg.key > $OUT",
+            "cat wg.key > /dev/shm/x >&2",
+            "grep 'a > b' ~/.ssh/id_rsa",
+            "wg pubkey < wg.key",
+            "wg pubkey < wg.key 2> err.log",
+            "sed -n p ~/.ssh/authorized_keys",
+            "sed -e 's/x/y/' --in-place ~/.ssh/authorized_keys",
             // Only the pattern is exempt; the paths after it are still read.
             "rg -n 'uri' ~/.ssh/id_rsa",
             "rg -e 'uri' -n ~/.ssh/id_rsa",
@@ -755,6 +856,19 @@ mod tests {
             "jq -r --arg n x '.[].key' response.json",
             "yq -o json '.secret' notes.md",
             "jq -r -- '.credentials' report.json",
+            // stdout ends in a file, so what was read lands there.
+            "wg pubkey < wg.key > wg.pub",
+            "cat fsa-secrets.yaml > /dev/shm/x",
+            "cat wg.key >> out 2>&1",
+            "cat wg.key &> out",
+            "cat wg.key > /dev/null",
+            "cat wg.key >&2 > out",
+            "K=$(grep ed25519 ~/.ssh/authorized_keys) && printf '%s\\n' \"$K\" >> c/root/.ssh/authorized_keys",
+            // A count, a copy, an in-place edit: none of it printed.
+            "wc -l ~/.ssh/authorized_keys",
+            "install -m600 ~/.ssh/authorized_keys c/root/.ssh/authorized_keys",
+            "sed -i '/old/d' c/root/.ssh/authorized_keys",
+            "sed -i.bak 's/x/y/' ~/.ssh/authorized_keys",
         ] {
             assert!(!denies(command), "should pass: {command}");
         }
