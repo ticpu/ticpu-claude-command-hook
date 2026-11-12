@@ -22,7 +22,8 @@
 //! - Any path in a stage whose stdout ends in a file: what it read lands
 //!   there. The last stdout redirect decides; its target, symlinks followed,
 //!   is a regular file, `/dev/null` or a new name, never `>&N`, a device, a
-//!   fifo or a variable. stderr is not weighed.
+//!   fifo, a variable or a hop through `/proc`, whose links are the hook's own
+//!   and not the shell's. stderr is not weighed.
 //! - A path read by `wc`, `install` or `sed -i`, which print none of it.
 //!
 //! A name is a credential by its basename — a word saying what it holds, a known
@@ -49,7 +50,7 @@
 //! quoted argument holding a space.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::checks::location::resolve;
 use crate::checks::{marker, search_flags, shell};
@@ -432,22 +433,65 @@ fn stdout_lands_in_a_file(outer: &str, cwd: &str) -> bool {
 }
 
 /// The redirect target, symlinks followed, is a regular file, `/dev/null`, or
-/// a name not there yet. A device, a fifo, `/proc/self/fd/1` behind a link, or a
+/// a name not there yet. A device, a fifo, anything under `/proc`, or a
 /// variable with nothing to stat can carry the bytes back to the transcript.
 fn is_file_target(target: &str, cwd: &str) -> bool {
     if target.is_empty() || target.starts_with('&') {
         return false;
     }
-    let Some(path) = resolvable(target, cwd) else {
+    let Some(real) = resolvable(target, cwd).and_then(|path| outside_proc(&path)) else {
         return false;
     };
-    match fs::metadata(&path) {
-        Ok(meta) => {
-            meta.is_file()
-                || fs::canonicalize(&path).is_ok_and(|real| real == Path::new("/dev/null"))
-        }
+    match fs::metadata(&real) {
+        Ok(meta) => meta.is_file() || real == Path::new("/dev/null"),
         Err(e) => e.kind() == std::io::ErrorKind::NotFound,
     }
+}
+
+/// The path with its symlinks resolved one hop at a time, or `None` once a hop
+/// enters `/proc`. Its links are the hook's own: `/dev/stdout` resolves to
+/// whatever this process's fd 1 is, not the shell's, so `canonicalize` lies.
+fn outside_proc(path: &Path) -> Option<PathBuf> {
+    let mut pending: Vec<PathBuf> = vec![path.to_path_buf()];
+    let mut real = PathBuf::from("/");
+    let mut hops = 0;
+    while let Some(next) = pending.pop() {
+        let mut parts = next.components();
+        if next.is_absolute() {
+            real = PathBuf::from("/");
+        }
+        while let Some(part) = parts.next() {
+            match part {
+                Component::RootDir | Component::CurDir | Component::Prefix(_) => {}
+                Component::ParentDir => {
+                    real.pop();
+                }
+                Component::Normal(name) => {
+                    real.push(name);
+                    if real.starts_with("/proc") {
+                        return None;
+                    }
+                    let Ok(link) = fs::read_link(&real) else {
+                        continue;
+                    };
+                    // A loop or a chain this long is not a file anyone writes to.
+                    hops += 1;
+                    if hops > 40 {
+                        return None;
+                    }
+                    real.pop();
+                    pending.push(
+                        parts
+                            .as_path()
+                            .to_path_buf(),
+                    );
+                    pending.push(link);
+                    break;
+                }
+            }
+        }
+    }
+    Some(real)
 }
 
 fn prints_a_patch(arg: &str) -> bool {
@@ -785,6 +829,8 @@ mod tests {
             "cat wg.key >&2",
             "cat wg.key 1>&2",
             "cat wg.key > /dev/stdout",
+            "cat wg.key > /dev/fd/1",
+            "cat wg.key > /proc/self/fd/1",
             "cat wg.key > out-link",
             "cat wg.key > $OUT",
             "cat wg.key > /dev/shm/x >&2",
