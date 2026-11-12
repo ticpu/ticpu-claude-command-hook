@@ -21,10 +21,17 @@ workflow="${2:-ci.yml}"
 # tag is always annotated.
 sha="$(git rev-parse "${ref}^{commit}")"
 
+# A tag points at a commit whose branch push already has a finished run;
+# without the tag as head branch, that run would be watched instead.
+branch_filter=()
+if git show-ref --verify --quiet "refs/tags/$ref"; then
+	branch_filter=(--branch "$ref")
+fi
+
 run_id=""
 waited=0
 while [ -z "$run_id" ]; do
-	run_id="$(gh run list --workflow "$workflow" --commit "$sha" --limit 1 \
+	run_id="$(gh run list --workflow "$workflow" --commit "$sha" "${branch_filter[@]}" --limit 1 \
 		--json databaseId --jq '.[0].databaseId // empty')"
 	[ -n "$run_id" ] && break
 	if [ "$waited" -ge "$POLL_TIMEOUT" ]; then
