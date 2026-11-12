@@ -293,7 +293,7 @@ dependencies = [
 
 [[package]]
 name = "ticpu-claude-command-hook"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "anyhow",
  "landlock-test-confine",
