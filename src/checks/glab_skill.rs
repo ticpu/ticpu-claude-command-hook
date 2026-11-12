@@ -33,7 +33,7 @@ pub fn check(input: &HookInput) -> Option<HookOutput> {
     if !is_glab(input.command()) {
         return None;
     }
-    decide(&marker::dir()?, &input.session_id, &reason(load_skill()))
+    decide(&marker::dir(), &input.session_id, &reason(load_skill()))
 }
 
 /// `~/.claude/skills/glab/SKILL.md`, or the same path under `CLAUDE_CONFIG_DIR`.

@@ -43,9 +43,7 @@ pub fn record(input: &HookInput) {
     {
         return;
     }
-    let Some(dir) = marker::dir() else {
-        return;
-    };
+    let dir = marker::dir();
     let marker = dir.join(name(&input.session_id, path));
     if let Err(e) = fs::create_dir_all(&dir).and_then(|()| fs::write(&marker, "")) {
         eprintln!(
@@ -71,9 +69,7 @@ pub(super) fn gate(input: &HookInput) -> Option<HookOutput> {
 
 /// Every read this session recorded, whichever file it was.
 pub fn forget(input: &HookInput) {
-    let Some(dir) = marker::dir() else {
-        return;
-    };
+    let dir = marker::dir();
     let ours = format!("{PREFIX}{}-", input.session_id);
     let entries = match fs::read_dir(&dir) {
         Ok(entries) => entries,

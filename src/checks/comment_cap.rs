@@ -92,10 +92,9 @@ fn opt_out(session: &str, repo: &str) -> Option<String> {
     if marker::present(&shown) {
         return None;
     }
-    if let Some(dir) = marker::dir() {
-        if let Err(e) = fs::create_dir_all(&dir).and_then(|()| fs::write(dir.join(&shown), "")) {
-            eprintln!("comment_cap: recording {shown} failed: {e} — the hint will repeat");
-        }
+    let dir = marker::dir();
+    if let Err(e) = fs::create_dir_all(&dir).and_then(|()| fs::write(dir.join(&shown), "")) {
+        eprintln!("comment_cap: recording {shown} failed: {e} — the hint will repeat");
     }
     Some(format!(
         "Comment cap refused an edit in {repo}. To turn it off for that repo:\n  {} \

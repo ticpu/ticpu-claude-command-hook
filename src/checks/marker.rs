@@ -49,36 +49,44 @@ fn creates_marker(stage: &str, name: &str) -> bool {
 
 /// Where every marker this binary keeps lives. Unit tests get their own, so a run
 /// neither reads the switches set on this box nor spends a waiver left for a session.
-pub fn dir() -> Option<PathBuf> {
+pub fn dir() -> PathBuf {
     #[cfg(not(test))]
-    return std::env::var_os("XDG_RUNTIME_DIR")
-        .map(|runtime| PathBuf::from(runtime).join("claude-hooks"));
+    return runtime_dir().join("claude-hooks");
     #[cfg(test)]
     {
         // A path that slips past this seam is refused by the kernel, not spent.
         landlock_test_confine::to_scratch_only(&landlock_test_confine::target_dir());
-        Some(landlock_test_confine::scratch_dir(
-            "test-scratch/claude-hooks",
-        ))
+        landlock_test_confine::scratch_dir("test-scratch/claude-hooks")
     }
 }
 
-fn path(name: &str) -> Option<PathBuf> {
-    Some(dir()?.join(name))
+/// XDG_RUNTIME_DIR when it is absolute, else the `/run/user/<uid>` logind would
+/// have set it to. An empty value, as a root session can have, would otherwise put
+/// markers under whatever directory the hook was started in.
+#[cfg(not(test))]
+fn runtime_dir() -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .filter(|dir| dir.is_absolute())
+        .unwrap_or_else(|| {
+            PathBuf::from(format!("/run/user/{}", rustix::process::getuid().as_raw()))
+        })
+}
+
+fn path(name: &str) -> PathBuf {
+    dir().join(name)
 }
 
 /// True while the marker exists, leaving it there. The other half of `spend`: a
 /// standing switch is read on every decision it governs, a waiver on one.
 pub fn present(name: &str) -> bool {
-    path(name).is_some_and(|marker| marker.exists())
+    path(name).exists()
 }
 
 /// True once per file created. Spending it before the decision it overrules means
 /// a failure to delete cannot leave a standing waiver behind.
 pub fn spend(name: &str) -> bool {
-    let Some(marker) = path(name) else {
-        return false;
-    };
+    let marker = path(name);
     match fs::remove_file(&marker) {
         Ok(()) => true,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
@@ -93,10 +101,10 @@ pub fn spend(name: &str) -> bool {
     }
 }
 
-/// The marker as the user would type it, for a message that has to name the file
-/// rather than describe where it lives.
+/// The marker's resolved path, quoted, for a message that has to name the file.
+/// Resolved here so the shell running the `touch` cannot land it elsewhere.
 pub fn location(name: &str) -> String {
-    format!("\"$XDG_RUNTIME_DIR/claude-hooks/{name}\"")
+    format!("\"{}\"", path(name).display())
 }
 
 /// The command to hand back, so a refusal can name what to run rather than

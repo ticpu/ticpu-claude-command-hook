@@ -299,6 +299,7 @@ dependencies = [
  "landlock-test-confine",
  "path-clean",
  "regex",
+ "rustix",
  "serde",
  "serde_json",
  "serde_yaml_ng",

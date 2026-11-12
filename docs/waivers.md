@@ -13,6 +13,10 @@ They all live in one directory, made once per boot:
 mkdir -p "$XDG_RUNTIME_DIR/claude-hooks"
 ```
 
+When XDG_RUNTIME_DIR is unset, empty or relative, as in some root sessions, the binary
+uses `/run/user/<uid>/claude-hooks` instead, and the commands below must name that path.
+A refusal always prints the resolved path.
+
 Creating one is forced to a permission prompt whatever your allowlist says — an
 allowlisted `touch` must not hand out a pass unseen — and the prompt describes what that
 particular waiver grants. Only *creating* it is prompted: a `test -e`, an `rm` or a grep

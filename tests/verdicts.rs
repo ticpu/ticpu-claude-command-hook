@@ -784,10 +784,14 @@ fn run_hook(command: &str, cwd: &str) -> String {
 }
 
 fn feed(payload: &Value) -> String {
+    feed_with_runtime(payload, env!("CARGO_TARGET_TMPDIR"))
+}
+
+fn feed_with_runtime(payload: &Value, runtime: &str) -> String {
     // The box's own markers would be read, and its waivers spent.
     landlock_test_confine::to_scratch_only(&landlock_test_confine::target_dir());
     let mut child = Command::new(env!("CARGO_BIN_EXE_ticpu-claude-command-hook"))
-        .env("XDG_RUNTIME_DIR", env!("CARGO_TARGET_TMPDIR"))
+        .env("XDG_RUNTIME_DIR", runtime)
         .env("XDG_CONFIG_HOME", env!("CARGO_TARGET_TMPDIR"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -825,4 +829,27 @@ fn gf_path() -> String {
         .to_str()
         .expect("utf-8 path")
         .to_string()
+}
+
+/// An empty or relative XDG_RUNTIME_DIR falls back to the uid's runtime dir, and
+/// the refusal names that resolved path so the `touch` lands where it is read.
+/// Landlock keeps the child from spending a real waiver there.
+#[test]
+fn an_unusable_runtime_dir_names_the_uid_fallback() {
+    let want = format!(
+        "/run/user/{}/claude-hooks/transcript-read-waiver",
+        rustix::process::getuid().as_raw()
+    );
+    for runtime in ["", "relative"] {
+        let out = feed_with_runtime(
+            &serde_json::json!({
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "cwd": "/",
+                "tool_input": { "command": "cat ~/.ssh/id_ed25519" },
+            }),
+            runtime,
+        );
+        assert!(out.contains(&want), "XDG_RUNTIME_DIR={runtime:?}: {out}");
+    }
 }
