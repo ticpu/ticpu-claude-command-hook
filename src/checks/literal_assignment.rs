@@ -16,6 +16,12 @@
 //!
 //! Single quotes are not tracked: a `$P` that does not expand leaves the
 //! assignment dead either way.
+//!
+//! Fires only in a permission mode where that call would wait on a person. In
+//! `auto` the classifier rules on it and in `bypassPermissions` nothing does, so
+//! a deny there only costs a retry. `dontAsk` keeps the deny: the harness refuses
+//! the unmatched call anyway, without saying how to fix it. An empty mode is an
+//! older Claude Code and is treated as one that prompts.
 
 use crate::checks::shell;
 use crate::output::HookOutput;
@@ -23,7 +29,10 @@ use crate::output::HookOutput;
 /// Denies a literal named by one segment and expanded by a later one. One approval
 /// covers the whole command string, so the assignment prefix matches no permission
 /// rule and the "don't ask again" entry it offers is that one command, value and all.
-pub fn check(command: &str) -> Option<HookOutput> {
+pub fn check(command: &str, permission_mode: &str) -> Option<HookOutput> {
+    if matches!(permission_mode, "auto" | "bypassPermissions") {
+        return None;
+    }
     let segments = shell::chain_segments(command)?;
     for (i, segment) in segments
         .iter()
@@ -123,7 +132,18 @@ mod tests {
     use super::check;
 
     fn denied(command: &str) -> bool {
-        check(command).is_some()
+        check(command, "default").is_some()
+    }
+
+    #[test]
+    fn only_a_mode_that_can_prompt_is_refused() {
+        let cmd = "P=/some/path; cat $P";
+        for mode in ["default", "acceptEdits", "plan", "dontAsk", ""] {
+            assert!(check(cmd, mode).is_some(), "should deny in {mode:?}");
+        }
+        for mode in ["auto", "bypassPermissions"] {
+            assert!(check(cmd, mode).is_none(), "should pass in {mode:?}");
+        }
     }
 
     #[test]

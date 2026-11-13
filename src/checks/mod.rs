@@ -69,7 +69,7 @@ pub fn dispatch(input: &HookInput) -> Option<HookOutput> {
                 .or_else(|| attribution::check(cmd))
                 .or_else(|| broad_walk::check(cmd, &input.cwd))
                 .or_else(|| idle_burn::check(cmd))
-                .or_else(|| literal_assignment::check(cmd))
+                .or_else(|| literal_assignment::check(cmd, &input.permission_mode))
                 .or_else(|| sudo_journal::check(cmd))
                 .or_else(|| remote_session::check(cmd))
                 .or_else(|| search_stderr::check(cmd))

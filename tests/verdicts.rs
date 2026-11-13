@@ -538,6 +538,21 @@ const SUBDIR_CASES: &[(&str, Verdict<&str>)] = &[
 ];
 
 #[test]
+fn a_named_literal_reaches_the_classifier_in_auto_mode() {
+    let payload = |mode: &str| {
+        serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "cwd": "/",
+            "permission_mode": mode,
+            "tool_input": { "command": "P=/x/doc.pdf; pdftotext -layout \"$P\" - | head -60" },
+        })
+    };
+    assert_eq!(decision(&feed(&payload("default"))), Deny);
+    assert_eq!(decision(&feed(&payload("auto"))), Pass);
+}
+
+#[test]
 fn verdicts_match() {
     for (command, expected) in CASES {
         assert_eq!(

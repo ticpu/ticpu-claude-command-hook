@@ -14,6 +14,10 @@ pub struct HookInput {
     pub source: String,
     #[serde(default)]
     pub cwd: String,
+    /// `default`, `acceptEdits`, `plan`, `auto`, `bypassPermissions` or `dontAsk`;
+    /// empty from a Claude Code too old to send it.
+    #[serde(default)]
+    pub permission_mode: String,
     /// Kept raw: a check that rewrites the call has to hand back every field the
     /// tool was given, not just the ones this binary knows about.
     #[serde(default)]
