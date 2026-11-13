@@ -770,12 +770,10 @@ mod tests {
         ] {
             fs::write(dir.join(name), "x\n").unwrap();
         }
-        let link = dir.join("out-link");
-        if link
-            .symlink_metadata()
-            .is_err()
-        {
-            std::os::unix::fs::symlink("/proc/self/fd/1", &link).unwrap();
+        // Tests share the fixture concurrently: another may create it between a check and the create.
+        match std::os::unix::fs::symlink("/proc/self/fd/1", dir.join("out-link")) {
+            Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => panic!("out-link: {e}"),
+            _ => {}
         }
         dir
     }
